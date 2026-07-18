@@ -23,15 +23,18 @@ host, meta.pinduoduo.com, reject
 host, cdl-1.pddpic.com, reject
 host, cdl-p2.pddpic.com, reject
 host, cd-1.pddpic.com, reject
+// Loon 在刷新阶段对地址发现服务执行连接级拒绝（HAR 状态 0），而非返回 HTTP 404。
+// IP 来自 QX 与 Loon 多轮 HAR，覆盖 PDD 当前观察到的地域轮换地址。
+host, 101.35.212.35, reject
+host, 81.69.130.131, reject
+host, 114.110.97.30, reject
+host, 121.5.84.85, reject
 // PDD 会轮换或重定向组件 CDN；按组件名精确阻断视频与额外底栏模块。
 ^https:\/\/[^\/]+\/.*volantis3-open\/component\/.*\/com\.xunmeng\.pinduoduo\.remote\.videoLayer\.br url reject
 ^https:\/\/[^\/]+\/.*volantis3-open\/component\/.*\/com\.xunmeng\.pinduoduo\.remote\.liveVideo\.br url reject
 ^https:\/\/[^\/]+\/.*volantis3-open\/component\/.*\/com\.xunmeng\.pinduoduo\.remote\.nspike\.br url reject
 ^https:\/\/[^\/]+\/.*volantis3-open\/component\/.*\/com\.xunmeng\.pinduoduo\.remote\.mobile-video-lego\.br url reject
 ^https:\/\/[^\/]+\/.*volantis3-open\/component\/.*\/com\.xunmeng\.pinduoduo\.mobileChannel\.br url reject
-// 地址发现响应会让客户端在下拉刷新后重新装载动态底栏；只拦截 HAR 验证的 PDD 服务与 ADDRS 类型。
-^http:\/\/(?:\d{1,3}\.){3}\d{1,3}(?:http:\/\/(?:\d{1,3}\.){3}\d{1,3})?\/d4\?appid=1&os=2&clientVersion=[^&]+&[^#]*type=ADDRS(?:&|$) url reject
-^http:\/\/(?:\d{1,3}\.){3}\d{1,3}\/v2\/d\?id=45237&[^#]*type=addrs(?:&|$) url reject
 ^https:\/\/api\.pinduoduo\.com\/api\/engels\/wait\/receive\/review url reject-dict
 ^https:\/\/api\.pinduoduo\.com\/api\/buffon\/nasus\/recommend url reject-dict
 ^https:\/\/api\.pinduoduo\.com\/api\/caterham\/v2\/query\/goods_detail_with_tags url reject-dict
