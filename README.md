@@ -14,7 +14,7 @@
 - DNS：使用 `223.5.5.5` 与 `119.29.29.29`。
 - 去广告：使用墨鱼去开屏 2.0，并保留应用专用净化规则；Spotify 使用 app2smile 规则。
 - 搜索：启用 Qsearch Safari 搜索重定向。
-- Tailscale：保留 `100.64.0.0/10` 排除路由，避免代理接管 Tailscale 网络。
+- Tailscale：保留 `100.64.0.0/10` 排除路由，并将 `*.ts.net` 加入 DNS 排除列表，避免代理接管 Tailscale 网络及 MagicDNS 解析。
 
 ## 使用方法
 
