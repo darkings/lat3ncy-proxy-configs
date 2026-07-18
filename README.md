@@ -16,6 +16,7 @@
 - 搜索：启用 Qsearch Safari 搜索重定向。
 - Tailscale：保留 `100.64.0.0/10` 排除路由，并将 `*.ts.net` 加入 DNS 排除列表，避免代理接管 Tailscale 网络及 MagicDNS 解析。
 - iOS/macOS 更新：启用“iOS系统更新屏蔽@hippiezhu”后会阻止系统更新检查与下载；需要更新系统时，请在 Quantumult X 的资源列表禁用该规则并刷新。
+- 拼多多：基于怎么肥事、walala 的净化规则维护仓库内修订版，同时过滤新版首页响应中的 `bottom_tabs` 与 `buffer_bottom_tabs`，移除多多视频等额外底栏入口。
 
 ## 使用方法
 
