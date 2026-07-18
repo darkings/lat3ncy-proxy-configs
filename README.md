@@ -16,7 +16,17 @@
 - 搜索：启用 Qsearch Safari 搜索重定向。
 - Tailscale：保留 `100.64.0.0/10` 排除路由，并将 `*.ts.net` 加入 DNS 排除列表，避免代理接管 Tailscale 网络及 MagicDNS 解析。
 - iOS/macOS 更新：启用“iOS系统更新屏蔽@hippiezhu”后会阻止系统更新检查与下载；需要更新系统时，请在 Quantumult X 的资源列表禁用该规则并刷新。
-- 拼多多：基于怎么肥事、walala 的净化规则维护仓库内修订版，同时过滤新版首页响应中的 `bottom_tabs` 与 `buffer_bottom_tabs`，移除多多视频等额外底栏入口。
+- 拼多多：基于怎么肥事、walala、ZenmoFeiShi 与可莉（KeLee）的规则维护仓库内修订版；过滤首页与订单营销内容，阻断额外底栏组件、推荐接口和遥测域名，并净化扫码取件页。
+
+## 拼多多净化维护
+
+- QX 入口：`rewrites/pinduoduo-cleanup.snippet`
+- 扫码取件响应脚本：`rewrites/scripts/pinduoduo-scan-cleanup.js`
+- 经审计的取件页分块：`rewrites/vendor/pinduoduo/9410-b8806e870a26db7d.js`
+- 分块通过 jsDelivr 引用仓库内固定提交 `93955a63afe561b665d6dab49c9dcc4ea257ceb5`，避免跟随 `main` 漂移；包装脚本中记录了官方、KeLee 上游和仓库文件的 SHA-256。
+- 未移植 Loon 的 QUIC 拒绝规则，以及两条依赖 User-Agent 条件的 HTTP IP 上报规则；现有仓库 IP-CIDR 规则保持不变。
+
+扫码取件净化依赖拼多多当前分块文件名 `9410-b8806e870a26db7d.js`。拼多多更新网页资源后，如果文件名改变，替换会自动失配而不会阻断正常取件查询，此时需要重新审计并更新仓库资产。
 
 ## 使用方法
 

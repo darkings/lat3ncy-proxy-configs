@@ -1,13 +1,23 @@
 #!name = 拼多多净化页面布局（本仓库修订）
-#!author = 怎么肥事 walala
+#!author = 怎么肥事 walala, ZenmoFeiShi, 可莉
 #!adapted-by = darkings
 #!upstream = https://github.com/ZenmoFeiShi/Qx/blob/main/Pinduoduo.snippet
-#!update = 2026-07-18
-#!based-on-version = 7.79.0
+#!upstream-kelee = https://kelee.one/Tool/Loon/Lpx/PinDuoDuo_remove_ads.lpx
+#!update = 2026-07-19
+#!based-on-version = 7.79.0 / KeLee 2026-07-11
 
 // pdd
 host, sdk.1rtb.net, reject
 host, titan.pinduoduo.com, reject
+// KeLee 遥测、长连接与远程配置域名（不移植 QUIC 和 HTTP IP+UA 规则）。
+host, xg.pinduoduo.com, reject
+host, apm.pinduoduo.com, reject
+host, th-b.pinduoduo.com, reject
+host, ta.pinduoduo.com, reject
+host, th.pinduoduo.com, reject
+host, th-a.pinduoduo.com, reject
+host, ta-a.pinduoduo.com, reject
+host, apm-a.pinduoduo.com, reject
 // 阻断本地 Tab 配置和远程组件，避免新版客户端绕过 homepage/hub 底栏过滤。
 host, meta.pinduoduo.com, reject
 host, cdl-1.pddpic.com, reject
@@ -27,11 +37,15 @@ ip-cidr, 183.194.214.20/32, reject
 ip-cidr, 117.185.244.145/32, reject
 ip-cidr, 183.194.214.14/32, reject
 ^https:\/\/api\.pinduoduo\.com\/api\/engels\/wait\/receive\/review url reject-dict
-^https:\/\/api\.pinduoduo\.com\/api\/alexa\/homepage\/hub url jsonjq-response-body 'del(.result.icon_set, .result.search_bar_hot_query, .result.dy_module.irregular_banner_dy, .result.dy_module.recommend_fresh_info) | if .result.bottom_tabs then .result.bottom_tabs |= map(select(.link == "index.html" or .link == "chat_list.html" or .link == "personal.html")) else . end | if .result.buffer_bottom_tabs then .result.buffer_bottom_tabs |= map(select(.link == "index.html" or .link == "chat_list.html" or .link == "personal.html")) else . end | if .result.selected_bottom_skin then .result.selected_bottom_skin |= map_values(if .tab_images then .tab_images |= with_entries(select(.key | IN("0", "3", "4"))) else . end) else . end'
+^https:\/\/api\.pinduoduo\.com\/api\/buffon\/nasus\/recommend url reject-dict
+^https:\/\/api\.pinduoduo\.com\/api\/caterham\/v2\/query\/goods_detail_with_tags url reject-dict
+^https:\/\/api\.pinduoduo\.com\/api\/alexa\/homepage\/hub url jsonjq-response-body 'del(.result.icon_set, .result.search_bar_hot_query, .result.dy_module.irregular_banner_dy, .result.dy_module.recommend_fresh_info) | if .result.bottom_tabs then .result.bottom_tabs |= map(select(.link == "index.html" or .link == "chat_list.html" or .link == "personal.html")) else . end | if .result.buffer_bottom_tabs then .result.buffer_bottom_tabs |= map(select(.link == "index.html" or .link == "chat_list.html" or .link == "personal.html")) else . end | if .result.all_top_opts then .result.all_top_opts |= map(del(.selected_image, .image, .height, .width)) else . end'
 ^https:\/\/api\.pinduoduo\.com\/search url jsonjq-response-body 'del(.expansion)'
-^https:\/\/api\.pinduoduo\.com\/api\/philo\/personal\/hub url jsonjq-response-body 'del(.monthly_card_entrance, .personal_center_style_v2_vo, .icon_set.icons, .icon_set.top_personal_icons)'
+^https:\/\/api\.pinduoduo\.com\/api\/philo\/personal\/hub url jsonjq-response-body 'del(.monthly_card_entrance, .personal_center_style_v2_vo, .icon_set.icons, .icon_set.top_personal_icons, .personal_banner)'
 ^https:\/\/api\.pinduoduo\.com\/api\/oak\/integration\/render url jsonjq-response-body 'del(.bottom_section_list, .ui.bottom_section, .ui.live_section.float_info)'
 ^https:\/\/api\.pinduoduo\.com\/api\/caterham\/v3\/query\/order_detail_group url jsonjq-response-body 'del(.data.goods_list)'
+^https:\/\/api\.pinduoduo\.com\/order\/ url jsonjq-response-body 'del(.marketing_banner_vo, .shipping.banner_above_recommend)'
+^https:\/\/api\.pinduoduo\.com\/api\/aristotle\/order_list_v4 url jsonjq-response-body 'if .orders then .orders |= map(if .order_buttons then .order_buttons |= map(del(.order_growth_tip)) else . end) else . end'
 ^https:\/\/api\.pinduoduo\.com\/api\/aristotle\/unrated_order_for_unreceived_tab url reject-dict
 ^https:\/\/api\.pinduoduo\.com\/api\/aristotle\/query_order_list_tabs_element url reject-dict
 ^https:\/\/api\.pinduoduo\.com\/api\/aquarius\/hungary\/global\/homepage\? url reject-dict
@@ -49,5 +63,7 @@ ip-cidr, 183.194.214.14/32, reject
 ^https:\/\/api\.pinduoduo\.com\/api\/manufacturer\/cross\/shortcut\/list url reject-dict
 ^https:\/\/api\.pinduoduo\.com\/api\/dunkirk\/liveactivity\/push\/create\/url\/report url reject-dict
 ^https:\/\/api\.pinduoduo\.com\/api\/growth\/nagato\/app\/index\/gather url reject-dict
+// 扫码取件页：移除推荐商品、GIF 广告容器与弹窗数据。
+^https:\/\/m\.pinduoduo\.net\/mdkd\/package\?from_app_scan url script-response-body https://raw.githubusercontent.com/darkings/lat3ncy-quantumultx-config/main/rewrites/scripts/pinduoduo-scan-cleanup.js
 
-hostname = api.pinduoduo.com
+hostname = api.pinduoduo.com, m.pinduoduo.net
