@@ -25,7 +25,7 @@
 - 扫码取件响应脚本：`rewrites/scripts/pinduoduo-scan-cleanup.js`
 - 经审计的取件页分块：`rewrites/vendor/pinduoduo/9410-b8806e870a26db7d.js`
 - 分块通过 jsDelivr 引用仓库内固定提交 `93955a63afe561b665d6dab49c9dcc4ea257ceb5`，避免跟随 `main` 漂移；包装脚本中记录了官方、KeLee 上游和仓库文件的 SHA-256。
-- QX 配置原有 `udp_drop_list = 443` 继续阻断 QUIC。根据 QX 与 Loon 的连续刷新 HAR，地址发现服务改用 Loon 同类的连接级拒绝，覆盖已观察到的地域轮换 IP；不再使用会返回 HTTP 404 的 URL 重写。
+- QX 配置原有 `udp_drop_list = 443` 继续阻断 QUIC。根据 QX 与 Loon 的连续刷新 HAR，地址发现服务由 `rules/pinduoduo-network-block.list` 在分流层执行 `/32` 连接级拒绝，覆盖已观察到的地域轮换 IP；snippet 不再使用对 IP 字面量无效的 `host` 规则或返回 HTTP 404 的 URL 重写。首次启用需更新一次主配置，此后只需更新“拼多多网络阻断”远程分流资源。
 
 扫码取件净化依赖拼多多当前分块文件名 `9410-b8806e870a26db7d.js`。拼多多更新网页资源后，如果文件名改变，替换会自动失配而不会阻断正常取件查询，此时需要重新审计并更新仓库资产。
 

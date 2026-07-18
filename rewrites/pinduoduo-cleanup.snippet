@@ -23,12 +23,6 @@ host, meta.pinduoduo.com, reject
 host, cdl-1.pddpic.com, reject
 host, cdl-p2.pddpic.com, reject
 host, cd-1.pddpic.com, reject
-// Loon 在刷新阶段对地址发现服务执行连接级拒绝（HAR 状态 0），而非返回 HTTP 404。
-// IP 来自 QX 与 Loon 多轮 HAR，覆盖 PDD 当前观察到的地域轮换地址。
-host, 101.35.212.35, reject
-host, 81.69.130.131, reject
-host, 114.110.97.30, reject
-host, 121.5.84.85, reject
 // PDD 会轮换或重定向组件 CDN；按组件名精确阻断视频与额外底栏模块。
 ^https:\/\/[^\/]+\/.*volantis3-open\/component\/.*\/com\.xunmeng\.pinduoduo\.remote\.videoLayer\.br url reject
 ^https:\/\/[^\/]+\/.*volantis3-open\/component\/.*\/com\.xunmeng\.pinduoduo\.remote\.liveVideo\.br url reject
