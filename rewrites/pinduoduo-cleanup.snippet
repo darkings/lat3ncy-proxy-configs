@@ -13,10 +13,12 @@ host, meta.pinduoduo.com, reject
 host, cdl-1.pddpic.com, reject
 host, cdl-p2.pddpic.com, reject
 host, cd-1.pddpic.com, reject
-// PDD 会轮换组件 CDN；仅阻断已在 HAR 中确认会恢复视频/底栏配置的模块。
-^https:\/\/(?:cdl|cd)-(?:\d+|p\d+)\.pddpic\.com\/volantis3-open\/component\/.*\/com\.xunmeng\.pinduoduo\.remote\.videoLayer\.br url reject
-^https:\/\/(?:cdl|cd)-(?:\d+|p\d+)\.pddpic\.com\/volantis3-open\/component\/.*\/com\.xunmeng\.pinduoduo\.remote\.liveVideo\.br url reject
-^https:\/\/(?:cdl|cd)-(?:\d+|p\d+)\.pddpic\.com\/volantis3-open\/component\/.*\/com\.xunmeng\.pinduoduo\.remote\.nspike\.br url reject
+// PDD 会轮换或重定向组件 CDN；按组件名精确阻断视频与额外底栏模块。
+^https:\/\/[^\/]+\/.*volantis3-open\/component\/.*\/com\.xunmeng\.pinduoduo\.remote\.videoLayer\.br url reject
+^https:\/\/[^\/]+\/.*volantis3-open\/component\/.*\/com\.xunmeng\.pinduoduo\.remote\.liveVideo\.br url reject
+^https:\/\/[^\/]+\/.*volantis3-open\/component\/.*\/com\.xunmeng\.pinduoduo\.remote\.nspike\.br url reject
+^https:\/\/[^\/]+\/.*volantis3-open\/component\/.*\/com\.xunmeng\.pinduoduo\.remote\.mobile-video-lego\.br url reject
+^https:\/\/[^\/]+\/.*volantis3-open\/component\/.*\/com\.xunmeng\.pinduoduo\.mobileChannel\.br url reject
 ip-cidr, 121.5.84.85/32, reject
 ip-cidr, 183.194.214.21/32, reject
 ip-cidr, 49.235.102.190/32, reject
