@@ -8,6 +8,11 @@
 // pdd
 host, sdk.1rtb.net, reject
 host, titan.pinduoduo.com, reject
+// 阻断本地 Tab 配置和远程组件，避免新版客户端绕过 homepage/hub 底栏过滤。
+host, meta.pinduoduo.com, reject
+host, cdl-1.pddpic.com, reject
+host, cdl-p2.pddpic.com, reject
+host, cd-1.pddpic.com, reject
 ip-cidr, 121.5.84.85/32, reject
 ip-cidr, 183.194.214.21/32, reject
 ip-cidr, 49.235.102.190/32, reject
