@@ -9,7 +9,7 @@
 // pdd
 host, sdk.1rtb.net, reject
 host, titan.pinduoduo.com, reject
-// KeLee 遥测、长连接与远程配置域名（不移植 QUIC 和 HTTP IP+UA 规则）。
+// KeLee 遥测、长连接与远程配置域名（不移植全局 QUIC 阻断）。
 host, xg.pinduoduo.com, reject
 host, apm.pinduoduo.com, reject
 host, th-b.pinduoduo.com, reject
@@ -29,13 +29,9 @@ host, cd-1.pddpic.com, reject
 ^https:\/\/[^\/]+\/.*volantis3-open\/component\/.*\/com\.xunmeng\.pinduoduo\.remote\.nspike\.br url reject
 ^https:\/\/[^\/]+\/.*volantis3-open\/component\/.*\/com\.xunmeng\.pinduoduo\.remote\.mobile-video-lego\.br url reject
 ^https:\/\/[^\/]+\/.*volantis3-open\/component\/.*\/com\.xunmeng\.pinduoduo\.mobileChannel\.br url reject
-ip-cidr, 121.5.84.85/32, reject
-ip-cidr, 183.194.214.21/32, reject
-ip-cidr, 49.235.102.190/32, reject
-ip-cidr, 81.69.116.33/32, reject
-ip-cidr, 183.194.214.20/32, reject
-ip-cidr, 117.185.244.145/32, reject
-ip-cidr, 183.194.214.14/32, reject
+// PDD Titan 地址发现会轮换 IP；仅拦截 HAR 已验证的路径和参数，避免固定 IP 误伤。
+^http:\/\/(?:\d{1,3}\.){3}\d{1,3}\/d4\?appid=1&os=2&clientVersion=[^&]+&[^#]*type=ADDRS(?:&|$) url reject
+^http:\/\/(?:\d{1,3}\.){3}\d{1,3}\/v2\/d\?id=45237&[^#]*type=addrs(?:&|$) url reject
 ^https:\/\/api\.pinduoduo\.com\/api\/engels\/wait\/receive\/review url reject-dict
 ^https:\/\/api\.pinduoduo\.com\/api\/buffon\/nasus\/recommend url reject-dict
 ^https:\/\/api\.pinduoduo\.com\/api\/caterham\/v2\/query\/goods_detail_with_tags url reject-dict
