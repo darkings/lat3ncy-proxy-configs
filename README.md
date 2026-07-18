@@ -15,6 +15,7 @@
 - 去广告：使用墨鱼去开屏 2.0，并保留应用专用净化规则；Spotify 使用 app2smile 规则。
 - 搜索：启用 Qsearch Safari 搜索重定向。
 - Tailscale：保留 `100.64.0.0/10` 排除路由，并将 `*.ts.net` 加入 DNS 排除列表，避免代理接管 Tailscale 网络及 MagicDNS 解析。
+- iOS/macOS 更新：启用“iOS系统更新屏蔽@hippiezhu”后会阻止系统更新检查与下载；需要更新系统时，请在 Quantumult X 的资源列表禁用该规则并刷新。
 
 ## 使用方法
 

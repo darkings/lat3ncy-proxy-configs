@@ -1,0 +1,9 @@
+# iOS/macOS 系统更新屏蔽 @hippiezhu
+# 更新系统前请在 Quantumult X 的资源列表禁用“iOS系统更新屏蔽”。
+host, mesu.apple.com, reject
+host, gdmf.apple.com, reject
+host, xp.apple.com, reject
+host, gdmf-ados.apple.com, reject
+host, appldnld.apple.com, reject
+host, updates-http.cdn-apple.com, reject
+host, updates.cdn-apple.com, reject
