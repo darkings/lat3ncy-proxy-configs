@@ -16,11 +16,12 @@
 - 搜索：启用 Qsearch Safari 搜索重定向。
 - Tailscale：保留 `100.64.0.0/10` 排除路由，并将 `*.ts.net` 加入 DNS 排除列表，避免代理接管 Tailscale 网络及 MagicDNS 解析。
 - iOS/macOS 更新：启用“iOS系统更新屏蔽@hippiezhu”后会阻止系统更新检查与下载；需要更新系统时，请在 Quantumult X 的资源列表禁用该规则并刷新。
-- 拼多多：基于怎么肥事、walala、ZenmoFeiShi 与可莉（KeLee）的规则维护仓库内修订版；过滤首页与订单营销内容，阻断额外底栏组件、推荐接口、遥测域名及经 HAR 验证的 Titan 地址发现路径，并净化扫码取件页。地址发现规则按 URL 和参数匹配，不依赖易轮换的固定 IP，也不包含全局 QUIC 阻断。
+- 拼多多：基于怎么肥事、walala、ZenmoFeiShi 与可莉（KeLee）的规则维护仓库内修订版；过滤首页与订单营销内容，阻断额外底栏组件、推荐接口和遥测域名，并净化扫码取件页。首页由仓库内专用响应脚本处理，并归一化压缩与传输响应头。
 
 ## 拼多多净化维护
 
 - QX 入口：`rewrites/pinduoduo-cleanup.snippet`
+- 首页响应脚本：`rewrites/scripts/pinduoduo-homepage-cleanup.js`
 - 扫码取件响应脚本：`rewrites/scripts/pinduoduo-scan-cleanup.js`
 - 经审计的取件页分块：`rewrites/vendor/pinduoduo/9410-b8806e870a26db7d.js`
 - 分块通过 jsDelivr 引用仓库内固定提交 `93955a63afe561b665d6dab49c9dcc4ea257ceb5`，避免跟随 `main` 漂移；包装脚本中记录了官方、KeLee 上游和仓库文件的 SHA-256。
