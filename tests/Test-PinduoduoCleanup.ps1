@@ -3,71 +3,76 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $snippetPath = Join-Path $repoRoot 'rewrites/pinduoduo-cleanup.snippet'
 $configPath = Join-Path $repoRoot 'quantumultx.conf'
-$filterPath = Join-Path $repoRoot 'rules/pinduoduo-network-block.list'
+$legacyFilterPath = Join-Path $repoRoot 'rules/pinduoduo-network-block.list'
 $snippetLines = Get-Content -LiteralPath $snippetPath
 $config = Get-Content -Raw -LiteralPath $configPath
 
-if (-not (Test-Path -LiteralPath $filterPath)) {
-    throw 'Missing remote Pinduoduo IP-CIDR filter resource'
-}
+$ipv4UrlPattern = '^http:\/\/(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\/(?:d4|v2\/d)(?:\?.*)?$'
+$ipv6UrlPattern = '^http:\/\/\[[0-9A-Fa-f:.%]+\](?::\d+)?\/(?:d4|v2\/d)(?:\?.*)?$'
+$pinduoduoHeaderPattern = '\r\nUser-Agent:.*BundleID\/com\.xunmeng\.pinduoduo'
 
-$filterLines = Get-Content -LiteralPath $filterPath
-
-$observedDiscoveryIps = @(
-    '101.35.204.35',
-    '101.35.212.35',
-    '81.69.130.131',
-    '114.110.96.6',
-    '114.110.96.26',
-    '114.110.97.30',
-    '121.5.84.85'
+$expectedRules = @(
+    "$ipv4UrlPattern $pinduoduoHeaderPattern url-and-header reject",
+    "$ipv6UrlPattern $pinduoduoHeaderPattern url-and-header reject"
 )
 
-foreach ($ip in $observedDiscoveryIps) {
-    $escapedIp = [regex]::Escape($ip)
-    $cidrRules = @($filterLines | Where-Object { $_ -match "^ip-cidr,\s*$escapedIp/32,\s*reject\s*$" })
-    if ($cidrRules.Count -ne 1) {
-        throw "Expected exactly one IP-CIDR reject for observed Pinduoduo discovery IP $ip; found $($cidrRules.Count)"
+foreach ($rule in $expectedRules) {
+    $matches = @($snippetLines | Where-Object { $_ -ceq $rule })
+    if ($matches.Count -ne 1) {
+        throw "Expected exactly one official-style Pinduoduo url-and-header rule: $rule; found $($matches.Count)"
     }
 }
 
-$filterUrl = 'https://raw.githubusercontent.com/darkings/lat3ncy-quantumultx-config/main/rules/pinduoduo-network-block.list'
-$remoteReferences = @($config -split "`r?`n" | Where-Object {
-    $_ -match "^$([regex]::Escape($filterUrl)),\s*tag=拼多多网络阻断@darkings,\s*force-policy=reject,.*enabled=true\s*$"
-})
-if ($remoteReferences.Count -ne 1) {
-    throw "Expected exactly one enabled remote Pinduoduo network filter reference; found $($remoteReferences.Count)"
+$ipv4Regex = [regex]$ipv4UrlPattern
+foreach ($url in @(
+    'http://81.69.130.131/d4?foo=bar',
+    'http://114.110.97.97/v2/d?foo=bar',
+    'http://101.35.204.35:80/v2/d'
+)) {
+    if (-not $ipv4Regex.IsMatch($url)) {
+        throw "IPv4 address-discovery rule does not match observed URL: $url"
+    }
+}
+
+foreach ($url in @(
+    'https://114.110.97.97/v2/d?foo=bar',
+    'http://114.110.97.97/v2/different',
+    'http://api.pinduoduo.com/v2/d'
+)) {
+    if ($ipv4Regex.IsMatch($url)) {
+        throw "IPv4 address-discovery rule is too broad: $url"
+    }
+}
+
+$headerRegex = [regex]$pinduoduoHeaderPattern
+$pinduoduoHeaders = "GET /v2/d HTTP/1.1`r`nUser-Agent: Mozilla/5.0 BundleID/com.xunmeng.pinduoduo AppVersion/8.16.0`r`n"
+$otherHeaders = "GET /v2/d HTTP/1.1`r`nUser-Agent: Mozilla/5.0 BundleID/com.example.other`r`n"
+if (-not $headerRegex.IsMatch($pinduoduoHeaders)) {
+    throw 'Header rule does not match the observed Pinduoduo BundleID'
+}
+if ($headerRegex.IsMatch($otherHeaders)) {
+    throw 'Header rule must not match another app using the same shared cloud IP'
+}
+
+$legacyFilterUrl = 'https://raw.githubusercontent.com/darkings/lat3ncy-quantumultx-config/main/rules/pinduoduo-network-block.list'
+if ($config -match [regex]::Escape($legacyFilterUrl)) {
+    throw 'Main configuration must not reference the global Pinduoduo IP-CIDR filter'
+}
+if (Test-Path -LiteralPath $legacyFilterPath) {
+    throw 'Legacy rotating-IP filter file must be removed'
 }
 
 $ineffectiveIpHostRules = @($snippetLines | Where-Object {
     $_ -match '^host,\s*(?:\d{1,3}\.){3}\d{1,3},\s*reject\s*$'
 })
 if ($ineffectiveIpHostRules.Count -ne 0) {
-    throw "IP literals must be rejected in the filter layer, not rewrite host rules: $($ineffectiveIpHostRules -join '; ')"
+    throw "IP literals must not use host rules: $($ineffectiveIpHostRules -join '; ')"
 }
 
-$legacyHttp404Rules = @($snippetLines | Where-Object {
-    $_ -notmatch '^\s*(//|#|;)' -and
-    ($_ -match '\\/d4\\\?' -or $_ -match '\\/v2\\/d\\\?') -and
-    $_ -match '\surl reject\s*$'
-})
-if ($legacyHttp404Rules.Count -ne 0) {
-    throw "Address discovery must use Loon-style connection rejection, not HTTP 404 rewrites: $($legacyHttp404Rules -join '; ')"
+$homepagePrefix = '^https:\/\/api\.pinduoduo\.com\/api\/alexa\/homepage\/hub url script-response-body '
+$homepageRules = @($snippetLines | Where-Object { $_.StartsWith($homepagePrefix) })
+if ($homepageRules.Count -ne 1) {
+    throw "Expected the homepage bottom-tab response script to remain enabled; found $($homepageRules.Count)"
 }
 
-$broadBlocking = $filterLines | Where-Object { $_ -notmatch '^\s*(//|#|;)' -and $_ -match '(?i)0\.0\.0\.0/0|::/0|QUIC|UDP|443' }
-if ($broadBlocking) {
-    throw "Pinduoduo filter must contain only observed /32 targets: $($broadBlocking -join '; ')"
-}
-
-$activeFilterRules = @($filterLines | Where-Object { $_ -notmatch '^\s*(//|#|;|$)' })
-$nonExactRules = @($activeFilterRules | Where-Object { $_ -notmatch '^ip-cidr,\s*(?:\d{1,3}\.){3}\d{1,3}/32,\s*reject\s*$' })
-if ($nonExactRules.Count -ne 0) {
-    throw "Shared Tencent Cloud and Baidu ranges must not be blocked; only exact /32 targets are allowed: $($nonExactRules -join '; ')"
-}
-
-if ($activeFilterRules.Count -ne $observedDiscoveryIps.Count) {
-    throw "Expected only the $($observedDiscoveryIps.Count) observed Pinduoduo discovery IPs; found $($activeFilterRules.Count) active rules"
-}
-
-Write-Output 'PASS: Pinduoduo address discovery uses a remote IP-CIDR filter'
+Write-Output 'PASS: Pinduoduo address discovery uses URL-and-header matching without global IP blocks'
