@@ -9,11 +9,13 @@ $config = Get-Content -Raw -LiteralPath $configPath
 
 $ipv4UrlPattern = '^http:\/\/(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\/(?:d4|v2\/d)(?:\?.*)?$'
 $ipv6UrlPattern = '^http:\/\/\[[0-9A-Fa-f:.%]+\](?::\d+)?\/(?:d4|v2\/d)(?:\?.*)?$'
+$duplicatedD4UrlPattern = '^http:\/\/(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?http:\/\/(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\/d4(?:\?.*)?$'
 $pinduoduoHeaderPattern = '\r\nUser-Agent:.*BundleID\/com\.xunmeng\.pinduoduo'
 
 $expectedRules = @(
     "$ipv4UrlPattern $pinduoduoHeaderPattern url-and-header reject",
-    "$ipv6UrlPattern $pinduoduoHeaderPattern url-and-header reject"
+    "$ipv6UrlPattern $pinduoduoHeaderPattern url-and-header reject",
+    "$duplicatedD4UrlPattern $pinduoduoHeaderPattern url-and-header reject"
 )
 
 foreach ($rule in $expectedRules) {
@@ -41,6 +43,21 @@ foreach ($url in @(
 )) {
     if ($ipv4Regex.IsMatch($url)) {
         throw "IPv4 address-discovery rule is too broad: $url"
+    }
+}
+
+$duplicatedD4Regex = [regex]$duplicatedD4UrlPattern
+$observedDuplicatedD4Url = 'http://114.110.96.6http://114.110.96.6/d4?appid=1&os=2&clientVersion=8.16.0&type=ADDRS'
+if (-not $duplicatedD4Regex.IsMatch($observedDuplicatedD4Url)) {
+    throw "Duplicated-URL compatibility rule does not match the latest HAR request: $observedDuplicatedD4Url"
+}
+foreach ($url in @(
+    'http://114.110.96.6/d4?appid=1&type=ADDRS',
+    'http://114.110.96.6http://114.110.96.6/v2/d?appid=1&type=ADDRS',
+    'http://api.pinduoduo.comhttp://114.110.96.6/d4?appid=1&type=ADDRS'
+)) {
+    if ($duplicatedD4Regex.IsMatch($url)) {
+        throw "Duplicated-URL compatibility rule is too broad: $url"
     }
 }
 

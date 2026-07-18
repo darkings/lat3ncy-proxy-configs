@@ -9,6 +9,7 @@
 // QX 官方 url-and-header：仅拒绝拼多多发往裸 IP 地址发现接口的明文 HTTP 请求。
 ^http:\/\/(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\/(?:d4|v2\/d)(?:\?.*)?$ \r\nUser-Agent:.*BundleID\/com\.xunmeng\.pinduoduo url-and-header reject
 ^http:\/\/\[[0-9A-Fa-f:.%]+\](?::\d+)?\/(?:d4|v2\/d)(?:\?.*)?$ \r\nUser-Agent:.*BundleID\/com\.xunmeng\.pinduoduo url-and-header reject
+^http:\/\/(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?http:\/\/(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\/d4(?:\?.*)?$ \r\nUser-Agent:.*BundleID\/com\.xunmeng\.pinduoduo url-and-header reject
 
 // pdd
 host, sdk.1rtb.net, reject
