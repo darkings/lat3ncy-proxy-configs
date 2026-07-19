@@ -46,8 +46,9 @@ Assert-NoMatch '(?m)^udp_drop_list\s*=' 'The Mac profile must not globally block
 Assert-NoMatch '(?i)KOP-XIAO' 'KOP-XIAO resources are intentionally excluded'
 Assert-NoMatch '(?im)^\s*(password|token|passphrase|p12|certificate)\s*=' 'Sensitive credentials must not be embedded'
 
-Assert-Match '(?m)^https://raw\.githubusercontent\.com/TG-Twilight/AWAvenue-Ads-Rule/.+enabled=true\s*$' 'AWAvenue must be the enabled base ad list'
-Assert-Match '(?m)^https://anti-ad\.net/.+enabled=false\s*$' 'anti-AD must be available but disabled'
+Assert-Match '(?m)^https://raw\.githubusercontent\.com/TG-Twilight/AWAvenue-Ads-Rule/.+update-interval=21600,.+opt-parser=false,.+enabled=false\s*$' 'AWAvenue must be a disabled six-hour fallback'
+Assert-NoMatch '(?i)anti-ad\.net|surge2\.txt' 'The Mac profile must not include a Surge-only anti-AD resource'
+Assert-Match '(?m)^https://raw\.githubusercontent\.com/Cats-Team/AdRules/main/qx\.conf,.+update-interval=21600,.+opt-parser=false,.+enabled=true\s*$' 'Cats-Team must be the enabled six-hour QX ad list'
 Assert-Match '(?m)^https://limbopro\.com/Adblock4limbo\.(list|conf).+enabled=false\s*$' 'Adblock4limbo must not be enabled by default'
 Assert-Match '(?m)^https://raw\.githubusercontent\.com/fmz200/wool_scripts/.+/XWebAds\.snippet.+enabled=true\s*$' 'XWebAds must be enabled'
 Assert-Match '(?m)^https://raw\.githubusercontent\.com/zqzess/.+/Qsearch\.qxrewrite.+enabled=true\s*$' 'Qsearch must be enabled'
