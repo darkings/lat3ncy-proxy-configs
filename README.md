@@ -6,6 +6,28 @@
 
 `https://raw.githubusercontent.com/darkings/lat3ncy-quantumultx-config/main/quantumultx.conf`
 
+macOS 本机专用配置直链：
+
+`https://raw.githubusercontent.com/darkings/lat3ncy-quantumultx-config/main/quantumultx-macos.conf`
+
+## macOS 本机配置
+
+`quantumultx-macos.conf` 是独立的桌面配置，不会替换或修改手机端 `quantumultx.conf`。它面向 Mac 本机使用，不包含局域网网关、设备转发、私人节点订阅、证书、密码或 Token。
+
+- Tailscale：系统 DNS 与 IPv6 保持启用；`cvat` 短主机名和 `*.ts.net` 使用系统解析，`100.64.0.0/10` 绕过 QX，`fd7a:115c:a1e0::/48`、`cvat`、`*.ts.net` 和 `*.tailscale.com` 优先直连。Tailnet 服务不会经过代理策略或广告规则。
+- 广告拦截：默认只启用 AWAvenue 基础规则、X 网页广告净化和 Safari Qsearch。anti-AD、Adblock4limbo、Spotify、WPS 与微信文章重写默认关闭，避免规则重复和扩大 MITM 范围。
+- 桌面应用：预置 Microsoft、OpenAI、GitHub、Telegram、Twitter、Instagram、YouTube、Netflix、Spotify、Steam 和国际版 TikTok 策略；中国版抖音保持国内服务直连。
+- 定时任务：Mac 配置中的 Epic 周免、GitHub 更新监控和 macOS/iOS 限免均默认关闭，避免与手机重复通知；节点详情查询为手动执行。
+- 网页元素：QX 的域名拦截能阻止网络广告请求，但不一定能消除页面留白。Safari、Chrome 等桌面浏览器建议另外使用可信内容拦截扩展处理 CSS 元素隐藏，不建议为所有网站开启宽泛 MITM。
+
+Mac 首次使用：
+
+1. 用上述 macOS 直链导入配置。
+2. 在 Mac 的 Quantumult X 中单独添加节点订阅。
+3. 仅在需要 XWebAds、Qsearch 等 HTTPS 重写时，在 Mac 上生成并信任 MITM 证书；不要从仓库导入证书。
+4. 先启动 Tailscale，再启动 QX。修改排除路由后，重新连接两个应用；用短主机名 `cvat`、完整的 `cvat.<tailnet>.ts.net` 或 Tailscale IP 验证直连。
+5. 远程分流和重写资源会按各自的 `update-interval` 自动刷新。更新这些资源不需要重装证书或重新导入节点订阅。
+
 ## 主要策略
 
 - 国内服务：微信、国内域名、国内 IP/ASN 与抖音走 `国内服务`，默认优先直连。
