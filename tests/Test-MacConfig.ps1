@@ -36,9 +36,9 @@ Assert-Match '(?m)^excluded_routes\s*=.*100\.64\.0\.0/10' 'Tailscale IPv4 range 
 Assert-Match '(?m)^ip6-cidr\s*,\s*fd7a:115c:a1e0::/48\s*,\s*direct\s*$' 'Tailscale IPv6 range must be the first-class direct rule'
 Assert-Match '(?m)^host-suffix\s*,\s*ts\.net\s*,\s*direct\s*$' 'Tailnet names must be direct'
 Assert-Match '(?m)^host-suffix\s*,\s*tailscale\.com\s*,\s*direct\s*$' 'Tailscale control and DERP domains must be direct'
-Assert-Match '(?m)^dns_exclusion_list\s*=.*(?:^|,\s*)cvat(?:\s*,|\s*$)' 'The cvat MagicDNS short name must bypass fake-IP handling'
-Assert-Match '(?m)^server\s*=\s*/cvat/system\s*$' 'The cvat MagicDNS short name must use the macOS system resolver'
-Assert-Match '(?m)^host\s*,\s*cvat\s*,\s*direct\s*$' 'The cvat MagicDNS short name must remain direct'
+Assert-NoMatch '(?m)^dns_exclusion_list\s*=.*(?:^|,\s*)cvat(?:\s*,|\s*$)' 'The profile must not special-case the cvat short hostname'
+Assert-NoMatch '(?m)^server\s*=\s*/cvat/system\s*$' 'The profile must not override DNS for the cvat short hostname'
+Assert-NoMatch '(?m)^host\s*,\s*cvat\s*,\s*direct\s*$' 'The profile must not contain a cvat short-host routing rule'
 
 Assert-NoMatch '(?m)^no-system\s*$' 'System DNS must remain enabled for Tailscale MagicDNS'
 Assert-NoMatch '(?m)^no-ipv6\s*$' 'IPv6 must remain enabled for Tailscale'
