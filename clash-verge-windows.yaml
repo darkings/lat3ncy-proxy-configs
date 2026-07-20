@@ -1,0 +1,74 @@
+# Clash Verge Rev / Mihomo Windows 远程扩展配置
+# 作为“远程扩展配置”关联到现有节点订阅，不包含私人节点或订阅地址。
+
+mixed-port: 7897
+allow-lan: false
+mode: rule
+ipv6: true
+log-level: warning
+unified-delay: true
+tcp-concurrent: true
+
+profile:
+  store-selected: true
+  store-fake-ip: true
+
+dns:
+  enable: true
+  ipv6: true
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter-mode: blacklist
+  fake-ip-filter:
+    - "*.lan"
+    - "*.local"
+    - "*.arpa"
+    - "time.*.com"
+    - "ntp.*.com"
+    - "+.market.xiaomi.com"
+    - "localhost.ptlogin2.qq.com"
+    - "*.msftncsi.com"
+    - "www.msftconnecttest.com"
+    - "+.ts.net"
+    - "+.tailscale.com"
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  nameserver:
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  proxy-server-nameserver:
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  nameserver-policy:
+    "+.ts.net": system
+    "+.tailscale.com": system
+  respect-rules: false
+
+# 默认不启用 TUN；需要时在 Clash Verge Rev 中开启。
+# 排除 Tailnet 网段，避免 Windows、WSL 与 Tailscale 路由相互接管。
+tun:
+  enable: false
+  stack: mixed
+  auto-route: true
+  strict-route: false
+  route-exclude-address:
+    - 100.64.0.0/10
+    - fd7a:115c:a1e0::/48
+
+rule-providers:
+  Cats-Team-AdRules:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/Cats-Team/AdRules/main/adrules-mihomo.mrs
+    path: ./ruleset/cats-team-adrules.mrs
+    interval: 21600
+
+# 扩展规则插入订阅规则之前：先保证 Tailscale 直连，再执行广告拦截。
+prepend-rules:
+  - DOMAIN-SUFFIX,ts.net,DIRECT
+  - DOMAIN-SUFFIX,tailscale.com,DIRECT
+  - IP-CIDR,100.64.0.0/10,DIRECT,no-resolve
+  - IP-CIDR6,fd7a:115c:a1e0::/48,DIRECT,no-resolve
+  - RULE-SET,Cats-Team-AdRules,REJECT

@@ -9,7 +9,7 @@
 let body = $response.body || "";
 
 const oldChunk = "https://pfile.pddpic.com/mdkd/mdkd/_next/static/chunks/9410-b8806e870a26db7d.js";
-const newChunk = "https://cdn.jsdelivr.net/gh/darkings/lat3ncy-quantumultx-config@93955a63afe561b665d6dab49c9dcc4ea257ceb5/rewrites/vendor/pinduoduo/9410-b8806e870a26db7d.js";
+const newChunk = "https://cdn.jsdelivr.net/gh/darkings/lat3ncy-proxy-configs@93955a63afe561b665d6dab49c9dcc4ea257ceb5/rewrites/vendor/pinduoduo/9410-b8806e870a26db7d.js";
 
 function replaceAllText(text, from, to) {
   let pos = text.indexOf(from);

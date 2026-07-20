@@ -71,7 +71,7 @@ if ($headerRegex.IsMatch($otherHeaders)) {
     throw 'Header rule must not match another app using the same shared cloud IP'
 }
 
-$legacyFilterUrl = 'https://raw.githubusercontent.com/darkings/lat3ncy-quantumultx-config/main/rules/pinduoduo-network-block.list'
+$legacyFilterUrl = 'https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/rules/pinduoduo-network-block.list'
 if ($config -match [regex]::Escape($legacyFilterUrl)) {
     throw 'Main configuration must not reference the global Pinduoduo IP-CIDR filter'
 }
