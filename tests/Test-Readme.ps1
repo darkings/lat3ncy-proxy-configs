@@ -3,7 +3,15 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $readme = Get-Content -LiteralPath (Join-Path $repoRoot 'README.md') -Raw
 
-$headings = @('# Quantumult X 自用配置', '## 配置下载', '## 手机版说明', '## macOS 版说明', '## 更新说明')
+$headings = @(
+    '# Quantumult X 自用配置',
+    '## 配置下载',
+    '## 手机版说明',
+    '### 手机版默认启用脚本',
+    '## macOS 版说明',
+    '### macOS 默认启用脚本',
+    '## 更新说明'
+)
 $positions = foreach ($heading in $headings) {
     $match = [regex]::Match($readme, "(?m)^$([regex]::Escape($heading))\s*$")
     if (-not $match.Success) { throw "Missing README heading: $heading" }
@@ -27,5 +35,35 @@ foreach ($removed in @('拼多多净化维护', 'GitHub 更新监控脚本使用
     if ($readme -match [regex]::Escape($removed)) { throw "README still contains removed content: $removed" }
 }
 if ($readme -match '(?m)^\s*\|.+\|\s*$') { throw 'README must not contain a comparison table' }
+
+$mobileScripts = @(
+    'B站去广告 · ZenmoFeiShi',
+    '拼多多净化 · 怎么肥事、walala，本仓库修订',
+    '墨鱼去开屏 2.0 · ddgksf2013',
+    '百度贴吧去广告 · app2smile',
+    '高德地图净化 · ddgksf2013',
+    '网页广告净化 · fmz200',
+    '喜马拉雅去广告 · fmz200',
+    '下厨房去广告 · fmz200',
+    '知乎去广告 · fmz200',
+    '美团去广告 · fmz200',
+    '淘宝去广告 · fmz200',
+    '京东去广告 · fmz200',
+    '闲鱼去广告 · fmz200',
+    'WPS 去广告 · fmz200',
+    '交管 12123 去广告 · fmz200',
+    '微信公众号文章去广告 · fmz200',
+    'Spotify · app2smile',
+    '小红书净化 · fmz200',
+    '抖音轻量净化 · fmz200',
+    'Safari 聚合搜索 · zqzess'
+)
+$macScripts = @('X 网页广告净化 · fmz200', 'Safari 聚合搜索 · zqzess')
+foreach ($script in $mobileScripts + $macScripts) {
+    if ($readme -notmatch "(?m)^- $([regex]::Escape($script))\s*$") { throw "Missing enabled script: $script" }
+}
+foreach ($forbiddenHeading in @('默认启用的工具', '默认启用的定时任务', '预置但默认关闭')) {
+    if ($readme -match "(?m)^#{2,4}\s+$([regex]::Escape($forbiddenHeading))\s*$") { throw "README contains excluded script category: $forbiddenHeading" }
+}
 
 Write-Output 'PASS: README release structure validation'
