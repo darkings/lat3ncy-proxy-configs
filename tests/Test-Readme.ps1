@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$readme = Get-Content -LiteralPath (Join-Path $repoRoot 'README.md') -Raw
+$readme = Get-Content -LiteralPath (Join-Path $repoRoot 'README.md') -Raw -Encoding UTF8
 
 $headings = @(
     '# 自用代理配置',
@@ -25,17 +25,21 @@ for ($i = 1; $i -lt $positions.Count; $i++) {
 }
 
 $base = 'https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/'
-foreach ($file in @('quantumultx.conf', 'quantumultx-macos.conf', 'clash-verge-windows.yaml')) {
+foreach ($file in @('quantumultx.conf', 'quantumultx-macos.conf', 'sparkle-windows-override.yaml')) {
     $url = "$base$file"
     if ($readme -notmatch [regex]::Escape($url)) { throw "Missing download URL: $file" }
     $codeBlock = '(?m)^```text\r?\n{0}\r?\n```\s*$' -f [regex]::Escape($url)
     if ($readme -notmatch $codeBlock) { throw "Download URL must use its own text code block: $file" }
 }
 
-if ($readme -notmatch '自用.+Quantumult X 手机版.+macOS.+Clash Verge Rev Windows') { throw 'Missing self-use cross-platform positioning' }
+if ($readme -notmatch '自用.+Quantumult X 手机版.+macOS.+Sparkle Windows') { throw 'Missing self-use cross-platform positioning' }
 if ($readme -notmatch 'Windows YAML 不包含节点') { throw 'Missing Windows extension import guidance' }
-if ($readme -notmatch '不能当作普通订阅单独激活') { throw 'Missing Windows YAML distinction' }
-if ($readme -notmatch '编辑扩展/脚本.+订阅扩展配置.+粘贴并保存 YAML') { throw 'Missing Windows extension editor steps' }
+if ($readme -notmatch '不能作为普通订阅单独激活') { throw 'Missing Windows YAML distinction' }
+if ($readme -notmatch '覆写.+Windows Raw 地址.+文件类型选择 YAML') { throw 'Missing Sparkle remote override import steps' }
+if ($readme -notmatch '不要启用“全局覆写”') { throw 'Missing profile-scoped override guidance' }
+if ($readme -notmatch '关闭 Sparkle 的 DNS 和嗅探接管') { throw 'Missing Sparkle DNS and sniff ownership guidance' }
+if ($readme -notmatch 'Sub-Store.+允许局域网连接.+关闭') { throw 'Missing local-only Sub-Store guidance' }
+if ($readme -notmatch '嗅探采用保守模式，不改写目标地址') { throw 'Missing conservative sniffing guidance' }
 if ($readme -notmatch '不要把 Windows Raw 地址添加成普通节点订阅') { throw 'Missing ordinary-profile warning' }
 if ($readme -notmatch '不需要导入 JavaScript') { throw 'Missing single-YAML installation guidance' }
 if ($readme -notmatch '不需要删除或重新导入节点订阅') { throw 'Missing Windows subscription preservation note' }

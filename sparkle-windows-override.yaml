@@ -1,18 +1,7 @@
-# Clash Verge Rev / Mihomo Windows 单 YAML 扩展配置
-# 关联到现有节点订阅使用；节点由订阅提供，本文件接管策略组与分流规则。
-# 不包含私人节点、订阅地址、密码或 Token。
-
-mixed-port: 7897
-allow-lan: false
-mode: rule
-ipv6: true
-log-level: warning
-unified-delay: true
-tcp-concurrent: true
-
-profile:
-  store-selected: true
-  store-fake-ip: true
+# Sparkle / Mihomo Windows 远程 YAML 覆写
+# 绑定到 Sparkle 的节点订阅或内置 Sub-Store ClashMeta 输出使用。
+# 本文件接管 DNS、嗅探、策略组与分流规则；端口、系统代理、TUN 等由 Sparkle 界面管理。
+# 不包含私人节点、订阅地址、密码或 Token，也不能作为普通订阅单独激活。
 
 dns:
   enable: true
@@ -45,13 +34,28 @@ dns:
     "+.tailscale.com": system
   respect-rules: false
 
-# 默认采用系统代理，关闭 TUN，减少与 WSL、Tailscale 和虚拟网络的冲突。
-tun:
-  enable: false
-  stack: mixed
-  auto-route: true
-  strict-route: false
-  route-exclude-address:
+sniffer:
+  enable: true
+  parse-pure-ip: true
+  force-dns-mapping: true
+  override-destination: false
+  sniff:
+    HTTP:
+      ports:
+        - 80
+        - 8080-8880
+    TLS:
+      ports:
+        - 443
+    QUIC:
+      ports:
+        - 443
+  skip-domain:
+    - "+.lan"
+    - "+.local"
+    - "+.ts.net"
+    - "+.tailscale.com"
+  skip-dst-address:
     - 100.64.0.0/10
     - fd7a:115c:a1e0::/48
 

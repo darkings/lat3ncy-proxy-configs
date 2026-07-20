@@ -1,12 +1,12 @@
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$configPath = Join-Path $repoRoot 'clash-verge-windows.yaml'
-$legacyScriptPath = Join-Path $repoRoot 'clash-verge-windows.js'
-if (-not (Test-Path -LiteralPath $configPath)) { throw 'Missing Windows Clash Verge config' }
-if (Test-Path -LiteralPath $legacyScriptPath) { throw 'Single-YAML mode must not require a JavaScript extension' }
+$configPath = Join-Path $repoRoot 'sparkle-windows-override.yaml'
+$legacyScriptPath = Join-Path $repoRoot 'sparkle-windows-override.js'
+if (-not (Test-Path -LiteralPath $configPath)) { throw 'Missing Windows Sparkle override' }
+if (Test-Path -LiteralPath $legacyScriptPath) { throw 'Sparkle remote override must not require JavaScript' }
 
-$config = Get-Content -LiteralPath $configPath -Raw
+$config = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8
 
 function Assert-Match {
     param([string]$Pattern, [string]$Message)
@@ -18,14 +18,18 @@ function Assert-NoMatch {
     if ($config -match $Pattern) { throw $Message }
 }
 
-Assert-Match '(?m)^allow-lan:\s*false\s*$' 'LAN proxy must be disabled'
-Assert-Match '(?ms)^tun:\s*\r?\n(?:^\s+.*\r?\n?)*?^\s+enable:\s*false\s*$' 'TUN must be disabled by default'
-Assert-Match '(?m)^\s+stack:\s*mixed\s*$' 'TUN stack must use mixed mode'
-Assert-Match '(?m)^\s+strict-route:\s*false\s*$' 'Strict route must remain disabled for WSL compatibility'
-Assert-NoMatch '(?m)^prepend-rules:\s*$' 'Single-YAML mode must use a complete rules array'
-Assert-Match '(?m)^proxy-groups:\s*$' 'Single-YAML mode must own proxy groups'
-Assert-Match '(?m)^rule-providers:\s*$' 'Single-YAML mode must own rule providers'
-Assert-Match '(?m)^rules:\s*$' 'Single-YAML mode must own routing rules'
+Assert-Match '(?m)^# Sparkle / Mihomo Windows 远程 YAML 覆写\s*$' 'Missing Sparkle override header'
+Assert-NoMatch '(?m)^(mixed-port|allow-lan|mode|ipv6|log-level|unified-delay|tcp-concurrent|profile|tun):' 'Sparkle-managed setting leaked into remote override'
+Assert-NoMatch '(?m)^proxy-providers:\s*$' 'Node subscriptions must remain in Sparkle or Sub-Store'
+Assert-NoMatch '(?m)^prepend-rules:\s*$' 'Sparkle YAML override must use a complete rules array'
+Assert-Match '(?m)^dns:\s*$' 'Sparkle override must own DNS when DNS control is disabled'
+Assert-Match '(?m)^sniffer:\s*$' 'Sparkle override must own sniffing when sniff control is disabled'
+Assert-Match '(?m)^\s+override-destination:\s*false\s*$' 'Sniffer must not rewrite destinations by default'
+Assert-Match '(?m)^\s+skip-domain:\s*$' 'Sniffer domain exclusions are missing'
+Assert-Match '(?m)^\s+skip-dst-address:\s*$' 'Sniffer address exclusions are missing'
+Assert-Match '(?m)^proxy-groups:\s*$' 'Sparkle override must own proxy groups'
+Assert-Match '(?m)^rule-providers:\s*$' 'Sparkle override must own rule providers'
+Assert-Match '(?m)^rules:\s*$' 'Sparkle override must own routing rules'
 
 foreach ($group in @(
     'Auto', 'Proxy', 'Spotify', 'Telegram',
@@ -66,9 +70,10 @@ Assert-NoMatch '(?m)^\s+- name:\s*Windows-' 'Visible proxy group names must not 
 Assert-NoMatch '(?m)^\s{2}Windows-[^:]+:\s*$' 'Rule provider names must not use a Windows prefix'
 
 Assert-Match '(?m)^\s+- "\+\.ts\.net"\s*$' 'MagicDNS must bypass fake IP'
-Assert-Match '(?m)^\s+- 100\.64\.0\.0/10\s*$' 'Tailscale IPv4 must bypass TUN'
-Assert-Match '(?m)^\s+- fd7a:115c:a1e0::/48\s*$' 'Tailscale IPv6 must bypass TUN'
+Assert-Match '(?m)^\s+- "\+\.tailscale\.com"\s*$' 'Tailscale domains must bypass DNS and sniffing'
 Assert-Match '(?m)^\s+- DOMAIN-SUFFIX,ts\.net,DIRECT\s*$' 'Tailnet domain rule is missing'
+Assert-Match '(?m)^\s+- IP-CIDR,100\.64\.0\.0/10,DIRECT,no-resolve\s*$' 'Tailscale IPv4 direct rule is missing'
+Assert-Match '(?m)^\s+- IP-CIDR6,fd7a:115c:a1e0::/48,DIRECT,no-resolve\s*$' 'Tailscale IPv6 direct rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Cats-Team-AdRules,REJECT\s*$' 'Cats-Team ad rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Microsoft-CN,DIRECT\s*$' 'Microsoft China direct rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Steam-CN,DIRECT\s*$' 'Steam China download direct rule is missing'
@@ -113,4 +118,4 @@ foreach ($app in @('TikTok', 'Pinduoduo', 'Ximalaya', 'Zhihu', 'Bilibili')) {
 
 Assert-NoMatch '(?im)^\s*(url|token|password|certificate):\s*(?:https?://[^\s]*[?&](?:token|key)=|gh[opusr]_|eyJ)' 'Possible secret detected'
 
-Write-Output 'PASS: Windows Clash Verge single-YAML validation'
+Write-Output 'PASS: Windows Sparkle remote-YAML override validation'
