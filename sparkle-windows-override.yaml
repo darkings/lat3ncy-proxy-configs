@@ -72,17 +72,6 @@ proxy-groups:
       - United States
     include-all: true
 
-  - name: Auto
-    type: url-test
-    include-all: true
-    url: https://www.gstatic.com/generate_204
-    interval: 600
-    tolerance: 50
-    lazy: true
-    timeout: 5000
-    max-failed-times: 3
-    expected-status: 204
-
   - name: Spotify
     type: select
     proxies:
@@ -178,6 +167,17 @@ proxy-groups:
       - Singapore
       - United States
     include-all: true
+
+  - name: Auto
+    type: url-test
+    include-all: true
+    url: https://www.gstatic.com/generate_204
+    interval: 600
+    tolerance: 50
+    lazy: true
+    timeout: 5000
+    max-failed-times: 3
+    expected-status: 204
 
   - name: Hong Kong
     type: url-test
