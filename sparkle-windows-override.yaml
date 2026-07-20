@@ -135,108 +135,108 @@ proxy-groups:
     type: select
     proxies:
       - Auto
+      - DIRECT
       - Hong Kong
       - Taiwan
       - Japan
       - Singapore
       - United States
-      - DIRECT
     include-all: true
 
   - name: Spotify
     type: select
     proxies:
       - Proxy
+      - DIRECT
       - Hong Kong
       - Taiwan
       - Japan
       - Singapore
       - United States
-      - DIRECT
     include-all: true
 
   - name: Telegram
     type: select
     proxies:
       - Proxy
+      - DIRECT
       - Hong Kong
       - Taiwan
       - Japan
       - Singapore
       - United States
-      - DIRECT
     include-all: true
 
   - name: OpenAI
     type: select
     proxies:
       - Proxy
+      - DIRECT
       - Hong Kong
       - Taiwan
       - Japan
       - Singapore
       - United States
-      - DIRECT
     include-all: true
 
   - name: GitHub
     type: select
     proxies:
       - Proxy
+      - DIRECT
       - Hong Kong
       - Taiwan
       - Japan
       - Singapore
       - United States
-      - DIRECT
     include-all: true
 
   - name: Microsoft
     type: select
     proxies:
       - Proxy
+      - DIRECT
       - Hong Kong
       - Taiwan
       - Japan
       - Singapore
       - United States
-      - DIRECT
     include-all: true
 
   - name: Steam
     type: select
     proxies:
       - Proxy
+      - DIRECT
       - Hong Kong
       - Taiwan
       - Japan
       - Singapore
       - United States
-      - DIRECT
     include-all: true
 
   - name: Apple
     type: select
     proxies:
       - Proxy
+      - DIRECT
       - Hong Kong
       - Taiwan
       - Japan
       - Singapore
       - United States
-      - DIRECT
     include-all: true
 
   - name: YouTube
     type: select
     proxies:
       - Proxy
+      - DIRECT
       - Hong Kong
       - Taiwan
       - Japan
       - Singapore
       - United States
-      - DIRECT
     include-all: true
 
 rule-providers:

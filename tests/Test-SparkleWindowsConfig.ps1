@@ -44,6 +44,17 @@ foreach ($region in @('Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United State
     $references = [regex]::Matches($config, "(?m)^\s{6}- $([regex]::Escape($region))\s*$").Count
     if ($references -ne 9) { throw "Every selectable group must include regional auto group: $region" }
 }
+$selectGroups = @('Proxy', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Steam', 'Apple', 'YouTube')
+foreach ($group in $selectGroups) {
+    $block = [regex]::Match(
+        $config,
+        "(?ms)^\s{2}- name: $([regex]::Escape($group))\s*\r?\n.*?(?=^\s{2}- name:|^rule-providers:)"
+    ).Value
+    if (-not $block) { throw "Missing selectable group block: $group" }
+    if ($block.IndexOf('      - DIRECT') -gt $block.IndexOf('      - Hong Kong')) {
+        throw "Regional auto groups must be placed after DIRECT in group: $group"
+    }
+}
 if (([regex]::Matches($config, '(?m)^\s{4}expected-status:\s*204\s*$')).Count -ne 6) {
     throw 'Every automatic latency group must require HTTP 204'
 }
