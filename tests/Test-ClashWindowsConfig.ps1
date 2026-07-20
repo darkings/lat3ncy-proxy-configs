@@ -2,37 +2,50 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $configPath = Join-Path $repoRoot 'clash-verge-windows.yaml'
+$scriptPath = Join-Path $repoRoot 'clash-verge-windows.js'
 if (-not (Test-Path -LiteralPath $configPath)) { throw 'Missing Windows Clash Verge config' }
+if (-not (Test-Path -LiteralPath $scriptPath)) { throw 'Missing Windows Clash Verge extension script' }
 
 $config = Get-Content -LiteralPath $configPath -Raw
+$script = Get-Content -LiteralPath $scriptPath -Raw
+$combined = "$config`n$script"
 
 function Assert-Match {
-    param([string]$Pattern, [string]$Message)
-    if ($config -notmatch $Pattern) { throw $Message }
+    param([string]$Text, [string]$Pattern, [string]$Message)
+    if ($Text -notmatch $Pattern) { throw $Message }
 }
 
 function Assert-NoMatch {
-    param([string]$Pattern, [string]$Message)
-    if ($config -match $Pattern) { throw $Message }
+    param([string]$Text, [string]$Pattern, [string]$Message)
+    if ($Text -match $Pattern) { throw $Message }
 }
 
-Assert-Match '(?m)^allow-lan:\s*false\s*$' 'LAN proxy must be disabled by default'
-Assert-Match '(?m)^\s+enable:\s*false\s*$' 'TUN must be disabled by default'
-Assert-Match '(?m)^\s+stack:\s*mixed\s*$' 'TUN stack must use mixed mode'
-Assert-Match '(?m)^\s+strict-route:\s*false\s*$' 'Strict route must be disabled for WSL compatibility'
-Assert-Match '(?m)^\s+- 100\.64\.0\.0/10\s*$' 'Tailscale IPv4 must be excluded'
-Assert-Match '(?m)^\s+- fd7a:115c:a1e0::/48\s*$' 'Tailscale IPv6 must be excluded'
-Assert-Match '(?m)^\s+- "\+\.ts\.net"\s*$' 'MagicDNS must bypass fake IP'
-Assert-Match '(?m)^\s+- DOMAIN-SUFFIX,ts\.net,DIRECT\s*$' 'Tailnet domains must be direct'
-Assert-Match '(?m)^\s+- RULE-SET,Cats-Team-AdRules,REJECT\s*$' 'Cats-Team must be the active ad rule'
-Assert-Match '(?m)^\s+url: https://raw\.githubusercontent\.com/Cats-Team/AdRules/main/adrules-mihomo\.mrs\s*$' 'Cats-Team Mihomo MRS URL is missing'
-Assert-Match '(?m)^\s+interval: 21600\s*$' 'Ad rules must refresh every six hours'
-Assert-NoMatch '(?im)^\s*(url|token|password|certificate):\s*(?:https?://[^\s]*[?&](?:token|key)=|gh[opusr]_|eyJ)' 'Possible secret detected'
+Assert-Match $config '(?m)^allow-lan:\s*false\s*$' 'LAN proxy must be disabled'
+Assert-Match $config '(?m)^\s+stack:\s*mixed\s*$' 'TUN stack must use mixed mode'
+Assert-Match $config '(?m)^\s+strict-route:\s*false\s*$' 'Strict route must remain disabled for WSL compatibility'
+$tunBlock = [regex]::Match($config, '(?ms)^tun:\s*\r?\n(?:^\s+.*\r?\n?)*').Value
+Assert-NoMatch $tunBlock '(?m)^\s+enable:\s*(?:true|false)\s*$' 'Remote YAML must not force the TUN switch'
+Assert-NoMatch $config '(?m)^prepend-rules:\s*$' 'New Clash Verge versions must use an extension script for rule insertion'
+Assert-NoMatch $config '(?m)^\s+fake-ip-filter:\s*$' 'YAML must not replace the subscription fake-IP filter array'
+Assert-NoMatch $config '(?m)^\s+route-exclude-address:\s*$' 'YAML must not replace existing TUN exclusions'
+Assert-NoMatch $config '(?m)^rule-providers:\s*$' 'Rule providers are managed by the extension script'
 
-$tailscaleRule = $config.IndexOf('  - DOMAIN-SUFFIX,ts.net,DIRECT')
-$adRule = $config.IndexOf('  - RULE-SET,Cats-Team-AdRules,REJECT')
-if ($tailscaleRule -lt 0 -or $adRule -lt 0 -or $tailscaleRule -gt $adRule) {
-    throw 'Tailscale direct rules must precede the ad rule'
+Assert-Match $script 'DOMAIN-SUFFIX,ts\.net,DIRECT' 'Tailnet domains must be direct'
+Assert-Match $script 'IP-CIDR,100\.64\.0\.0/10,DIRECT,no-resolve' 'Tailscale IPv4 must be direct'
+Assert-Match $script 'IP-CIDR6,fd7a:115c:a1e0::/48,DIRECT,no-resolve' 'Tailscale IPv6 must be direct'
+Assert-Match $script 'Windows-Private-Domain' 'Private-domain provider is missing'
+Assert-Match $script 'Windows-Private-IP' 'Private-IP provider is missing'
+Assert-Match $script 'RULE-SET,Cats-Team-AdRules,REJECT' 'Cats-Team ad rule is missing'
+Assert-Match $script 'MetaCubeX/meta-rules-dat/meta/geo/geosite/private\.mrs' 'MetaCubeX private-domain MRS is missing'
+Assert-Match $script 'MetaCubeX/meta-rules-dat/meta/geo/geoip/private\.mrs' 'MetaCubeX private-IP MRS is missing'
+Assert-Match $script 'www\.msftconnecttest\.com' 'Windows connectivity-check direct rule is missing'
+Assert-Match $script 'mergeUnique' 'Array-preserving merge helper is missing'
+Assert-Match $script 'prependUnique' 'Rule-prepend deduplication helper is missing'
+
+foreach ($app in @('TikTok', 'Pinduoduo', 'Spotify', 'YouTube', 'Telegram', 'Ximalaya', 'Zhihu', 'Bilibili')) {
+    Assert-NoMatch $combined "(?i)$([regex]::Escape($app))" "Windows profile contains an app-specific rule: $app"
 }
 
-Write-Output 'PASS: Windows Clash Verge extension validation'
+Assert-NoMatch $combined '(?im)^\s*(url|token|password|certificate):\s*(?:https?://[^\s]*[?&](?:token|key)=|gh[opusr]_|eyJ)' 'Possible secret detected'
+
+Write-Output 'PASS: Windows Clash Verge config and script structure validation'

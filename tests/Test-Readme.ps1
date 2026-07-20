@@ -24,13 +24,15 @@ for ($i = 1; $i -lt $positions.Count; $i++) {
 }
 
 $base = 'https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/'
-foreach ($file in @('quantumultx.conf', 'quantumultx-macos.conf', 'clash-verge-windows.yaml')) {
+foreach ($file in @('quantumultx.conf', 'quantumultx-macos.conf', 'clash-verge-windows.yaml', 'clash-verge-windows.js')) {
     if ($readme -notmatch [regex]::Escape("$base$file")) { throw "Missing download URL: $file" }
 }
 
 if ($readme -notmatch '自用.+Quantumult X 手机版.+macOS.+Clash Verge Rev Windows') { throw 'Missing self-use cross-platform positioning' }
 if ($readme -notmatch 'Windows 文件不是节点订阅') { throw 'Missing Windows extension import guidance' }
+if ($readme -notmatch '扩展配置.+扩展脚本') { throw 'Missing dual Windows extension installation guidance' }
 if ($readme -notmatch '不需要删除或重新导入节点订阅') { throw 'Missing Windows subscription preservation note' }
+if ($readme -notmatch 'Windows 版不加入.+App 专项规则') { throw 'Missing Windows-only scope statement' }
 if ($readme -notmatch '节点订阅.+MITM 证书.+不会') { throw 'Missing local subscription and certificate note' }
 if ($readme -notmatch '远程规则和脚本.+update-interval.+自动') { throw 'Missing remote-resource automatic update guidance' }
 if ($readme -match '(?m)^\s*\|.+\|\s*$') { throw 'README must not contain a comparison table' }
