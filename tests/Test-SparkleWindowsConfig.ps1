@@ -55,6 +55,17 @@ foreach ($group in $selectGroups) {
         throw "Regional auto groups must be placed after DIRECT in group: $group"
     }
 }
+$topLevelOrder = @(
+    'Auto', 'Proxy', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Steam', 'Apple', 'YouTube',
+    'Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States'
+)
+$lastTopLevelPosition = -1
+foreach ($group in $topLevelOrder) {
+    $position = $config.IndexOf("  - name: $group")
+    if ($position -lt 0) { throw "Missing top-level proxy group: $group" }
+    if ($position -le $lastTopLevelPosition) { throw "Top-level proxy group is out of order: $group" }
+    $lastTopLevelPosition = $position
+}
 if (([regex]::Matches($config, '(?m)^\s{4}expected-status:\s*204\s*$')).Count -ne 6) {
     throw 'Every automatic latency group must require HTTP 204'
 }
