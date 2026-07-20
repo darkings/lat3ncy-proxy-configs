@@ -39,10 +39,19 @@ Assert-Match $script 'RULE-SET,Cats-Team-AdRules,REJECT' 'Cats-Team ad rule is m
 Assert-Match $script 'MetaCubeX/meta-rules-dat/meta/geo/geosite/private\.mrs' 'MetaCubeX private-domain MRS is missing'
 Assert-Match $script 'MetaCubeX/meta-rules-dat/meta/geo/geoip/private\.mrs' 'MetaCubeX private-IP MRS is missing'
 Assert-Match $script 'www\.msftconnecttest\.com' 'Windows connectivity-check direct rule is missing'
+Assert-Match $script 'MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify\.mrs' 'Spotify Windows rule provider is missing'
+Assert-Match $script 'MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram\.mrs' 'Telegram Windows domain provider is missing'
+Assert-Match $script 'MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram\.mrs' 'Telegram Windows IP provider is missing'
+Assert-Match $script 'RULE-SET,Windows-Spotify,Windows-Spotify' 'Spotify policy rule is missing'
+Assert-Match $script 'RULE-SET,Windows-Telegram-Domain,Windows-Telegram' 'Telegram domain policy rule is missing'
+Assert-Match $script 'RULE-SET,Windows-Telegram-IP,Windows-Telegram,no-resolve' 'Telegram IP policy rule is missing'
+Assert-Match $script 'name: "Windows-Auto"' 'Windows automatic node group is missing'
+Assert-Match $script 'name: "Windows-Spotify"' 'Spotify Windows policy group is missing'
+Assert-Match $script 'name: "Windows-Telegram"' 'Telegram Windows policy group is missing'
 Assert-Match $script 'mergeUnique' 'Array-preserving merge helper is missing'
 Assert-Match $script 'prependUnique' 'Rule-prepend deduplication helper is missing'
 
-foreach ($app in @('TikTok', 'Pinduoduo', 'Spotify', 'YouTube', 'Telegram', 'Ximalaya', 'Zhihu', 'Bilibili')) {
+foreach ($app in @('TikTok', 'Pinduoduo', 'YouTube', 'Ximalaya', 'Zhihu', 'Bilibili')) {
     Assert-NoMatch $combined "(?i)$([regex]::Escape($app))" "Windows profile contains an app-specific rule: $app"
 }
 

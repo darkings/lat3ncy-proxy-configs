@@ -32,7 +32,8 @@ if ($readme -notmatch '自用.+Quantumult X 手机版.+macOS.+Clash Verge Rev Wi
 if ($readme -notmatch 'Windows 文件不是节点订阅') { throw 'Missing Windows extension import guidance' }
 if ($readme -notmatch '扩展配置.+扩展脚本') { throw 'Missing dual Windows extension installation guidance' }
 if ($readme -notmatch '不需要删除或重新导入节点订阅') { throw 'Missing Windows subscription preservation note' }
-if ($readme -notmatch 'Windows 版不加入.+App 专项规则') { throw 'Missing Windows-only scope statement' }
+if ($readme -notmatch 'Windows 版为.+Spotify.+Telegram.+独立策略组') { throw 'Missing Windows desktop app scope statement' }
+if ($readme -notmatch '不加入 TikTok.+移动 App 专项规则') { throw 'Missing mobile-app exclusion statement' }
 if ($readme -notmatch '节点订阅.+MITM 证书.+不会') { throw 'Missing local subscription and certificate note' }
 if ($readme -notmatch '远程规则和脚本.+update-interval.+自动') { throw 'Missing remote-resource automatic update guidance' }
 if ($readme -match '(?m)^\s*\|.+\|\s*$') { throw 'README must not contain a comparison table' }

@@ -1,8 +1,8 @@
 /**
  * Clash Verge Rev Windows extension script.
  *
- * Scope: Windows, WSL, private networks, Tailscale, DNS safety and domain-level
- * advertising. It intentionally adds no mobile-app or entertainment-app rules.
+ * Scope: Windows, WSL, private networks, Tailscale, DNS safety, domain-level
+ * advertising, and selected applications that have native Windows clients.
  */
 
 const managedRules = [
@@ -17,6 +17,9 @@ const managedRules = [
   "RULE-SET,Windows-Private-Domain,DIRECT",
   "RULE-SET,Windows-Private-IP,DIRECT,no-resolve",
   "RULE-SET,Cats-Team-AdRules,REJECT",
+  "RULE-SET,Windows-Spotify,Windows-Spotify",
+  "RULE-SET,Windows-Telegram-Domain,Windows-Telegram",
+  "RULE-SET,Windows-Telegram-IP,Windows-Telegram,no-resolve",
 ];
 
 const managedProviders = {
@@ -44,7 +47,55 @@ const managedProviders = {
     path: "./ruleset/windows-private-ip.mrs",
     interval: 86400,
   },
+  "Windows-Spotify": {
+    type: "http",
+    behavior: "domain",
+    format: "mrs",
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs",
+    path: "./ruleset/windows-spotify.mrs",
+    interval: 86400,
+  },
+  "Windows-Telegram-Domain": {
+    type: "http",
+    behavior: "domain",
+    format: "mrs",
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs",
+    path: "./ruleset/windows-telegram-domain.mrs",
+    interval: 86400,
+  },
+  "Windows-Telegram-IP": {
+    type: "http",
+    behavior: "ipcidr",
+    format: "mrs",
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs",
+    path: "./ruleset/windows-telegram-ip.mrs",
+    interval: 86400,
+  },
 };
+
+const managedGroups = [
+  {
+    name: "Windows-Auto",
+    type: "url-test",
+    "include-all": true,
+    url: "https://www.gstatic.com/generate_204",
+    interval: 600,
+    tolerance: 50,
+    lazy: true,
+  },
+  {
+    name: "Windows-Spotify",
+    type: "select",
+    proxies: ["Windows-Auto", "DIRECT"],
+    "include-all": true,
+  },
+  {
+    name: "Windows-Telegram",
+    type: "select",
+    proxies: ["Windows-Auto", "DIRECT"],
+    "include-all": true,
+  },
+];
 
 const fakeIpExclusions = [
   "*.lan",
@@ -80,6 +131,16 @@ function prependUnique(original, additions) {
   return additions.concat(remainder);
 }
 
+function mergeGroups(original, additions) {
+  const result = Array.isArray(original) ? original.slice() : [];
+  for (const group of additions) {
+    if (!result.some((item) => item && item.name === group.name)) {
+      result.push(group);
+    }
+  }
+  return result;
+}
+
 function main(config) {
   if (!config || typeof config !== "object") return config;
 
@@ -103,6 +164,7 @@ function main(config) {
     config["rule-providers"][name] = managedProviders[name];
   }
 
+  config["proxy-groups"] = mergeGroups(config["proxy-groups"], managedGroups);
   config.rules = prependUnique(config.rules, managedRules);
   return config;
 }
@@ -112,6 +174,7 @@ if (typeof module !== "undefined") {
     main,
     managedRules,
     managedProviders,
+    managedGroups,
     fakeIpExclusions,
     tailscaleRouteExclusions,
   };

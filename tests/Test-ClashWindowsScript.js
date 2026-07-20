@@ -1,7 +1,7 @@
 "use strict";
 
 const assert = require("node:assert/strict");
-const { main, managedRules } = require("../clash-verge-windows.js");
+const { main, managedRules, managedGroups } = require("../clash-verge-windows.js");
 
 const source = {
   dns: {
@@ -14,6 +14,7 @@ const source = {
   "rule-providers": {
     Existing: { type: "file", behavior: "domain", path: "./existing.yaml" },
   },
+  "proxy-groups": [{ name: "Existing-Group", type: "select", proxies: ["DIRECT"] }],
   rules: ["DOMAIN,existing.example,DIRECT", "MATCH,Existing-Policy"],
 };
 
@@ -29,6 +30,13 @@ assert.ok(result["rule-providers"].Existing, "existing providers must remain");
 assert.ok(result["rule-providers"]["Cats-Team-AdRules"]);
 assert.ok(result["rule-providers"]["Windows-Private-Domain"]);
 assert.ok(result["rule-providers"]["Windows-Private-IP"]);
+assert.ok(result["rule-providers"]["Windows-Spotify"]);
+assert.ok(result["rule-providers"]["Windows-Telegram-Domain"]);
+assert.ok(result["rule-providers"]["Windows-Telegram-IP"]);
+assert.ok(result["proxy-groups"].some((group) => group.name === "Existing-Group"));
+for (const group of managedGroups) {
+  assert.ok(result["proxy-groups"].some((item) => item.name === group.name));
+}
 assert.deepEqual(result.rules.slice(0, managedRules.length), managedRules);
 assert.ok(result.rules.includes("DOMAIN,existing.example,DIRECT"));
 assert.ok(result.rules.includes("MATCH,Existing-Policy"));
@@ -36,6 +44,13 @@ assert.ok(result.rules.includes("MATCH,Existing-Policy"));
 main(result);
 for (const rule of managedRules) {
   assert.equal(result.rules.filter((item) => item === rule).length, 1, `duplicate rule: ${rule}`);
+}
+for (const group of managedGroups) {
+  assert.equal(
+    result["proxy-groups"].filter((item) => item.name === group.name).length,
+    1,
+    `duplicate group: ${group.name}`
+  );
 }
 assert.equal(
   result.dns["fake-ip-filter"].filter((item) => item === "+.ts.net").length,
