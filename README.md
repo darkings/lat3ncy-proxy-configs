@@ -16,11 +16,39 @@ macOS 版：[导入 `quantumultx-macos.conf`](https://raw.githubusercontent.com/
 
 手机版保留 Tailscale 网络排除：`100.64.0.0/10` 绕过 Quantumult X，`*.ts.net` 不进入 Fake-IP 解析，避免 Tailnet 服务被代理或广告规则接管。
 
+### 手机版默认启用脚本
+
+- B站去广告 · ZenmoFeiShi
+- 拼多多净化 · 怎么肥事、walala，本仓库修订
+- 墨鱼去开屏 2.0 · ddgksf2013
+- 百度贴吧去广告 · app2smile
+- 高德地图净化 · ddgksf2013
+- 网页广告净化 · fmz200
+- 喜马拉雅去广告 · fmz200
+- 下厨房去广告 · fmz200
+- 知乎去广告 · fmz200
+- 美团去广告 · fmz200
+- 淘宝去广告 · fmz200
+- 京东去广告 · fmz200
+- 闲鱼去广告 · fmz200
+- WPS 去广告 · fmz200
+- 交管 12123 去广告 · fmz200
+- 微信公众号文章去广告 · fmz200
+- Spotify · app2smile
+- 小红书净化 · fmz200
+- 抖音轻量净化 · fmz200
+- Safari 聚合搜索 · zqzess
+
 ## macOS 版说明
 
 macOS 版面向 Mac 本机客户端，不作为局域网网关。它保留桌面常用服务策略和必要的网页重写，并缩小移动应用专项规则与 MITM 范围；定时任务默认关闭，避免与手机重复执行。
 
 Cats-Team AdRules 是 macOS 版默认启用的广告主规则，每 6 小时检查一次更新；AWAvenue 作为默认关闭的轻量备用规则，两套规则不建议同时启用。Tailscale 的 IPv4、IPv6、`*.ts.net` 和控制域名优先直连，系统 DNS 与 IPv6 保持启用。
+
+### macOS 默认启用脚本
+
+- X 网页广告净化 · fmz200
+- Safari 聚合搜索 · zqzess
 
 ## 更新说明
 
