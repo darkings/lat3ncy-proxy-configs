@@ -56,8 +56,8 @@ foreach ($group in $selectGroups) {
     }
 }
 $topLevelOrder = @(
-    'Proxy', 'Auto', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Steam', 'Apple', 'YouTube',
-    'Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States'
+    'Proxy', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Steam', 'Apple', 'YouTube',
+    'Auto', 'Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States'
 )
 $lastTopLevelPosition = -1
 foreach ($group in $topLevelOrder) {
