@@ -11,6 +11,7 @@ $headings = @(
     '## macOS 版说明',
     '### macOS 默认启用脚本',
     '## Windows 版说明',
+    '### Windows 配置方法',
     '## 更新说明'
 )
 $positions = foreach ($heading in $headings) {
@@ -32,8 +33,11 @@ foreach ($file in @('quantumultx.conf', 'quantumultx-macos.conf', 'clash-verge-w
 }
 
 if ($readme -notmatch '自用.+Quantumult X 手机版.+macOS.+Clash Verge Rev Windows') { throw 'Missing self-use cross-platform positioning' }
-if ($readme -notmatch 'Windows 文件不是节点订阅') { throw 'Missing Windows extension import guidance' }
-if ($readme -notmatch '不需要另行导入 JavaScript') { throw 'Missing single-YAML installation guidance' }
+if ($readme -notmatch 'Windows YAML 不包含节点') { throw 'Missing Windows extension import guidance' }
+if ($readme -notmatch '不能当作普通订阅单独激活') { throw 'Missing Windows YAML distinction' }
+if ($readme -notmatch '编辑扩展/脚本.+订阅扩展配置.+粘贴并保存 YAML') { throw 'Missing Windows extension editor steps' }
+if ($readme -notmatch '不要把 Windows Raw 地址添加成普通节点订阅') { throw 'Missing ordinary-profile warning' }
+if ($readme -notmatch '不需要导入 JavaScript') { throw 'Missing single-YAML installation guidance' }
 if ($readme -notmatch '不需要删除或重新导入节点订阅') { throw 'Missing Windows subscription preservation note' }
 if ($readme -notmatch 'Windows 版为.+Spotify.+Telegram.+独立策略组') { throw 'Missing Windows desktop app scope statement' }
 if ($readme -notmatch '不加入 TikTok.+移动 App 专项规则') { throw 'Missing mobile-app exclusion statement' }
