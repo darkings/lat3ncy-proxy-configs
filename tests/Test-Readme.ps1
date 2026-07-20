@@ -25,7 +25,10 @@ for ($i = 1; $i -lt $positions.Count; $i++) {
 
 $base = 'https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/'
 foreach ($file in @('quantumultx.conf', 'quantumultx-macos.conf', 'clash-verge-windows.yaml')) {
-    if ($readme -notmatch [regex]::Escape("$base$file")) { throw "Missing download URL: $file" }
+    $url = "$base$file"
+    if ($readme -notmatch [regex]::Escape($url)) { throw "Missing download URL: $file" }
+    $codeBlock = '(?m)^```text\r?\n{0}\r?\n```\s*$' -f [regex]::Escape($url)
+    if ($readme -notmatch $codeBlock) { throw "Download URL must use its own text code block: $file" }
 }
 
 if ($readme -notmatch '自用.+Quantumult X 手机版.+macOS.+Clash Verge Rev Windows') { throw 'Missing self-use cross-platform positioning' }

@@ -4,9 +4,23 @@
 
 ## 配置下载
 
-- 手机版：[导入 `quantumultx.conf`](https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/quantumultx.conf)
-- macOS 版：[导入 `quantumultx-macos.conf`](https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/quantumultx-macos.conf)
-- Windows 版：[导入 `clash-verge-windows.yaml`](https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/clash-verge-windows.yaml)
+手机版：
+
+```text
+https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/quantumultx.conf
+```
+
+macOS 版：
+
+```text
+https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/quantumultx-macos.conf
+```
+
+Windows 版：
+
+```text
+https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/clash-verge-windows.yaml
+```
 
 Quantumult X 配置使用对应 Raw 链接导入。Windows 文件不是节点订阅：保留已有节点订阅，新建一个远程“扩展配置”，填入上面的 YAML Raw 链接并关联到现有订阅，然后重新激活该订阅；不需要另行导入 JavaScript。
 
