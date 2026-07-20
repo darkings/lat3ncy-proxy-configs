@@ -27,7 +27,11 @@ Assert-Match '(?m)^proxy-groups:\s*$' 'Single-YAML mode must own proxy groups'
 Assert-Match '(?m)^rule-providers:\s*$' 'Single-YAML mode must own rule providers'
 Assert-Match '(?m)^rules:\s*$' 'Single-YAML mode must own routing rules'
 
-foreach ($group in @('Windows-Auto', 'Windows-Proxy', 'Windows-Spotify', 'Windows-Telegram')) {
+foreach ($group in @(
+    'Windows-Auto', 'Windows-Proxy', 'Windows-Spotify', 'Windows-Telegram',
+    'Windows-OpenAI', 'Windows-GitHub', 'Windows-Microsoft', 'Windows-OneDrive',
+    'Windows-Steam', 'Windows-Apple', 'Windows-YouTube'
+)) {
     Assert-Match "(?m)^\s+- name: $([regex]::Escape($group))\s*$" "Missing proxy group: $group"
 }
 
@@ -38,6 +42,16 @@ $providers = @(
     'Windows-Spotify',
     'Windows-Telegram-Domain',
     'Windows-Telegram-IP',
+    'Windows-OpenAI',
+    'Windows-GitHub',
+    'Windows-Microsoft-CN',
+    'Windows-Microsoft',
+    'Windows-OneDrive',
+    'Windows-Steam-CN',
+    'Windows-Steam',
+    'Windows-Apple-CN',
+    'Windows-Apple',
+    'Windows-YouTube',
     'Windows-CN-Domain',
     'Windows-NonCN-Domain',
     'Windows-CN-IP'
@@ -54,6 +68,16 @@ Assert-Match '(?m)^\s+- 100\.64\.0\.0/10\s*$' 'Tailscale IPv4 must bypass TUN'
 Assert-Match '(?m)^\s+- fd7a:115c:a1e0::/48\s*$' 'Tailscale IPv6 must bypass TUN'
 Assert-Match '(?m)^\s+- DOMAIN-SUFFIX,ts\.net,DIRECT\s*$' 'Tailnet domain rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Cats-Team-AdRules,REJECT\s*$' 'Cats-Team ad rule is missing'
+Assert-Match '(?m)^\s+- RULE-SET,Windows-Microsoft-CN,DIRECT\s*$' 'Microsoft China direct rule is missing'
+Assert-Match '(?m)^\s+- RULE-SET,Windows-Steam-CN,DIRECT\s*$' 'Steam China download direct rule is missing'
+Assert-Match '(?m)^\s+- RULE-SET,Windows-Apple-CN,DIRECT\s*$' 'Apple China CDN direct rule is missing'
+Assert-Match '(?m)^\s+- RULE-SET,Windows-OpenAI,Windows-OpenAI\s*$' 'OpenAI policy rule is missing'
+Assert-Match '(?m)^\s+- RULE-SET,Windows-GitHub,Windows-GitHub\s*$' 'GitHub policy rule is missing'
+Assert-Match '(?m)^\s+- RULE-SET,Windows-OneDrive,Windows-OneDrive\s*$' 'OneDrive policy rule is missing'
+Assert-Match '(?m)^\s+- RULE-SET,Windows-Microsoft,Windows-Microsoft\s*$' 'Microsoft policy rule is missing'
+Assert-Match '(?m)^\s+- RULE-SET,Windows-Steam,Windows-Steam\s*$' 'Steam store and community policy rule is missing'
+Assert-Match '(?m)^\s+- RULE-SET,Windows-Apple,Windows-Apple\s*$' 'Apple international policy rule is missing'
+Assert-Match '(?m)^\s+- RULE-SET,Windows-YouTube,Windows-YouTube\s*$' 'YouTube policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Windows-Spotify,Windows-Spotify\s*$' 'Spotify policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Windows-Telegram-Domain,Windows-Telegram\s*$' 'Telegram domain policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Windows-Telegram-IP,Windows-Telegram,no-resolve\s*$' 'Telegram IP policy rule is missing'
@@ -64,10 +88,21 @@ Assert-Match '(?m)^\s+- MATCH,Windows-Proxy\s*$' 'Final Windows proxy rule is mi
 
 $tailscalePosition = $config.IndexOf('  - DOMAIN-SUFFIX,ts.net,DIRECT')
 $adPosition = $config.IndexOf('  - RULE-SET,Cats-Team-AdRules,REJECT')
+$microsoftCnPosition = $config.IndexOf('  - RULE-SET,Windows-Microsoft-CN,DIRECT')
+$microsoftPosition = $config.IndexOf('  - RULE-SET,Windows-Microsoft,Windows-Microsoft')
+$oneDrivePosition = $config.IndexOf('  - RULE-SET,Windows-OneDrive,Windows-OneDrive')
+$steamCnPosition = $config.IndexOf('  - RULE-SET,Windows-Steam-CN,DIRECT')
+$steamPosition = $config.IndexOf('  - RULE-SET,Windows-Steam,Windows-Steam')
+$appleCnPosition = $config.IndexOf('  - RULE-SET,Windows-Apple-CN,DIRECT')
+$applePosition = $config.IndexOf('  - RULE-SET,Windows-Apple,Windows-Apple')
 $finalPosition = $config.IndexOf('  - MATCH,Windows-Proxy')
 if ($tailscalePosition -lt 0 -or $adPosition -lt 0 -or $finalPosition -lt 0 -or
     $tailscalePosition -gt $adPosition -or $adPosition -gt $finalPosition) {
     throw 'Rule order must be system direct, ad blocking, then final routing'
+}
+if ($microsoftCnPosition -gt $microsoftPosition -or $oneDrivePosition -gt $microsoftPosition -or
+    $steamCnPosition -gt $steamPosition -or $appleCnPosition -gt $applePosition) {
+    throw 'China download/CDN and OneDrive rules must precede their broad service rules'
 }
 
 foreach ($app in @('TikTok', 'Pinduoduo', 'Ximalaya', 'Zhihu', 'Bilibili')) {

@@ -85,6 +85,55 @@ proxy-groups:
       - DIRECT
     include-all: true
 
+  - name: Windows-OpenAI
+    type: select
+    proxies:
+      - Windows-Proxy
+      - DIRECT
+    include-all: true
+
+  - name: Windows-GitHub
+    type: select
+    proxies:
+      - Windows-Proxy
+      - DIRECT
+    include-all: true
+
+  - name: Windows-Microsoft
+    type: select
+    proxies:
+      - Windows-Proxy
+      - DIRECT
+    include-all: true
+
+  - name: Windows-OneDrive
+    type: select
+    proxies:
+      - Windows-Proxy
+      - DIRECT
+    include-all: true
+
+  - name: Windows-Steam
+    type: select
+    proxies:
+      - Windows-Proxy
+      - DIRECT
+    include-all: true
+
+  - name: Windows-Apple
+    type: select
+    proxies:
+      - Windows-Proxy
+      - DIRECT
+    include-all: true
+
+  - name: Windows-YouTube
+    type: select
+    proxies:
+      - Windows-Proxy
+      - DIRECT
+    include-all: true
+
 rule-providers:
   Cats-Team-AdRules:
     type: http
@@ -140,6 +189,96 @@ rule-providers:
     interval: 86400
     proxy: Windows-Proxy
 
+  Windows-OpenAI:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/openai.mrs
+    path: ./ruleset/windows-openai.mrs
+    interval: 86400
+    proxy: Windows-Proxy
+
+  Windows-GitHub:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs
+    path: ./ruleset/windows-github.mrs
+    interval: 86400
+    proxy: Windows-Proxy
+
+  Windows-Microsoft-CN:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft%40cn.mrs
+    path: ./ruleset/windows-microsoft-cn.mrs
+    interval: 86400
+    proxy: Windows-Proxy
+
+  Windows-Microsoft:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft.mrs
+    path: ./ruleset/windows-microsoft.mrs
+    interval: 86400
+    proxy: Windows-Proxy
+
+  Windows-OneDrive:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/onedrive.mrs
+    path: ./ruleset/windows-onedrive.mrs
+    interval: 86400
+    proxy: Windows-Proxy
+
+  Windows-Steam-CN:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam%40cn.mrs
+    path: ./ruleset/windows-steam-cn.mrs
+    interval: 86400
+    proxy: Windows-Proxy
+
+  Windows-Steam:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam.mrs
+    path: ./ruleset/windows-steam.mrs
+    interval: 86400
+    proxy: Windows-Proxy
+
+  Windows-Apple-CN:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple-cn.mrs
+    path: ./ruleset/windows-apple-cn.mrs
+    interval: 86400
+    proxy: Windows-Proxy
+
+  Windows-Apple:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.mrs
+    path: ./ruleset/windows-apple.mrs
+    interval: 86400
+    proxy: Windows-Proxy
+
+  Windows-YouTube:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs
+    path: ./ruleset/windows-youtube.mrs
+    interval: 86400
+    proxy: Windows-Proxy
+
   Windows-CN-Domain:
     type: http
     behavior: domain
@@ -180,6 +319,16 @@ rules:
   - RULE-SET,Windows-Private-Domain,DIRECT
   - RULE-SET,Windows-Private-IP,DIRECT,no-resolve
   - RULE-SET,Cats-Team-AdRules,REJECT
+  - RULE-SET,Windows-Microsoft-CN,DIRECT
+  - RULE-SET,Windows-Steam-CN,DIRECT
+  - RULE-SET,Windows-Apple-CN,DIRECT
+  - RULE-SET,Windows-OpenAI,Windows-OpenAI
+  - RULE-SET,Windows-GitHub,Windows-GitHub
+  - RULE-SET,Windows-OneDrive,Windows-OneDrive
+  - RULE-SET,Windows-Microsoft,Windows-Microsoft
+  - RULE-SET,Windows-Steam,Windows-Steam
+  - RULE-SET,Windows-Apple,Windows-Apple
+  - RULE-SET,Windows-YouTube,Windows-YouTube
   - RULE-SET,Windows-Spotify,Windows-Spotify
   - RULE-SET,Windows-Telegram-Domain,Windows-Telegram
   - RULE-SET,Windows-Telegram-IP,Windows-Telegram,no-resolve
