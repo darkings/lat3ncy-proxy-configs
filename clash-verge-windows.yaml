@@ -1,5 +1,6 @@
-# Clash Verge Rev / Mihomo Windows 远程扩展配置
-# 作为“远程扩展配置”关联到现有节点订阅，不包含私人节点或订阅地址。
+# Clash Verge Rev / Mihomo Windows 单 YAML 扩展配置
+# 关联到现有节点订阅使用；节点由订阅提供，本文件接管策略组与分流规则。
+# 不包含私人节点、订阅地址、密码或 Token。
 
 mixed-port: 7897
 allow-lan: false
@@ -25,7 +26,6 @@ dns:
     - "*.arpa"
     - "time.*.com"
     - "ntp.*.com"
-    - "+.market.xiaomi.com"
     - "localhost.ptlogin2.qq.com"
     - "*.msftncsi.com"
     - "www.msftconnecttest.com"
@@ -45,8 +45,7 @@ dns:
     "+.tailscale.com": system
   respect-rules: false
 
-# 默认不启用 TUN；需要时在 Clash Verge Rev 中开启。
-# 排除 Tailnet 网段，避免 Windows、WSL 与 Tailscale 路由相互接管。
+# 默认采用系统代理，关闭 TUN，减少与 WSL、Tailscale 和虚拟网络的冲突。
 tun:
   enable: false
   stack: mixed
@@ -56,6 +55,36 @@ tun:
     - 100.64.0.0/10
     - fd7a:115c:a1e0::/48
 
+proxy-groups:
+  - name: Windows-Auto
+    type: url-test
+    include-all: true
+    url: https://www.gstatic.com/generate_204
+    interval: 600
+    tolerance: 50
+    lazy: true
+
+  - name: Windows-Proxy
+    type: select
+    proxies:
+      - Windows-Auto
+      - DIRECT
+    include-all: true
+
+  - name: Windows-Spotify
+    type: select
+    proxies:
+      - Windows-Proxy
+      - DIRECT
+    include-all: true
+
+  - name: Windows-Telegram
+    type: select
+    proxies:
+      - Windows-Proxy
+      - DIRECT
+    include-all: true
+
 rule-providers:
   Cats-Team-AdRules:
     type: http
@@ -64,11 +93,97 @@ rule-providers:
     url: https://raw.githubusercontent.com/Cats-Team/AdRules/main/adrules-mihomo.mrs
     path: ./ruleset/cats-team-adrules.mrs
     interval: 21600
+    proxy: Windows-Proxy
 
-# 扩展规则插入订阅规则之前：先保证 Tailscale 直连，再执行广告拦截。
-prepend-rules:
+  Windows-Private-Domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs
+    path: ./ruleset/windows-private-domain.mrs
+    interval: 86400
+    proxy: Windows-Proxy
+
+  Windows-Private-IP:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs
+    path: ./ruleset/windows-private-ip.mrs
+    interval: 86400
+    proxy: Windows-Proxy
+
+  Windows-Spotify:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs
+    path: ./ruleset/windows-spotify.mrs
+    interval: 86400
+    proxy: Windows-Proxy
+
+  Windows-Telegram-Domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs
+    path: ./ruleset/windows-telegram-domain.mrs
+    interval: 86400
+    proxy: Windows-Proxy
+
+  Windows-Telegram-IP:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs
+    path: ./ruleset/windows-telegram-ip.mrs
+    interval: 86400
+    proxy: Windows-Proxy
+
+  Windows-CN-Domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs
+    path: ./ruleset/windows-cn-domain.mrs
+    interval: 86400
+    proxy: Windows-Proxy
+
+  Windows-NonCN-Domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/geolocation-!cn.mrs
+    path: ./ruleset/windows-non-cn-domain.mrs
+    interval: 86400
+    proxy: Windows-Proxy
+
+  Windows-CN-IP:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs
+    path: ./ruleset/windows-cn-ip.mrs
+    interval: 86400
+    proxy: Windows-Proxy
+
+# 本文件完整接管规则顺序：系统与私有网络优先，随后广告和桌面应用，最后国内外分流。
+rules:
   - DOMAIN-SUFFIX,ts.net,DIRECT
   - DOMAIN-SUFFIX,tailscale.com,DIRECT
   - IP-CIDR,100.64.0.0/10,DIRECT,no-resolve
   - IP-CIDR6,fd7a:115c:a1e0::/48,DIRECT,no-resolve
+  - DOMAIN,dns.msftncsi.com,DIRECT
+  - DOMAIN,www.msftncsi.com,DIRECT
+  - DOMAIN,www.msftconnecttest.com,DIRECT
+  - DOMAIN,ipv6.msftconnecttest.com,DIRECT
+  - RULE-SET,Windows-Private-Domain,DIRECT
+  - RULE-SET,Windows-Private-IP,DIRECT,no-resolve
   - RULE-SET,Cats-Team-AdRules,REJECT
+  - RULE-SET,Windows-Spotify,Windows-Spotify
+  - RULE-SET,Windows-Telegram-Domain,Windows-Telegram
+  - RULE-SET,Windows-Telegram-IP,Windows-Telegram,no-resolve
+  - RULE-SET,Windows-CN-Domain,DIRECT
+  - RULE-SET,Windows-NonCN-Domain,Windows-Proxy
+  - RULE-SET,Windows-CN-IP,DIRECT,no-resolve
+  - MATCH,Windows-Proxy
