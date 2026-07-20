@@ -56,7 +56,7 @@ tun:
     - fd7a:115c:a1e0::/48
 
 proxy-groups:
-  - name: Windows-Auto
+  - name: Auto
     type: url-test
     include-all: true
     url: https://www.gstatic.com/generate_204
@@ -64,73 +64,73 @@ proxy-groups:
     tolerance: 50
     lazy: true
 
-  - name: Windows-Proxy
+  - name: Proxy
     type: select
     proxies:
-      - Windows-Auto
+      - Auto
       - DIRECT
     include-all: true
 
-  - name: Windows-Spotify
+  - name: Spotify
     type: select
     proxies:
-      - Windows-Proxy
+      - Proxy
       - DIRECT
     include-all: true
 
-  - name: Windows-Telegram
+  - name: Telegram
     type: select
     proxies:
-      - Windows-Proxy
+      - Proxy
       - DIRECT
     include-all: true
 
-  - name: Windows-OpenAI
+  - name: OpenAI
     type: select
     proxies:
-      - Windows-Proxy
+      - Proxy
       - DIRECT
     include-all: true
 
-  - name: Windows-GitHub
+  - name: GitHub
     type: select
     proxies:
-      - Windows-Proxy
+      - Proxy
       - DIRECT
     include-all: true
 
-  - name: Windows-Microsoft
+  - name: Microsoft
     type: select
     proxies:
-      - Windows-Proxy
+      - Proxy
       - DIRECT
     include-all: true
 
-  - name: Windows-OneDrive
+  - name: OneDrive
     type: select
     proxies:
-      - Windows-Proxy
+      - Proxy
       - DIRECT
     include-all: true
 
-  - name: Windows-Steam
+  - name: Steam
     type: select
     proxies:
-      - Windows-Proxy
+      - Proxy
       - DIRECT
     include-all: true
 
-  - name: Windows-Apple
+  - name: Apple
     type: select
     proxies:
-      - Windows-Proxy
+      - Proxy
       - DIRECT
     include-all: true
 
-  - name: Windows-YouTube
+  - name: YouTube
     type: select
     proxies:
-      - Windows-Proxy
+      - Proxy
       - DIRECT
     include-all: true
 
@@ -142,169 +142,169 @@ rule-providers:
     url: https://raw.githubusercontent.com/Cats-Team/AdRules/main/adrules-mihomo.mrs
     path: ./ruleset/cats-team-adrules.mrs
     interval: 21600
-    proxy: Windows-Proxy
+    proxy: Proxy
 
-  Windows-Private-Domain:
+  Private-Domain:
     type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs
     path: ./ruleset/windows-private-domain.mrs
     interval: 86400
-    proxy: Windows-Proxy
+    proxy: Proxy
 
-  Windows-Private-IP:
+  Private-IP:
     type: http
     behavior: ipcidr
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs
     path: ./ruleset/windows-private-ip.mrs
     interval: 86400
-    proxy: Windows-Proxy
+    proxy: Proxy
 
-  Windows-Spotify:
+  Spotify:
     type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs
     path: ./ruleset/windows-spotify.mrs
     interval: 86400
-    proxy: Windows-Proxy
+    proxy: Proxy
 
-  Windows-Telegram-Domain:
+  Telegram-Domain:
     type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs
     path: ./ruleset/windows-telegram-domain.mrs
     interval: 86400
-    proxy: Windows-Proxy
+    proxy: Proxy
 
-  Windows-Telegram-IP:
+  Telegram-IP:
     type: http
     behavior: ipcidr
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs
     path: ./ruleset/windows-telegram-ip.mrs
     interval: 86400
-    proxy: Windows-Proxy
+    proxy: Proxy
 
-  Windows-OpenAI:
+  OpenAI:
     type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/openai.mrs
     path: ./ruleset/windows-openai.mrs
     interval: 86400
-    proxy: Windows-Proxy
+    proxy: Proxy
 
-  Windows-GitHub:
+  GitHub:
     type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs
     path: ./ruleset/windows-github.mrs
     interval: 86400
-    proxy: Windows-Proxy
+    proxy: Proxy
 
-  Windows-Microsoft-CN:
+  Microsoft-CN:
     type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft%40cn.mrs
     path: ./ruleset/windows-microsoft-cn.mrs
     interval: 86400
-    proxy: Windows-Proxy
+    proxy: Proxy
 
-  Windows-Microsoft:
+  Microsoft:
     type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft.mrs
     path: ./ruleset/windows-microsoft.mrs
     interval: 86400
-    proxy: Windows-Proxy
+    proxy: Proxy
 
-  Windows-OneDrive:
+  OneDrive:
     type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/onedrive.mrs
     path: ./ruleset/windows-onedrive.mrs
     interval: 86400
-    proxy: Windows-Proxy
+    proxy: Proxy
 
-  Windows-Steam-CN:
+  Steam-CN:
     type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam%40cn.mrs
     path: ./ruleset/windows-steam-cn.mrs
     interval: 86400
-    proxy: Windows-Proxy
+    proxy: Proxy
 
-  Windows-Steam:
+  Steam:
     type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam.mrs
     path: ./ruleset/windows-steam.mrs
     interval: 86400
-    proxy: Windows-Proxy
+    proxy: Proxy
 
-  Windows-Apple-CN:
+  Apple-CN:
     type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple-cn.mrs
     path: ./ruleset/windows-apple-cn.mrs
     interval: 86400
-    proxy: Windows-Proxy
+    proxy: Proxy
 
-  Windows-Apple:
+  Apple:
     type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.mrs
     path: ./ruleset/windows-apple.mrs
     interval: 86400
-    proxy: Windows-Proxy
+    proxy: Proxy
 
-  Windows-YouTube:
+  YouTube:
     type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs
     path: ./ruleset/windows-youtube.mrs
     interval: 86400
-    proxy: Windows-Proxy
+    proxy: Proxy
 
-  Windows-CN-Domain:
+  CN-Domain:
     type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs
     path: ./ruleset/windows-cn-domain.mrs
     interval: 86400
-    proxy: Windows-Proxy
+    proxy: Proxy
 
-  Windows-NonCN-Domain:
+  NonCN-Domain:
     type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/geolocation-!cn.mrs
     path: ./ruleset/windows-non-cn-domain.mrs
     interval: 86400
-    proxy: Windows-Proxy
+    proxy: Proxy
 
-  Windows-CN-IP:
+  CN-IP:
     type: http
     behavior: ipcidr
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs
     path: ./ruleset/windows-cn-ip.mrs
     interval: 86400
-    proxy: Windows-Proxy
+    proxy: Proxy
 
 # 本文件完整接管规则顺序：系统与私有网络优先，随后广告和桌面应用，最后国内外分流。
 rules:
@@ -316,23 +316,23 @@ rules:
   - DOMAIN,www.msftncsi.com,DIRECT
   - DOMAIN,www.msftconnecttest.com,DIRECT
   - DOMAIN,ipv6.msftconnecttest.com,DIRECT
-  - RULE-SET,Windows-Private-Domain,DIRECT
-  - RULE-SET,Windows-Private-IP,DIRECT,no-resolve
+  - RULE-SET,Private-Domain,DIRECT
+  - RULE-SET,Private-IP,DIRECT,no-resolve
   - RULE-SET,Cats-Team-AdRules,REJECT
-  - RULE-SET,Windows-Microsoft-CN,DIRECT
-  - RULE-SET,Windows-Steam-CN,DIRECT
-  - RULE-SET,Windows-Apple-CN,DIRECT
-  - RULE-SET,Windows-OpenAI,Windows-OpenAI
-  - RULE-SET,Windows-GitHub,Windows-GitHub
-  - RULE-SET,Windows-OneDrive,Windows-OneDrive
-  - RULE-SET,Windows-Microsoft,Windows-Microsoft
-  - RULE-SET,Windows-Steam,Windows-Steam
-  - RULE-SET,Windows-Apple,Windows-Apple
-  - RULE-SET,Windows-YouTube,Windows-YouTube
-  - RULE-SET,Windows-Spotify,Windows-Spotify
-  - RULE-SET,Windows-Telegram-Domain,Windows-Telegram
-  - RULE-SET,Windows-Telegram-IP,Windows-Telegram,no-resolve
-  - RULE-SET,Windows-CN-Domain,DIRECT
-  - RULE-SET,Windows-NonCN-Domain,Windows-Proxy
-  - RULE-SET,Windows-CN-IP,DIRECT,no-resolve
-  - MATCH,Windows-Proxy
+  - RULE-SET,Microsoft-CN,DIRECT
+  - RULE-SET,Steam-CN,DIRECT
+  - RULE-SET,Apple-CN,DIRECT
+  - RULE-SET,OpenAI,OpenAI
+  - RULE-SET,GitHub,GitHub
+  - RULE-SET,OneDrive,OneDrive
+  - RULE-SET,Microsoft,Microsoft
+  - RULE-SET,Steam,Steam
+  - RULE-SET,Apple,Apple
+  - RULE-SET,YouTube,YouTube
+  - RULE-SET,Spotify,Spotify
+  - RULE-SET,Telegram-Domain,Telegram
+  - RULE-SET,Telegram-IP,Telegram,no-resolve
+  - RULE-SET,CN-Domain,DIRECT
+  - RULE-SET,NonCN-Domain,Proxy
+  - RULE-SET,CN-IP,DIRECT,no-resolve
+  - MATCH,Proxy
