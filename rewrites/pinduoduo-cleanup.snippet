@@ -37,7 +37,7 @@ host, cd-1.pddpic.com, reject
 ^https:\/\/api\.pinduoduo\.com\/api\/engels\/wait\/receive\/review url reject-dict
 ^https:\/\/api\.pinduoduo\.com\/api\/buffon\/nasus\/recommend url reject-dict
 ^https:\/\/api\.pinduoduo\.com\/api\/caterham\/v2\/query\/goods_detail_with_tags url reject-dict
-^https:\/\/api\.pinduoduo\.com\/api\/alexa\/homepage\/hub url script-response-body https://raw.githubusercontent.com/darkings/lat3ncy-quantumultx-config/main/rewrites/scripts/pinduoduo-homepage-cleanup.js
+^https:\/\/api\.pinduoduo\.com\/api\/alexa\/homepage\/hub url script-response-body https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/rewrites/scripts/pinduoduo-homepage-cleanup.js
 ^https:\/\/api\.pinduoduo\.com\/search url jsonjq-response-body 'del(.expansion)'
 ^https:\/\/api\.pinduoduo\.com\/api\/philo\/personal\/hub url jsonjq-response-body 'del(.monthly_card_entrance, .personal_center_style_v2_vo, .icon_set.icons, .icon_set.top_personal_icons, .personal_banner)'
 ^https:\/\/api\.pinduoduo\.com\/api\/oak\/integration\/render url jsonjq-response-body 'del(.bottom_section_list, .ui.bottom_section, .ui.live_section.float_info)'
@@ -62,6 +62,6 @@ host, cd-1.pddpic.com, reject
 ^https:\/\/api\.pinduoduo\.com\/api\/dunkirk\/liveactivity\/push\/create\/url\/report url reject-dict
 ^https:\/\/api\.pinduoduo\.com\/api\/growth\/nagato\/app\/index\/gather url reject-dict
 // 扫码取件页：移除推荐商品、GIF 广告容器与弹窗数据。
-^https:\/\/m\.pinduoduo\.net\/mdkd\/package\?from_app_scan url script-response-body https://raw.githubusercontent.com/darkings/lat3ncy-quantumultx-config/main/rewrites/scripts/pinduoduo-scan-cleanup.js
+^https:\/\/m\.pinduoduo\.net\/mdkd\/package\?from_app_scan url script-response-body https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/rewrites/scripts/pinduoduo-scan-cleanup.js
 
 hostname = api.pinduoduo.com, m.pinduoduo.net

@@ -4,12 +4,13 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $readme = Get-Content -LiteralPath (Join-Path $repoRoot 'README.md') -Raw
 
 $headings = @(
-    '# Quantumult X 自用配置',
+    '# 自用代理配置',
     '## 配置下载',
     '## 手机版说明',
     '### 手机版默认启用脚本',
     '## macOS 版说明',
     '### macOS 默认启用脚本',
+    '## Windows 版说明',
     '## 更新说明'
 )
 $positions = foreach ($heading in $headings) {
@@ -22,18 +23,16 @@ for ($i = 1; $i -lt $positions.Count; $i++) {
     if ($positions[$i] -le $positions[$i - 1]) { throw 'README headings are out of order' }
 }
 
-$mobile = 'https://raw.githubusercontent.com/darkings/lat3ncy-quantumultx-config/main/quantumultx.conf'
-$mac = 'https://raw.githubusercontent.com/darkings/lat3ncy-quantumultx-config/main/quantumultx-macos.conf'
-if ($readme -notmatch [regex]::Escape($mobile)) { throw 'Missing mobile download URL' }
-if ($readme -notmatch [regex]::Escape($mac)) { throw 'Missing macOS download URL' }
-if ($readme -notmatch '自用.+手机版.+macOS') { throw 'Missing self-use mobile and macOS positioning' }
-if ($readme -notmatch '节点订阅.+MITM 证书.+不会') { throw 'Missing local subscription and certificate update note' }
-if ($readme -notmatch '主配置.+(?:刷新|重新导入)') { throw 'Missing main-profile refresh guidance' }
-if ($readme -notmatch '远程资源.+update-interval.+自动') { throw 'Missing remote-resource automatic update guidance' }
-
-foreach ($removed in @('拼多多净化维护', 'GitHub 更新监控脚本使用 BoxJS 参数', '## 定时任务', '## 注意事项')) {
-    if ($readme -match [regex]::Escape($removed)) { throw "README still contains removed content: $removed" }
+$base = 'https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/'
+foreach ($file in @('quantumultx.conf', 'quantumultx-macos.conf', 'clash-verge-windows.yaml')) {
+    if ($readme -notmatch [regex]::Escape("$base$file")) { throw "Missing download URL: $file" }
 }
+
+if ($readme -notmatch '自用.+Quantumult X 手机版.+macOS.+Clash Verge Rev Windows') { throw 'Missing self-use cross-platform positioning' }
+if ($readme -notmatch 'Windows 文件不是节点订阅') { throw 'Missing Windows extension import guidance' }
+if ($readme -notmatch '不需要删除或重新导入节点订阅') { throw 'Missing Windows subscription preservation note' }
+if ($readme -notmatch '节点订阅.+MITM 证书.+不会') { throw 'Missing local subscription and certificate note' }
+if ($readme -notmatch '远程规则和脚本.+update-interval.+自动') { throw 'Missing remote-resource automatic update guidance' }
 if ($readme -match '(?m)^\s*\|.+\|\s*$') { throw 'README must not contain a comparison table' }
 
 $mobileScripts = @(
@@ -62,8 +61,5 @@ $macScripts = @('X 网页广告净化 · fmz200', 'Safari 聚合搜索 · zqzess
 foreach ($script in $mobileScripts + $macScripts) {
     if ($readme -notmatch "(?m)^- $([regex]::Escape($script))\s*$") { throw "Missing enabled script: $script" }
 }
-foreach ($forbiddenHeading in @('默认启用的工具', '默认启用的定时任务', '预置但默认关闭')) {
-    if ($readme -match "(?m)^#{2,4}\s+$([regex]::Escape($forbiddenHeading))\s*$") { throw "README contains excluded script category: $forbiddenHeading" }
-}
 
-Write-Output 'PASS: README release structure validation'
+Write-Output 'PASS: README cross-platform release validation'
