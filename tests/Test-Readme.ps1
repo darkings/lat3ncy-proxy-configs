@@ -43,7 +43,9 @@ if ($readme -notmatch '嗅探采用保守模式，不改写目标地址') { thro
 if ($readme -notmatch '不要把 Windows Raw 地址添加成普通节点订阅') { throw 'Missing ordinary-profile warning' }
 if ($readme -notmatch '不需要导入 JavaScript') { throw 'Missing single-YAML installation guidance' }
 if ($readme -notmatch '不需要删除或重新导入节点订阅') { throw 'Missing Windows subscription preservation note' }
-if ($readme -notmatch 'Windows 版为.+Spotify.+Telegram.+独立策略组') { throw 'Missing Windows desktop app scope statement' }
+if ($readme -notmatch 'Proxy 和.+Spotify、Telegram.+应用策略组') { throw 'Missing Windows desktop app scope statement' }
+if ($readme -notmatch '香港、台湾、日本、新加坡、美国五个地区自动测速组') { throw 'Missing regional auto-test group guidance' }
+if ($readme -notmatch 'OneDrive 保留独立规则集，但流量并入 Microsoft 策略') { throw 'Missing OneDrive merge guidance' }
 if ($readme -notmatch '不加入 TikTok.+移动 App 专项规则') { throw 'Missing mobile-app exclusion statement' }
 if ($readme -notmatch '节点订阅.+MITM 证书.+不会') { throw 'Missing local subscription and certificate note' }
 if ($readme -notmatch '远程规则和脚本.+update-interval.+自动') { throw 'Missing remote-resource automatic update guidance' }
