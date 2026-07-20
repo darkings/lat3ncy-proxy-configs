@@ -67,11 +67,79 @@ proxy-groups:
     interval: 600
     tolerance: 50
     lazy: true
+    timeout: 5000
+    max-failed-times: 3
+    expected-status: 204
+
+  - name: Hong Kong
+    type: url-test
+    include-all: true
+    filter: '(?i)(香港|港|🇭🇰|\bHK\b|Hong[ -]?Kong)'
+    url: https://www.gstatic.com/generate_204
+    interval: 600
+    tolerance: 50
+    lazy: true
+    timeout: 5000
+    max-failed-times: 3
+    expected-status: 204
+
+  - name: Taiwan
+    type: url-test
+    include-all: true
+    filter: '(?i)(台湾|台灣|臺灣|台北|臺北|🇹🇼|\bTW\b|Taiwan|Taipei)'
+    url: https://www.gstatic.com/generate_204
+    interval: 600
+    tolerance: 50
+    lazy: true
+    timeout: 5000
+    max-failed-times: 3
+    expected-status: 204
+
+  - name: Japan
+    type: url-test
+    include-all: true
+    filter: '(?i)(日本|东京|東京|大阪|🇯🇵|\bJP\b|Japan|Tokyo|Osaka)'
+    url: https://www.gstatic.com/generate_204
+    interval: 600
+    tolerance: 50
+    lazy: true
+    timeout: 5000
+    max-failed-times: 3
+    expected-status: 204
+
+  - name: Singapore
+    type: url-test
+    include-all: true
+    filter: '(?i)(新加坡|狮城|獅城|🇸🇬|\bSG\b|Singapore)'
+    url: https://www.gstatic.com/generate_204
+    interval: 600
+    tolerance: 50
+    lazy: true
+    timeout: 5000
+    max-failed-times: 3
+    expected-status: 204
+
+  - name: United States
+    type: url-test
+    include-all: true
+    filter: '(?i)(美国|美國|🇺🇸|\bUS(?:A)?\b|United[ -]?States|America|Los[ -]?Angeles|San[ -]?Jose|Seattle|New[ -]?York)'
+    url: https://www.gstatic.com/generate_204
+    interval: 600
+    tolerance: 50
+    lazy: true
+    timeout: 5000
+    max-failed-times: 3
+    expected-status: 204
 
   - name: Proxy
     type: select
     proxies:
       - Auto
+      - Hong Kong
+      - Taiwan
+      - Japan
+      - Singapore
+      - United States
       - DIRECT
     include-all: true
 
@@ -79,6 +147,11 @@ proxy-groups:
     type: select
     proxies:
       - Proxy
+      - Hong Kong
+      - Taiwan
+      - Japan
+      - Singapore
+      - United States
       - DIRECT
     include-all: true
 
@@ -86,6 +159,11 @@ proxy-groups:
     type: select
     proxies:
       - Proxy
+      - Hong Kong
+      - Taiwan
+      - Japan
+      - Singapore
+      - United States
       - DIRECT
     include-all: true
 
@@ -93,6 +171,11 @@ proxy-groups:
     type: select
     proxies:
       - Proxy
+      - Hong Kong
+      - Taiwan
+      - Japan
+      - Singapore
+      - United States
       - DIRECT
     include-all: true
 
@@ -100,6 +183,11 @@ proxy-groups:
     type: select
     proxies:
       - Proxy
+      - Hong Kong
+      - Taiwan
+      - Japan
+      - Singapore
+      - United States
       - DIRECT
     include-all: true
 
@@ -107,13 +195,11 @@ proxy-groups:
     type: select
     proxies:
       - Proxy
-      - DIRECT
-    include-all: true
-
-  - name: OneDrive
-    type: select
-    proxies:
-      - Proxy
+      - Hong Kong
+      - Taiwan
+      - Japan
+      - Singapore
+      - United States
       - DIRECT
     include-all: true
 
@@ -121,6 +207,11 @@ proxy-groups:
     type: select
     proxies:
       - Proxy
+      - Hong Kong
+      - Taiwan
+      - Japan
+      - Singapore
+      - United States
       - DIRECT
     include-all: true
 
@@ -128,6 +219,11 @@ proxy-groups:
     type: select
     proxies:
       - Proxy
+      - Hong Kong
+      - Taiwan
+      - Japan
+      - Singapore
+      - United States
       - DIRECT
     include-all: true
 
@@ -135,6 +231,11 @@ proxy-groups:
     type: select
     proxies:
       - Proxy
+      - Hong Kong
+      - Taiwan
+      - Japan
+      - Singapore
+      - United States
       - DIRECT
     include-all: true
 
@@ -328,7 +429,7 @@ rules:
   - RULE-SET,Apple-CN,DIRECT
   - RULE-SET,OpenAI,OpenAI
   - RULE-SET,GitHub,GitHub
-  - RULE-SET,OneDrive,OneDrive
+  - RULE-SET,OneDrive,Microsoft
   - RULE-SET,Microsoft,Microsoft
   - RULE-SET,Steam,Steam
   - RULE-SET,Apple,Apple

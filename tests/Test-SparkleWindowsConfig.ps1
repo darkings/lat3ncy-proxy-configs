@@ -32,11 +32,20 @@ Assert-Match '(?m)^rule-providers:\s*$' 'Sparkle override must own rule provider
 Assert-Match '(?m)^rules:\s*$' 'Sparkle override must own routing rules'
 
 foreach ($group in @(
-    'Auto', 'Proxy', 'Spotify', 'Telegram',
-    'OpenAI', 'GitHub', 'Microsoft', 'OneDrive',
+    'Auto', 'Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States',
+    'Proxy', 'Spotify', 'Telegram',
+    'OpenAI', 'GitHub', 'Microsoft',
     'Steam', 'Apple', 'YouTube'
 )) {
     Assert-Match "(?m)^\s+- name: $([regex]::Escape($group))\s*$" "Missing proxy group: $group"
+}
+
+foreach ($region in @('Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States')) {
+    $references = [regex]::Matches($config, "(?m)^\s{6}- $([regex]::Escape($region))\s*$").Count
+    if ($references -ne 9) { throw "Every selectable group must include regional auto group: $region" }
+}
+if (([regex]::Matches($config, '(?m)^\s{4}expected-status:\s*204\s*$')).Count -ne 6) {
+    throw 'Every automatic latency group must require HTTP 204'
 }
 
 $providers = @(
@@ -68,6 +77,7 @@ if (([regex]::Matches($config, '(?m)^\s{4}proxy:\s*Proxy\s*$')).Count -ne $provi
 }
 Assert-NoMatch '(?m)^\s+- name:\s*Windows-' 'Visible proxy group names must not use a Windows prefix'
 Assert-NoMatch '(?m)^\s{2}Windows-[^:]+:\s*$' 'Rule provider names must not use a Windows prefix'
+Assert-NoMatch '(?m)^\s+- name:\s*OneDrive\s*$' 'OneDrive must share the Microsoft policy group'
 
 Assert-Match '(?m)^\s+- "\+\.ts\.net"\s*$' 'MagicDNS must bypass fake IP'
 Assert-Match '(?m)^\s+- "\+\.tailscale\.com"\s*$' 'Tailscale domains must bypass DNS and sniffing'
@@ -80,7 +90,7 @@ Assert-Match '(?m)^\s+- RULE-SET,Steam-CN,DIRECT\s*$' 'Steam China download dire
 Assert-Match '(?m)^\s+- RULE-SET,Apple-CN,DIRECT\s*$' 'Apple China CDN direct rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,OpenAI,OpenAI\s*$' 'OpenAI policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,GitHub,GitHub\s*$' 'GitHub policy rule is missing'
-Assert-Match '(?m)^\s+- RULE-SET,OneDrive,OneDrive\s*$' 'OneDrive policy rule is missing'
+Assert-Match '(?m)^\s+- RULE-SET,OneDrive,Microsoft\s*$' 'OneDrive must route through Microsoft policy'
 Assert-Match '(?m)^\s+- RULE-SET,Microsoft,Microsoft\s*$' 'Microsoft policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Steam,Steam\s*$' 'Steam store and community policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Apple,Apple\s*$' 'Apple international policy rule is missing'
@@ -97,7 +107,7 @@ $tailscalePosition = $config.IndexOf('  - DOMAIN-SUFFIX,ts.net,DIRECT')
 $adPosition = $config.IndexOf('  - RULE-SET,Cats-Team-AdRules,REJECT')
 $microsoftCnPosition = $config.IndexOf('  - RULE-SET,Microsoft-CN,DIRECT')
 $microsoftPosition = $config.IndexOf('  - RULE-SET,Microsoft,Microsoft')
-$oneDrivePosition = $config.IndexOf('  - RULE-SET,OneDrive,OneDrive')
+$oneDrivePosition = $config.IndexOf('  - RULE-SET,OneDrive,Microsoft')
 $steamCnPosition = $config.IndexOf('  - RULE-SET,Steam-CN,DIRECT')
 $steamPosition = $config.IndexOf('  - RULE-SET,Steam,Steam')
 $appleCnPosition = $config.IndexOf('  - RULE-SET,Apple-CN,DIRECT')
