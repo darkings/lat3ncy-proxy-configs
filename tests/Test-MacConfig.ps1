@@ -7,7 +7,7 @@ if (-not (Test-Path -LiteralPath $configPath)) {
     throw 'Missing config: quantumultx-macos.conf'
 }
 
-$config = Get-Content -LiteralPath $configPath -Raw
+$config = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8
 $activeLines = $config -split "`r?`n" | Where-Object {
     $_ -notmatch '^\s*[#;]' -and $_ -match '\S'
 }

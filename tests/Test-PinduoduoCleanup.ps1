@@ -4,8 +4,8 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $snippetPath = Join-Path $repoRoot 'rewrites/pinduoduo-cleanup.snippet'
 $configPath = Join-Path $repoRoot 'quantumultx.conf'
 $legacyFilterPath = Join-Path $repoRoot 'rules/pinduoduo-network-block.list'
-$snippetLines = Get-Content -LiteralPath $snippetPath
-$config = Get-Content -Raw -LiteralPath $configPath
+$snippetLines = Get-Content -LiteralPath $snippetPath -Encoding UTF8
+$config = Get-Content -Raw -LiteralPath $configPath -Encoding UTF8
 
 $ipv4UrlPattern = '^http:\/\/(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\/(?:d4|v2\/d)(?:\?.*)?$'
 $ipv6UrlPattern = '^http:\/\/\[[0-9A-Fa-f:.%]+\](?::\d+)?\/(?:d4|v2\/d)(?:\?.*)?$'
