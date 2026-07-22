@@ -53,12 +53,20 @@ foreach ($platform in $configs.Keys) {
     Assert-Match $config '(?m)^ipv6-vif=on\s*$' "$platform must enable the IPv6 virtual interface"
     Assert-Match $config '(?m)^dns-server=system\s*$' "$platform must retain system DNS"
     Assert-Match $config '(?m)^disable-stun=false\s*$' "$platform must not globally block STUN"
-    Assert-Match $config '(?m)^real-ip=.*\*\.ts\.net.*\*\.tailscale\.com' "$platform must return real IPs for Tailscale domains"
-
     $general = Get-Section $config 'General'
     foreach ($value in @('100.64.0.0/10', 'fd7a:115c:a1e0::/48', '*.ts.net', '*.tailscale.com')) {
         Assert-Match $general "(?m)^skip-proxy=.*$([regex]::Escape($value))" "$platform skip-proxy missing $value"
-        Assert-Match $general "(?m)^bypass-tun=.*$([regex]::Escape($value))" "$platform bypass-tun missing $value"
+    }
+    if ($platform -eq 'macOS') {
+        Assert-Match $general '(?m)^real-ip=\*\.ts\.net,\*\.tailscale\.com\s*$' 'macOS must return real IPs for Tailscale domains'
+        Assert-Match $general '(?m)^skip-proxy=127\.0\.0\.1,localhost,\*\.local,192\.168\.0\.0/16,10\.0\.0\.0/8,172\.16\.0\.0/12,100\.64\.0\.0/10,100\.100\.100\.100/32,fd7a:115c:a1e0::/48,\*\.ts\.net,\*\.tailscale\.com,e\.crashlynatics\.com\s*$' 'macOS skip-proxy must preserve the verified Tailscale routing order'
+        Assert-Match $general '(?m)^bypass-tun=10\.0\.0\.0/8,127\.0\.0\.0/8,169\.254\.0\.0/16,172\.16\.0\.0/12,192\.0\.0\.0/24,192\.0\.2\.0/24,192\.88\.99\.0/24,192\.168\.0\.0/16,198\.51\.100\.0/24,203\.0\.113\.0/24,224\.0\.0\.0/4,255\.255\.255\.255/32\s*$' 'macOS bypass-tun must avoid conflicting with Tailscale routes'
+        Assert-NoMatch $general '(?m)^bypass-tun=.*(?:100\.64\.0\.0/10|fd7a:115c:a1e0::/48|\*\.ts\.net|\*\.tailscale\.com)' 'macOS bypass-tun must not bypass Tailscale traffic'
+    } else {
+        Assert-Match $config '(?m)^real-ip=.*\*\.ts\.net.*\*\.tailscale\.com' "$platform must return real IPs for Tailscale domains"
+        foreach ($value in @('100.64.0.0/10', 'fd7a:115c:a1e0::/48', '*.ts.net', '*.tailscale.com')) {
+            Assert-Match $general "(?m)^bypass-tun=.*$([regex]::Escape($value))" "$platform bypass-tun missing $value"
+        }
     }
 
     $filters = Get-Section $config 'Remote Filter'

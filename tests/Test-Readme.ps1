@@ -45,6 +45,7 @@ if ($readme -notmatch 'Loon 配置.+本地添加节点订阅') { throw 'Missing 
 if ($readme -notmatch '香港、台湾、日本、新加坡、美国.+固定地区') { throw 'Missing Loon fixed-region guidance' }
 if ($readme -notmatch 'Loon.+MITM.+本地') { throw 'Missing Loon local MITM guidance' }
 if ($readme -notmatch 'Loon.+Sub-Store') { throw 'Missing Loon Sub-Store guidance' }
+if ($readme -notmatch 'macOS.+100\.100\.100\.100/32.+不放入.+bypass-tun.+Tailscale.+路由冲突') { throw 'Missing Loon macOS Tailscale routing guidance' }
 if ($readme -notmatch 'Windows YAML 不包含节点') { throw 'Missing Windows extension import guidance' }
 if ($readme -notmatch '不能作为普通订阅单独激活') { throw 'Missing Windows YAML distinction' }
 if ($readme -notmatch '覆写.+Windows Raw 地址.+文件类型选择 YAML') { throw 'Missing Sparkle remote override import steps' }
