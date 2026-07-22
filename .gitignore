@@ -1,1 +1,14 @@
+# Local documentation and generated document artifacts are never published.
 /docs/
+/.docx_work/
+
+# README.md is the only document allowed at the repository root.
+/*.md
+/*.mdx
+/*.txt
+/*.doc
+/*.docx
+/*.pdf
+/*.rtf
+/*.odt
+!/README.md

@@ -10,6 +10,7 @@ $headings = @(
     '### 手机版默认启用脚本',
     '## macOS 版说明',
     '### macOS 默认启用脚本',
+    '## Loon iOS 与 macOS 版说明',
     '## Windows 版说明',
     '### Windows 配置方法',
     '## 更新说明'
@@ -25,7 +26,13 @@ for ($i = 1; $i -lt $positions.Count; $i++) {
 }
 
 $base = 'https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/'
-foreach ($file in @('quantumultx.conf', 'quantumultx-macos.conf', 'sparkle-windows-override.yaml')) {
+foreach ($file in @(
+    'quantumultx.conf',
+    'quantumultx-macos.conf',
+    'loon-ios.lcf',
+    'loon-macos.lcf',
+    'sparkle-windows-override.yaml'
+)) {
     $url = "$base$file"
     if ($readme -notmatch [regex]::Escape($url)) { throw "Missing download URL: $file" }
     $codeBlock = '(?m)^```text\r?\n{0}\r?\n```\s*$' -f [regex]::Escape($url)
@@ -33,6 +40,11 @@ foreach ($file in @('quantumultx.conf', 'quantumultx-macos.conf', 'sparkle-windo
 }
 
 if ($readme -notmatch '自用.+Quantumult X 手机版.+macOS.+Sparkle Windows') { throw 'Missing self-use cross-platform positioning' }
+if ($readme -notmatch 'Loon iOS.+Loon macOS') { throw 'Missing Loon platform positioning' }
+if ($readme -notmatch 'Loon 配置.+本地添加节点订阅') { throw 'Missing Loon local subscription guidance' }
+if ($readme -notmatch '香港、台湾、日本、新加坡、美国.+固定地区') { throw 'Missing Loon fixed-region guidance' }
+if ($readme -notmatch 'Loon.+MITM.+本地') { throw 'Missing Loon local MITM guidance' }
+if ($readme -notmatch 'Loon.+Sub-Store') { throw 'Missing Loon Sub-Store guidance' }
 if ($readme -notmatch 'Windows YAML 不包含节点') { throw 'Missing Windows extension import guidance' }
 if ($readme -notmatch '不能作为普通订阅单独激活') { throw 'Missing Windows YAML distinction' }
 if ($readme -notmatch '覆写.+Windows Raw 地址.+文件类型选择 YAML') { throw 'Missing Sparkle remote override import steps' }
