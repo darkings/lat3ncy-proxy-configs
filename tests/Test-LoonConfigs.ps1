@@ -114,7 +114,11 @@ foreach ($platform in $configs.Keys) {
         Assert-Match $remoteRules "(?m)/$([regex]::Escape($app))/$([regex]::Escape($app))\.list,\s*policy=$([regex]::Escape($app))," "$platform missing remote rule for $app"
     }
     Assert-Match $remoteRules '(?m)/LAN_SPLITTER\.lsr,\s*policy=DIRECT,' "$platform missing LAN direct rule"
+    Assert-Match $remoteRules '(?m)/rule/Loon/WeChat/WeChat\.list,\s*policy=DIRECT,\s*tag=微信转圈,\s*enabled=true' "$platform missing the native Loon WeChat direct rule"
     Assert-Match $remoteRules '(?m)/REGION_SPLITTER\.lsr,\s*policy=DIRECT,' "$platform missing China direct rule"
+    if ($remoteRules.IndexOf('/rule/Loon/WeChat/WeChat.list') -gt $remoteRules.IndexOf('/REGION_SPLITTER.lsr')) {
+        throw "$platform WeChat direct rule must precede the general China rule"
+    }
 
     $plugins = Get-Section $config 'Plugin'
     foreach ($plugin in @('BlockAdvertisers', 'QuickSearch', 'Prevent_DNS_Leaks', 'Node_detection_tool', 'Sub-Store')) {
