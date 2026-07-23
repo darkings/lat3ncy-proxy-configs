@@ -176,7 +176,6 @@ $iosAppPlugins = @(
     'Amap_remove_ads',
     'JD_remove_ads',
     'Remove_ads_by_keli',
-    'PinDuoDuo_remove_ads',
     'Taobao_remove_ads',
     'Weixin_Official_Accounts_remove_ads',
     'Weixin_external_links_unlock',
@@ -191,6 +190,10 @@ foreach ($plugin in $iosAppPlugins) {
     Assert-Match $iosPlugins "(?m)^https://kelee\.one/Tool/Loon/Lpx/$([regex]::Escape($plugin))\.lpx,.+enabled=true\s*$" "iOS missing enabled KeLee plugin: $plugin"
     Assert-NoMatch $macPlugins "(?m)/$([regex]::Escape($plugin))\.lpx," "macOS must not contain iOS app plugin: $plugin"
 }
+$localPinduoduoPlugin = 'https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/loon/plugins/pinduoduo-cleanup.lpx'
+Assert-Match $iosPlugins "(?m)^$([regex]::Escape($localPinduoduoPlugin)),\s*enabled=true\s*$" 'iOS missing the repository Loon Pinduoduo plugin'
+Assert-NoMatch $iosPlugins '(?m)^https://kelee\.one/Tool/Loon/Lpx/PinDuoDuo_remove_ads\.lpx,' 'iOS must not keep the replaced KeLee Pinduoduo plugin'
+Assert-NoMatch $macPlugins '(?m)/loon/plugins/pinduoduo-cleanup\.lpx,' 'macOS must not contain the iOS Pinduoduo plugin'
 Assert-Match $iosPlugins '(?m)^https://raw\.githubusercontent\.com/fmz200/wool_scripts/main/Loon/plugin/split/partM/Meituan\.lpx,.+enabled=true\s*$' 'iOS missing enabled fmz200 plugin: Meituan'
 Assert-NoMatch $macPlugins '(?m)/partM/Meituan\.lpx,' 'macOS must not contain iOS app plugin: Meituan'
 $iosPluginUrls = [regex]::Matches($iosPlugins, '(?m)^https?://[^,\r\n]+') | ForEach-Object { $_.Value }
