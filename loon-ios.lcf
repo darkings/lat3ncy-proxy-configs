@@ -104,10 +104,12 @@ https://kelee.one/Tool/Loon/Lpx/WexinMiniPrograms_Remove_ads.lpx, enabled=true
 https://kelee.one/Tool/Loon/Lpx/FleaMarket_remove_ads.lpx, enabled=true
 https://kelee.one/Tool/Loon/Lpx/XiaobaiPrint_remove_ads.lpx, enabled=true
 https://kelee.one/Tool/Loon/Lpx/Himalaya_remove_ads.lpx, enabled=true
+https://kelee.one/Tool/Loon/Lpx/XiaChuFang_remove_ads.lpx, enabled=true
+https://kelee.one/Tool/Loon/Lpx/Zhihu_remove_ads.lpx, enabled=true
+https://raw.githubusercontent.com/fmz200/wool_scripts/main/Loon/plugin/split/partM/Meituan.lpx, enabled=true
 https://kelee.one/Tool/Loon/Lpx/QuickSearch.lpx, enabled=true
 https://kelee.one/Tool/Loon/Lpx/Prevent_DNS_Leaks.lpx, policy=Proxy, enabled=true
 https://kelee.one/Tool/Loon/Lpx/Node_detection_tool.lpx, enabled=true
-https://kelee.one/Tool/Loon/Lpx/TestFlightRegionUnlock.lpx, policy=DIRECT, enabled=false
 https://kelee.one/Tool/Loon/Lpx/BoxJs.lpx, policy=Proxy, enabled=true
 https://kelee.one/Tool/Loon/Lpx/Sub-Store.lpx, policy=Proxy, enabled=true
 https://kelee.one/Tool/Loon/Lpx/Script-Hub.lpx, policy=Proxy, enabled=true

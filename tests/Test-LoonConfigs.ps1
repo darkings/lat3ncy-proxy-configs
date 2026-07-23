@@ -183,17 +183,21 @@ $iosAppPlugins = @(
     'WexinMiniPrograms_Remove_ads',
     'FleaMarket_remove_ads',
     'XiaobaiPrint_remove_ads',
-    'Himalaya_remove_ads'
+    'Himalaya_remove_ads',
+    'XiaChuFang_remove_ads',
+    'Zhihu_remove_ads'
 )
 foreach ($plugin in $iosAppPlugins) {
     Assert-Match $iosPlugins "(?m)^https://kelee\.one/Tool/Loon/Lpx/$([regex]::Escape($plugin))\.lpx,.+enabled=true\s*$" "iOS missing enabled KeLee plugin: $plugin"
     Assert-NoMatch $macPlugins "(?m)/$([regex]::Escape($plugin))\.lpx," "macOS must not contain iOS app plugin: $plugin"
 }
+Assert-Match $iosPlugins '(?m)^https://raw\.githubusercontent\.com/fmz200/wool_scripts/main/Loon/plugin/split/partM/Meituan\.lpx,.+enabled=true\s*$' 'iOS missing enabled fmz200 plugin: Meituan'
+Assert-NoMatch $macPlugins '(?m)/partM/Meituan\.lpx,' 'macOS must not contain iOS app plugin: Meituan'
 $iosPluginUrls = [regex]::Matches($iosPlugins, '(?m)^https?://[^,\r\n]+') | ForEach-Object { $_.Value }
 if (($iosPluginUrls | Sort-Object -Unique).Count -ne $iosPluginUrls.Count) {
     throw 'iOS plugin URLs must not contain duplicates'
 }
-Assert-Match $iosPlugins '(?m)/TestFlightRegionUnlock\.lpx,.+enabled=false' 'iOS must keep TestFlight disabled'
+Assert-NoMatch $iosPlugins '(?m)/TestFlightRegionUnlock\.lpx,' 'iOS must not contain TestFlight region unlock'
 Assert-NoMatch $macPlugins '(?m)/TestFlightRegionUnlock\.lpx,' 'macOS must not contain TestFlight'
 Assert-NoMatch (Get-Section $ios 'Proxy Group') '(?m)^Steam=' 'iOS must not expose Steam'
 Assert-NoMatch (Get-Section $ios 'Remote Rule') '(?m)/Steam/Steam\.list' 'iOS must not route Steam separately'
