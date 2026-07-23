@@ -71,6 +71,7 @@ proxy-groups:
       - Singapore
       - United States
     include-all: true
+    exclude-filter: '(?i)(官网|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)'
 
   - name: Spotify
     type: select
@@ -83,6 +84,7 @@ proxy-groups:
       - Singapore
       - United States
     include-all: true
+    exclude-filter: '(?i)(官网|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)'
 
   - name: Telegram
     type: select
@@ -95,6 +97,7 @@ proxy-groups:
       - Singapore
       - United States
     include-all: true
+    exclude-filter: '(?i)(官网|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)'
 
   - name: OpenAI
     type: select
@@ -107,6 +110,7 @@ proxy-groups:
       - Singapore
       - United States
     include-all: true
+    exclude-filter: '(?i)(官网|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)'
 
   - name: GitHub
     type: select
@@ -119,6 +123,7 @@ proxy-groups:
       - Singapore
       - United States
     include-all: true
+    exclude-filter: '(?i)(官网|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)'
 
   - name: Microsoft
     type: select
@@ -131,6 +136,7 @@ proxy-groups:
       - Singapore
       - United States
     include-all: true
+    exclude-filter: '(?i)(官网|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)'
 
   - name: Steam
     type: select
@@ -143,6 +149,7 @@ proxy-groups:
       - Singapore
       - United States
     include-all: true
+    exclude-filter: '(?i)(官网|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)'
 
   - name: Apple
     type: select
@@ -155,6 +162,7 @@ proxy-groups:
       - Singapore
       - United States
     include-all: true
+    exclude-filter: '(?i)(官网|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)'
 
   - name: YouTube
     type: select
@@ -167,10 +175,12 @@ proxy-groups:
       - Singapore
       - United States
     include-all: true
+    exclude-filter: '(?i)(官网|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)'
 
   - name: Auto
     type: url-test
     include-all: true
+    exclude-filter: '(?i)(官网|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)'
     url: https://www.gstatic.com/generate_204
     interval: 600
     tolerance: 50
@@ -183,6 +193,7 @@ proxy-groups:
     type: url-test
     include-all: true
     filter: '(?i)(香港|港|🇭🇰|\bHK\b|Hong[ -]?Kong)'
+    exclude-filter: '(?i)(官网|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)'
     url: https://www.gstatic.com/generate_204
     interval: 600
     tolerance: 50
@@ -195,6 +206,7 @@ proxy-groups:
     type: url-test
     include-all: true
     filter: '(?i)(台湾|台灣|臺灣|台北|臺北|🇹🇼|\bTW\b|Taiwan|Taipei)'
+    exclude-filter: '(?i)(官网|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)'
     url: https://www.gstatic.com/generate_204
     interval: 600
     tolerance: 50
@@ -207,6 +219,7 @@ proxy-groups:
     type: url-test
     include-all: true
     filter: '(?i)(日本|东京|東京|大阪|🇯🇵|\bJP\b|Japan|Tokyo|Osaka)'
+    exclude-filter: '(?i)(官网|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)'
     url: https://www.gstatic.com/generate_204
     interval: 600
     tolerance: 50
@@ -219,6 +232,7 @@ proxy-groups:
     type: url-test
     include-all: true
     filter: '(?i)(新加坡|狮城|獅城|🇸🇬|\bSG\b|Singapore)'
+    exclude-filter: '(?i)(官网|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)'
     url: https://www.gstatic.com/generate_204
     interval: 600
     tolerance: 50
@@ -231,6 +245,7 @@ proxy-groups:
     type: url-test
     include-all: true
     filter: '(?i)(美国|美國|🇺🇸|\bUS(?:A)?\b|United[ -]?States|America|Los[ -]?Angeles|San[ -]?Jose|Seattle|New[ -]?York)'
+    exclude-filter: '(?i)(官网|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)'
     url: https://www.gstatic.com/generate_204
     interval: 600
     tolerance: 50

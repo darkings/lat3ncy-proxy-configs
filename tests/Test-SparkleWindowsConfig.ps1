@@ -39,6 +39,17 @@ foreach ($group in @(
 )) {
     Assert-Match "(?m)^\s+- name: $([regex]::Escape($group))\s*$" "Missing proxy group: $group"
 }
+$subscriptionStatusFilter = '(?i)(官网|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)'
+$excludeFilterLines = [regex]::Matches($config, "(?m)^\s{4}exclude-filter:\s*'$([regex]::Escape($subscriptionStatusFilter))'\s*$")
+if ($excludeFilterLines.Count -ne 15) {
+    throw 'Every Sparkle proxy group that includes subscription nodes must exclude subscription status entries'
+}
+foreach ($blockedName in @('香港 剩余流量 20GB', '日本 套餐到期', 'US Remaining 50G', '新加坡 Bandwidth 100G', '2026-08-01')) {
+    if ($blockedName -notmatch $subscriptionStatusFilter) { throw "Subscription status filter missed: $blockedName" }
+}
+foreach ($allowedName in @('香港 01', '日本-HY2', 'United States 02')) {
+    if ($allowedName -match $subscriptionStatusFilter) { throw "Subscription status filter rejected a normal node: $allowedName" }
+}
 
 foreach ($region in @('Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States')) {
     $references = [regex]::Matches($config, "(?m)^\s{6}- $([regex]::Escape($region))\s*$").Count

@@ -92,6 +92,13 @@ foreach ($platform in $configs.Keys) {
     foreach ($region in $regions) {
         Assert-Match $filters "(?m)^$($region)节点=NameRegex," "$platform missing node filter for $region"
     }
+    $subscriptionStatusTerms = @('官网', '订阅', '剩余', '流量', '套餐', '到期', '过期', '有效期', '已用', '重置', 'TRAFFIC', 'EXPIRE', 'EXPIRED', 'USED', 'TOTAL', 'REMAINING', 'RESET', 'BANDWIDTH')
+    foreach ($filterName in @('全球') + $regions) {
+        $filterLine = [regex]::Match($filters, "(?m)^$($filterName)节点=NameRegex,.+$").Value
+        foreach ($term in $subscriptionStatusTerms) {
+            Assert-Match $filterLine ([regex]::Escape($term)) "$platform $filterName node filter must exclude subscription status term: $term"
+        }
+    }
     Assert-NoMatch $filters '(?m)^(韩国|游戏).*=NameRegex,' "$platform must not expose Korea or game filters"
 
     $groups = Get-Section $config 'Proxy Group'
