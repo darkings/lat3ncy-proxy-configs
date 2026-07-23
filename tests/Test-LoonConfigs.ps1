@@ -167,6 +167,32 @@ foreach ($plugin in @('Block_HTTPDNS', 'BoxJs', 'Script-Hub')) {
     Assert-Match $iosPlugins "(?m)/$plugin\.lpx,.+enabled=true" "iOS missing enabled plugin: $plugin"
     Assert-NoMatch $macPlugins "(?m)/$plugin\.lpx," "macOS must not contain plugin: $plugin"
 }
+$iosAppPlugins = @(
+    'AppleWeatherEnhancer',
+    'QQ_Redirect',
+    'Spotify_remove_ads',
+    'Spotify_lyrics_translation',
+    'Bilibili_remove_ads',
+    'Amap_remove_ads',
+    'JD_remove_ads',
+    'Remove_ads_by_keli',
+    'PinDuoDuo_remove_ads',
+    'Taobao_remove_ads',
+    'Weixin_Official_Accounts_remove_ads',
+    'Weixin_external_links_unlock',
+    'WexinMiniPrograms_Remove_ads',
+    'FleaMarket_remove_ads',
+    'XiaobaiPrint_remove_ads',
+    'Himalaya_remove_ads'
+)
+foreach ($plugin in $iosAppPlugins) {
+    Assert-Match $iosPlugins "(?m)^https://kelee\.one/Tool/Loon/Lpx/$([regex]::Escape($plugin))\.lpx,.+enabled=true\s*$" "iOS missing enabled KeLee plugin: $plugin"
+    Assert-NoMatch $macPlugins "(?m)/$([regex]::Escape($plugin))\.lpx," "macOS must not contain iOS app plugin: $plugin"
+}
+$iosPluginUrls = [regex]::Matches($iosPlugins, '(?m)^https?://[^,\r\n]+') | ForEach-Object { $_.Value }
+if (($iosPluginUrls | Sort-Object -Unique).Count -ne $iosPluginUrls.Count) {
+    throw 'iOS plugin URLs must not contain duplicates'
+}
 Assert-Match $iosPlugins '(?m)/TestFlightRegionUnlock\.lpx,.+enabled=false' 'iOS must keep TestFlight disabled'
 Assert-NoMatch $macPlugins '(?m)/TestFlightRegionUnlock\.lpx,' 'macOS must not contain TestFlight'
 Assert-NoMatch (Get-Section $ios 'Proxy Group') '(?m)^Steam=' 'iOS must not expose Steam'
