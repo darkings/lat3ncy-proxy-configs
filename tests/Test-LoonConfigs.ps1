@@ -36,6 +36,24 @@ $apps = @{
     iOS = $commonApps + 'TikTok'
     macOS = $commonApps[0..4] + 'Steam' + $commonApps[5..6]
 }
+$groupIcons = @{
+    Proxy = 'Global'
+    Spotify = 'Spotify'
+    Telegram = 'Telegram'
+    OpenAI = 'OpenAI'
+    GitHub = 'github'
+    Microsoft = 'Microsoft'
+    Steam = 'Steam'
+    Apple = 'Apple'
+    YouTube = 'YouTube'
+    TikTok = 'TikTok'
+    Auto = 'Urltest'
+    香港 = 'HK'
+    台湾 = 'TW'
+    日本 = 'JP'
+    新加坡 = 'SG'
+    美国 = 'US'
+}
 
 foreach ($platform in $configs.Keys) {
     $path = $configs[$platform]
@@ -84,6 +102,9 @@ foreach ($platform in $configs.Keys) {
         if ($position -lt 0) { throw "$platform missing policy group: $group" }
         if ($position -le $lastPosition) { throw "$platform policy group is out of order: $group" }
         $lastPosition = $position
+        $groupLine = [regex]::Match($groups, "(?m)^$([regex]::Escape($group))=.+$").Value
+        $iconUrl = "https://raw.githubusercontent.com/Orz-3/mini/master/Color/$($groupIcons[$group]).png"
+        Assert-Match $groupLine ",\s*img-url=$([regex]::Escape($iconUrl))\s*$" "$platform $group missing its policy-group icon"
     }
 
     $proxyLine = [regex]::Match($groups, '(?m)^Proxy=.+$').Value

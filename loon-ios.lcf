@@ -43,21 +43,21 @@ bypass-tun=10.0.0.0/8, 100.64.0.0/10, fd7a:115c:a1e0::/48, 127.0.0.0/8, 169.254.
 美国节点=NameRegex, FilterKey="^(?=.*((?i)🇺🇸|美国|波特兰|达拉斯|俄勒冈|凤凰城|费利蒙|硅谷|拉斯维加斯|洛杉矶|圣何塞|圣克拉拉|西雅图|芝加哥|(\b(US|USA|United States)(\d+)?\b)))(?!.*((?i)回国|校园|游戏|🎮|(\b(GAME)\b))).*$"
 
 [Proxy Group]
-Proxy=select, Auto, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, 全球节点
-Spotify=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国
-Telegram=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国
-OpenAI=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国
-GitHub=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国
-Microsoft=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国
-Apple=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国
-YouTube=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国
-TikTok=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国
-Auto=url-test, 全球节点, interval=60, tolerance=50
-香港=url-test, 香港节点, interval=60, tolerance=50
-台湾=url-test, 台湾节点, interval=60, tolerance=50
-日本=url-test, 日本节点, interval=60, tolerance=50
-新加坡=url-test, 新加坡节点, interval=60, tolerance=50
-美国=url-test, 美国节点, interval=60, tolerance=50
+Proxy=select, Auto, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, 全球节点, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Global.png
+Spotify=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Spotify.png
+Telegram=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Telegram.png
+OpenAI=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/OpenAI.png
+GitHub=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/github.png
+Microsoft=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Microsoft.png
+Apple=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Apple.png
+YouTube=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/YouTube.png
+TikTok=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/TikTok.png
+Auto=url-test, 全球节点, interval=60, tolerance=50, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Urltest.png
+香港=url-test, 香港节点, interval=60, tolerance=50, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/HK.png
+台湾=url-test, 台湾节点, interval=60, tolerance=50, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/TW.png
+日本=url-test, 日本节点, interval=60, tolerance=50, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/JP.png
+新加坡=url-test, 新加坡节点, interval=60, tolerance=50, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/SG.png
+美国=url-test, 美国节点, interval=60, tolerance=50, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/US.png
 
 [Rule]
 DOMAIN-SUFFIX, ts.net, DIRECT
