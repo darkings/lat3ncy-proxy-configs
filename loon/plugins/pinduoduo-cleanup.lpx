@@ -60,7 +60,7 @@ DOMAIN, cd-1.pddpic.com, REJECT
 
 [Script]
 http-response ^https:\/\/api\.pinduoduo\.com\/api\/alexa\/homepage\/hub script-path = https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/loon/scripts/pinduoduo-homepage-cleanup.js, requires-body = true, timeout = 10, tag = 拼多多首页与底栏净化
-http-response ^https:\/\/m\.pinduoduo\.net\/mdkd\/package\?from_app_scan script-path = https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/rewrites/scripts/pinduoduo-scan-cleanup.js, requires-body = true, timeout = 10, tag = 拼多多扫码取件页净化
+http-response ^https:\/\/m\.pinduoduo\.net\/mdkd\/package\?from_app_scan script-path = https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/loon/scripts/pinduoduo-scan-cleanup.js, requires-body = true, timeout = 10, tag = 拼多多扫码取件页净化
 
 [MITM]
 hostname = api.pinduoduo.com, api.yangkeduo.com, mobile.yangkeduo.com, m.pinduoduo.net, *.pddpic.com
