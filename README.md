@@ -28,17 +28,17 @@ Loon 配置使用对应 Raw 链接导入，导入后需在本地添加节点订�
 
 两份配置基于 iKeLee 的 Auto Select 模板定制，并保留原作者和授权说明。公开文件中的节点、远程订阅和证书字段保持为空。
 
-两端均启用 IPv6 和系统 DNS，并让 Tailscale 的 `100.64.0.0/10`、`fd7a:115c:a1e0::/48`、`*.ts.net` 与 `*.tailscale.com` 优先直连。iOS 继续绕过代理和 TUN；macOS 还将 `100.100.100.100/32` 加入 `skip-proxy`，但不放入 `bypass-tun`，避免与 Tailscale 路由冲突。
+两端均启用 IPv6 和系统 DNS，禁用 STUN 以减少直连 IP 泄漏，并在策略切换时重建现有连接。Tailscale 的 `100.64.0.0/10`、`fd7a:115c:a1e0::/48`、`*.ts.net` 与 `*.tailscale.com` 优先直连。iOS 继续绕过代理和 TUN；macOS 还将 `100.100.100.100/32` 加入 `skip-proxy`，但不放入 `bypass-tun`，避免与 Tailscale 路由冲突。
 
-香港、台湾、日本、新加坡、美国是五个固定地区自动测速组。全球和地区节点筛选都会排除订阅状态节点，包括“剩余流量、套餐到期、有效期、已用、重置”以及对应英文名称，防止信息节点进入策略组。
+香港、台湾、日本、新加坡、美国是五个固定地区自动测速组，每 600 秒检测一次。全球和地区节点筛选都会排除订阅状态节点，包括“剩余流量、套餐到期、有效期、已用、重置”以及对应英文名称，防止信息节点进入策略组。
 
-顶层策略顺序为 Proxy、各应用组、Auto 和五个地区组。Proxy 默认使用 Auto，也可切换地区、DIRECT 或单个订阅节点；应用组可选择 Proxy、DIRECT 和地区组。两端策略组均带图标。
+顶层策略顺序为 Proxy、各应用组、Auto 和五个地区组。Proxy 默认使用 Auto，也可切换地区、DIRECT 或单个订阅节点；应用组可选择 Proxy、DIRECT 和地区组。两端策略组均带图标。Apple 中国区服务优先直连，需代理的 Apple 服务进入 Apple 策略；macOS 的 Steam 中国区下载/CDN 也优先直连。
 
 ### iOS 配置
 
 iOS 版包含 TikTok、BoxJs、Sub-Store、Script-Hub 等移动端策略和工具，TestFlight 地区解锁保持关闭。默认启用 Apple 天气增强、QQ 链接解锁、Spotify 去广告与歌词增强、哔哩哔哩、高德地图、京东、拼多多、淘宝、微信公众号、微信外部链接、微信小程序、闲鱼、小白智慧打印、喜马拉雅、下厨房、知乎和美团等专项净化插件。
 
-拼多多使用仓库内的 Loon 原生插件和脚本，处理广告域名、接口响应、首页底栏以及扫码取件页面。相关资源统一保存在 `loon/` 目录。
+拼多多当前使用 KeLee 的 Loon 原生去广告插件；仓库内原有插件、脚本和 vendor 文件保留作备用，但不在 iOS 配置中加载。
 
 ### macOS 配置
 
@@ -61,7 +61,7 @@ Windows 版用于 Sparkle 的 Mihomo 内核，以单个远程 YAML 覆写叠加�
 
 单 YAML 完整接管节点订阅的 DNS、嗅探、策略组和分流规则，同时继续使用订阅提供的节点。嗅探采用保守模式，不改写目标地址，并跳过局域网、MagicDNS、Tailscale 控制域名及 Tailnet IPv4/IPv6。配置将这些私有网络和 Windows 联网检测置于规则最前；Cats-Team AdRules 每 6 小时更新，MetaCubeX 私有网络及国内外分流 MRS 每天更新。
 
-Windows 版提供全节点自动测速，以及香港、台湾、日本、新加坡、美国五个地区自动测速组。Proxy 和 OpenAI、GitHub、Microsoft、Steam、Apple、YouTube、Spotify、Telegram 等应用策略组均可直接选择地区自动组，也保留单节点手动选择。所有自动纳入订阅节点的策略组均通过 `exclude-filter` 排除剩余流量、套餐到期等订阅信息节点。
+Windows 版提供全节点自动测速，以及香港、台湾、日本、新加坡、美国五个地区自动测速组。Proxy 保留单节点手动选择；OpenAI、GitHub、Microsoft、Steam、Apple、YouTube、Spotify、Telegram 等应用策略组只提供 Proxy、DIRECT 和地区自动组，避免重复展开全部节点。自动纳入订阅节点的策略组通过统一的 `exclude-filter` 排除流量、到期、客服、公告、频道等信息节点。
 
 OneDrive 保留独立规则集，但流量并入 Microsoft 策略。Microsoft、Steam 与 Apple 的中国区下载/CDN 子集优先直连，商店、社区和国际服务进入对应策略组；Windows 配置不加入 TikTok、抖音、拼多多等移动 App 专项规则，也不包含 HTTPS 响应重写。
 

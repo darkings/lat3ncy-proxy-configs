@@ -70,7 +70,8 @@ foreach ($platform in $configs.Keys) {
     Assert-Match $config '(?m)^ip-mode=dual\s*$' "$platform must use dual-stack IP mode"
     Assert-Match $config '(?m)^ipv6-vif=on\s*$' "$platform must enable the IPv6 virtual interface"
     Assert-Match $config '(?m)^dns-server=system\s*$' "$platform must retain system DNS"
-    Assert-Match $config '(?m)^disable-stun=false\s*$' "$platform must not globally block STUN"
+    Assert-Match $config '(?m)^disable-stun=true\s*$' "$platform must block STUN to reduce direct-IP leakage"
+    Assert-Match $config '(?m)^disconnect-on-policy-change=true\s*$' "$platform must reconnect sessions after policy changes"
     $general = Get-Section $config 'General'
     foreach ($value in @('100.64.0.0/10', 'fd7a:115c:a1e0::/48', '*.ts.net', '*.tailscale.com')) {
         Assert-Match $general "(?m)^skip-proxy=.*$([regex]::Escape($value))" "$platform skip-proxy missing $value"
@@ -127,9 +128,9 @@ foreach ($platform in $configs.Keys) {
         Assert-NoMatch $appLine '(?:^|,\s*)Auto(?:,|$)' "$platform $app must not directly contain Auto"
     }
 
-    Assert-Match $groups '(?m)^Auto=url-test,\s*全球节点,' "$platform Auto must test all nodes"
+    Assert-Match $groups '(?m)^Auto=url-test,\s*全球节点,\s*interval=600,' "$platform Auto must test all nodes every 600 seconds"
     foreach ($region in $regions) {
-        Assert-Match $groups "(?m)^$region=url-test,\s*$($region)节点," "$platform $region must test its regional nodes"
+        Assert-Match $groups "(?m)^$region=url-test,\s*$($region)节点,\s*interval=600," "$platform $region must test its regional nodes every 600 seconds"
     }
 
     $rules = Get-Section $config 'Rule'
@@ -147,7 +148,19 @@ foreach ($platform in $configs.Keys) {
 
     $remoteRules = Get-Section $config 'Remote Rule'
     foreach ($app in $apps[$platform]) {
+        if ($app -eq 'Apple') { continue }
         Assert-Match $remoteRules "(?m)/$([regex]::Escape($app))/$([regex]::Escape($app))\.list,\s*policy=$([regex]::Escape($app))," "$platform missing remote rule for $app"
+    }
+    Assert-Match $remoteRules '(?m)/Repcz/Tool/X/Loon/Rules/AppleCN\.list,\s*policy=DIRECT,\s*tag=Apple CN,' "$platform missing Apple China direct rule"
+    Assert-Match $remoteRules '(?m)/Repcz/Tool/X/Loon/Rules/AppleProxy\.list,\s*policy=Apple,\s*tag=Apple Proxy,' "$platform missing Apple proxy rule"
+    if ($remoteRules.IndexOf('/AppleCN.list') -gt $remoteRules.IndexOf('/AppleProxy.list')) {
+        throw "$platform Apple China direct rule must precede Apple proxy rule"
+    }
+    if ($platform -eq 'macOS') {
+        Assert-Match $remoteRules '(?m)/SteamCN/SteamCN\.list,\s*policy=DIRECT,\s*tag=Steam CN,' 'macOS missing Steam China direct rule'
+        if ($remoteRules.IndexOf('/SteamCN/SteamCN.list') -gt $remoteRules.IndexOf('/Steam/Steam.list')) {
+            throw 'macOS Steam China direct rule must precede Steam proxy rule'
+        }
     }
     Assert-Match $remoteRules '(?m)/LAN_SPLITTER\.lsr,\s*policy=DIRECT,' "$platform missing LAN direct rule"
     Assert-Match $remoteRules '(?m)/rule/Loon/WeChat/WeChat\.list,\s*policy=DIRECT,\s*tag=微信转圈,\s*enabled=true' "$platform missing the native Loon WeChat direct rule"
@@ -182,6 +195,7 @@ $iosAppPlugins = @(
     'Bilibili_remove_ads',
     'Amap_remove_ads',
     'JD_remove_ads',
+    'PinDuoDuo_remove_ads',
     'Remove_ads_by_keli',
     'Taobao_remove_ads',
     'Weixin_Official_Accounts_remove_ads',
@@ -197,10 +211,9 @@ foreach ($plugin in $iosAppPlugins) {
     Assert-Match $iosPlugins "(?m)^https://kelee\.one/Tool/Loon/Lpx/$([regex]::Escape($plugin))\.lpx,.+enabled=true\s*$" "iOS missing enabled KeLee plugin: $plugin"
     Assert-NoMatch $macPlugins "(?m)/$([regex]::Escape($plugin))\.lpx," "macOS must not contain iOS app plugin: $plugin"
 }
-$localPinduoduoPlugin = 'https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/loon/plugins/pinduoduo-cleanup.lpx'
-Assert-Match $iosPlugins "(?m)^$([regex]::Escape($localPinduoduoPlugin)),\s*enabled=true\s*$" 'iOS missing the repository Loon Pinduoduo plugin'
-Assert-NoMatch $iosPlugins '(?m)^https://kelee\.one/Tool/Loon/Lpx/PinDuoDuo_remove_ads\.lpx,' 'iOS must not keep the replaced KeLee Pinduoduo plugin'
-Assert-NoMatch $macPlugins '(?m)/loon/plugins/pinduoduo-cleanup\.lpx,' 'macOS must not contain the iOS Pinduoduo plugin'
+Assert-Match $iosPlugins '(?m)^https://kelee\.one/Tool/Loon/Lpx/PinDuoDuo_remove_ads\.lpx,\s*enabled=true\s*$' 'iOS missing KeLee Pinduoduo plugin'
+Assert-NoMatch $iosPlugins '(?m)/loon/plugins/pinduoduo-cleanup\.lpx,' 'iOS must not load the fallback repository Pinduoduo plugin'
+Assert-NoMatch $macPlugins '(?m)/PinDuoDuo_remove_ads\.lpx,' 'macOS must not contain iOS Pinduoduo plugin'
 Assert-Match $iosPlugins '(?m)^https://raw\.githubusercontent\.com/fmz200/wool_scripts/main/Loon/plugin/split/partM/Meituan\.lpx,.+enabled=true\s*$' 'iOS missing enabled fmz200 plugin: Meituan'
 Assert-NoMatch $macPlugins '(?m)/partM/Meituan\.lpx,' 'macOS must not contain iOS app plugin: Meituan'
 $iosPluginUrls = [regex]::Matches($iosPlugins, '(?m)^https?://[^,\r\n]+') | ForEach-Object { $_.Value }
