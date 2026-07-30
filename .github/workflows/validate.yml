@@ -1,0 +1,73 @@
+name: Validate proxy configurations
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 3 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  configuration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install YAML parser
+        run: python -m pip install --disable-pip-version-check --no-cache-dir PyYAML==6.0.2
+
+      - name: Validate PowerShell contracts
+        shell: pwsh
+        run: |
+          ./tests/Test-LoonConfigs.ps1
+          ./tests/Test-MicrosoftCnRule.ps1
+          ./tests/Test-Readme.ps1
+          ./tests/Test-SparkleWindowsConfig.ps1
+          ./tests/Test-PinduoduoCleanup.ps1
+          ./tests/Test-DocumentPolicy.ps1
+
+      - name: Validate Python tooling
+        run: python -m py_compile scripts/generate_loon_configs.py scripts/generate_microsoft_cn.py scripts/check_remote_resources.py
+
+      - name: Validate generated Loon configurations
+        run: python scripts/generate_loon_configs.py --check
+
+      - name: Parse Sparkle YAML
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          config = yaml.safe_load(Path('sparkle-windows-override.yaml').read_text(encoding='utf-8'))
+          assert isinstance(config, dict)
+          assert config['rule-providers']['Google']['format'] == 'mrs'
+          assert config['rules'].index('RULE-SET,YouTube,YouTube') < config['rules'].index('RULE-SET,Google,Google')
+          print('PASS: Sparkle YAML parse and rule ordering')
+          PY
+
+      - name: Audit remote resources
+        run: python scripts/check_remote_resources.py
+
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

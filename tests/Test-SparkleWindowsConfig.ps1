@@ -35,7 +35,7 @@ foreach ($group in @(
     'Auto', 'Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States',
     'Proxy', 'Spotify', 'Telegram',
     'OpenAI', 'GitHub', 'Microsoft',
-    'Steam', 'Apple', 'YouTube'
+    'Steam', 'Apple', 'Google', 'YouTube'
 )) {
     Assert-Match "(?m)^\s+- name: $([regex]::Escape($group))\s*$" "Missing proxy group: $group"
 }
@@ -53,9 +53,9 @@ foreach ($allowedName in @('香港 01', '日本-HY2', 'United States 02')) {
 
 foreach ($region in @('Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States')) {
     $references = [regex]::Matches($config, "(?m)^\s{6}- $([regex]::Escape($region))\s*$").Count
-    if ($references -ne 9) { throw "Every selectable group must include regional auto group: $region" }
+    if ($references -ne 10) { throw "Every selectable group must include regional auto group: $region" }
 }
-$selectGroups = @('Proxy', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Steam', 'Apple', 'YouTube')
+$selectGroups = @('Proxy', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Steam', 'Apple', 'Google', 'YouTube')
 foreach ($group in $selectGroups) {
     $block = [regex]::Match(
         $config,
@@ -70,7 +70,7 @@ foreach ($group in $selectGroups) {
     }
 }
 $topLevelOrder = @(
-    'Proxy', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Steam', 'Apple', 'YouTube',
+    'Proxy', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Steam', 'Apple', 'Google', 'YouTube',
     'Auto', 'Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States'
 )
 $lastTopLevelPosition = -1
@@ -101,6 +101,7 @@ $providers = @(
     'Apple-CN',
     'Apple',
     'YouTube',
+    'Google',
     'CN-Domain',
     'NonCN-Domain',
     'CN-IP'
@@ -131,6 +132,7 @@ Assert-Match '(?m)^\s+- RULE-SET,Microsoft,Microsoft\s*$' 'Microsoft policy rule
 Assert-Match '(?m)^\s+- RULE-SET,Steam,Steam\s*$' 'Steam store and community policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Apple,Apple\s*$' 'Apple international policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,YouTube,YouTube\s*$' 'YouTube policy rule is missing'
+Assert-Match '(?m)^\s+- RULE-SET,Google,Google\s*$' 'Google policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Spotify,Spotify\s*$' 'Spotify policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Telegram-Domain,Telegram\s*$' 'Telegram domain policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Telegram-IP,Telegram,no-resolve\s*$' 'Telegram IP policy rule is missing'
@@ -148,6 +150,8 @@ $steamCnPosition = $config.IndexOf('  - RULE-SET,Steam-CN,DIRECT')
 $steamPosition = $config.IndexOf('  - RULE-SET,Steam,Steam')
 $appleCnPosition = $config.IndexOf('  - RULE-SET,Apple-CN,DIRECT')
 $applePosition = $config.IndexOf('  - RULE-SET,Apple,Apple')
+$youtubePosition = $config.IndexOf('  - RULE-SET,YouTube,YouTube')
+$googlePosition = $config.IndexOf('  - RULE-SET,Google,Google')
 $finalPosition = $config.IndexOf('  - MATCH,Proxy')
 if ($tailscalePosition -lt 0 -or $adPosition -lt 0 -or $finalPosition -lt 0 -or
     $tailscalePosition -gt $adPosition -or $adPosition -gt $finalPosition) {
@@ -156,6 +160,10 @@ if ($tailscalePosition -lt 0 -or $adPosition -lt 0 -or $finalPosition -lt 0 -or
 if ($microsoftCnPosition -gt $microsoftPosition -or $oneDrivePosition -gt $microsoftPosition -or
     $steamCnPosition -gt $steamPosition -or $appleCnPosition -gt $applePosition) {
     throw 'China download/CDN and OneDrive rules must precede their broad service rules'
+}
+
+if ($youtubePosition -lt 0 -or $googlePosition -lt 0 -or $youtubePosition -gt $googlePosition) {
+    throw 'YouTube rule must precede broad Google rule'
 }
 
 foreach ($app in @('TikTok', 'Pinduoduo', 'Ximalaya', 'Zhihu', 'Bilibili')) {
