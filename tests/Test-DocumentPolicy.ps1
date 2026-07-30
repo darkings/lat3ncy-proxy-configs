@@ -33,4 +33,5 @@ foreach ($path in $ignoreChecks) {
 & git -C $repoRoot check-ignore --quiet --no-index -- README.md
 if ($LASTEXITCODE -eq 0) { throw 'README.md must remain trackable' }
 
+$global:LASTEXITCODE = 0
 Write-Output 'PASS: repository documentation policy validation'
