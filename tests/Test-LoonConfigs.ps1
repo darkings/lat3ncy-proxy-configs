@@ -31,10 +31,10 @@ $requiredSections = @(
     'Rule', 'Remote Rule', 'Host', 'Rewrite', 'Script', 'Plugin', 'Mitm'
 )
 $regions = @('香港', '台湾', '日本', '新加坡', '美国')
-$commonApps = @('Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Apple', 'YouTube')
+$commonApps = @('Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Apple', 'Google', 'YouTube')
 $apps = @{
     iOS = $commonApps + 'TikTok'
-    macOS = $commonApps[0..4] + 'Steam' + $commonApps[5..6]
+    macOS = $commonApps[0..4] + 'Steam' + $commonApps[5..7]
 }
 $groupIcons = @{
     Proxy = 'Global'
@@ -45,6 +45,7 @@ $groupIcons = @{
     Microsoft = 'Microsoft'
     Steam = 'Steam'
     Apple = 'Apple'
+    Google = 'Google'
     YouTube = 'YouTube'
     TikTok = 'TikTok'
     Auto = 'Urltest'
@@ -147,9 +148,16 @@ foreach ($platform in $configs.Keys) {
     }
 
     $remoteRules = Get-Section $config 'Remote Rule'
+    Assert-Match $remoteRules '(?m)/darkings/lat3ncy-proxy-configs/main/loon/rules/microsoft-cn\.list,\s*policy=DIRECT,\s*tag=Microsoft CN,' "$platform missing Microsoft China direct rule"
+    if ($remoteRules.IndexOf('/microsoft-cn.list') -gt $remoteRules.IndexOf('/Microsoft/Microsoft.list')) {
+        throw "$platform Microsoft China direct rule must precede broad Microsoft rule"
+    }
     foreach ($app in $apps[$platform]) {
         if ($app -eq 'Apple') { continue }
         Assert-Match $remoteRules "(?m)/$([regex]::Escape($app))/$([regex]::Escape($app))\.list,\s*policy=$([regex]::Escape($app))," "$platform missing remote rule for $app"
+    }
+    if ($remoteRules.IndexOf('/YouTube/YouTube.list') -gt $remoteRules.IndexOf('/Google/Google.list')) {
+        throw "$platform YouTube rule must precede broad Google rule"
     }
     Assert-Match $remoteRules '(?m)/Repcz/Tool/X/Loon/Rules/AppleCN\.list,\s*policy=DIRECT,\s*tag=Apple CN,' "$platform missing Apple China direct rule"
     Assert-Match $remoteRules '(?m)/Repcz/Tool/X/Loon/Rules/AppleProxy\.list,\s*policy=Apple,\s*tag=Apple Proxy,' "$platform missing Apple proxy rule"

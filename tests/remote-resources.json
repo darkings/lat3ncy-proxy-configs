@@ -1,0 +1,25 @@
+{
+  "scan_files": [
+    "loon-ios.lcf",
+    "loon-macos.lcf",
+    "sparkle-windows-override.yaml",
+    "README.md"
+  ],
+  "required_hosts": [
+    "raw.githubusercontent.com"
+  ],
+  "warning_hosts": [
+    "geodata.kelee.one",
+    "kelee.one"
+  ],
+  "ignored_hosts": [
+    "connectivitycheck.platform.hicloud.com",
+    "dns.alidns.com",
+    "doh.pub",
+    "t.me",
+    "www.gstatic.com"
+  ],
+  "local_first_prefixes": [
+    "https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/"
+  ]
+}

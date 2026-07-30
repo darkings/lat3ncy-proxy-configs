@@ -1,4 +1,4 @@
-# Loon iOS configuration
+# Loon {{PLATFORM_DISPLAY}} configuration
 # Based on iKeLee Loon Auto Select Configuration
 # Upstream date: 2025-11-08
 # Author: https://t.me/iKeLee
@@ -26,9 +26,9 @@ proxy-test-url=http://www.gstatic.com/generate_204
 resource-parser=https://raw.githubusercontent.com/sub-store-org/Sub-Store/release/sub-store-parser.loon.min.js
 geoip-url=https://geodata.kelee.one/Country-Masaiki.mmdb
 ipasn-url=https://geodata.kelee.one/GeoLite2-ASN-P3TERX.mmdb
-real-ip=*.ts.net, *.tailscale.com
-skip-proxy=192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12, 100.64.0.0/10, fd7a:115c:a1e0::/48, localhost, *.local, *.ts.net, *.tailscale.com, e.crashlynatics.com
-bypass-tun=10.0.0.0/8, 100.64.0.0/10, fd7a:115c:a1e0::/48, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.0.2.0/24, 192.88.99.0/24, 192.168.0.0/16, 198.51.100.0/24, 203.0.113.0/24, 224.0.0.0/4, 255.255.255.255/32, *.ts.net, *.tailscale.com
+real-ip={{REAL_IP}}
+skip-proxy={{SKIP_PROXY}}
+bypass-tun={{BYPASS_TUN}}
 
 [Proxy]
 
@@ -49,10 +49,11 @@ Telegram=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-u
 OpenAI=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/OpenAI.png
 GitHub=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/github.png
 Microsoft=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Microsoft.png
+@@PRE_APP_GROUPS@@
 Apple=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Apple.png
 Google=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Google.png
 YouTube=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/YouTube.png
-TikTok=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/TikTok.png
+@@POST_APP_GROUPS@@
 Auto=url-test, 全球节点, interval=600, tolerance=50, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Urltest.png
 香港=url-test, 香港节点, interval=600, tolerance=50, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/HK.png
 台湾=url-test, 台湾节点, interval=600, tolerance=50, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/TW.png
@@ -76,11 +77,12 @@ https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Loon/
 https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Loon/GitHub/GitHub.list, policy=GitHub, tag=GitHub, enabled=true
 https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/loon/rules/microsoft-cn.list, policy=DIRECT, tag=Microsoft CN, enabled=true
 https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Loon/Microsoft/Microsoft.list, policy=Microsoft, tag=Microsoft, enabled=true
+@@PRE_REMOTE_RULES@@
 https://raw.githubusercontent.com/Repcz/Tool/X/Loon/Rules/AppleCN.list, policy=DIRECT, tag=Apple CN, enabled=true
 https://raw.githubusercontent.com/Repcz/Tool/X/Loon/Rules/AppleProxy.list, policy=Apple, tag=Apple Proxy, enabled=true
 https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Loon/YouTube/YouTube.list, policy=YouTube, tag=YouTube, enabled=true
 https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Loon/Google/Google.list, policy=Google, tag=Google, enabled=true
-https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Loon/TikTok/TikTok.list, policy=TikTok, tag=TikTok, enabled=true
+@@POST_REMOTE_RULES@@
 https://kelee.one/Tool/Loon/Lsr/REGION_SPLITTER.lsr, policy=DIRECT, tag=CN REGION, enabled=true
 
 [Host]
@@ -90,33 +92,7 @@ https://kelee.one/Tool/Loon/Lsr/REGION_SPLITTER.lsr, policy=DIRECT, tag=CN REGIO
 [Script]
 
 [Plugin]
-https://kelee.one/Tool/Loon/Lpx/Block_HTTPDNS.lpx, pin=true, enabled=true
-https://kelee.one/Tool/Loon/Lpx/BlockAdvertisers.lpx, pin=true, enabled=true
-https://kelee.one/Tool/Loon/Lpx/Remove_ads_by_keli.lpx, enabled=true
-https://kelee.one/Tool/Loon/Lpx/AppleWeatherEnhancer.lpx, enabled=true
-https://kelee.one/Tool/Loon/Lpx/QQ_Redirect.lpx, enabled=true
-https://kelee.one/Tool/Loon/Lpx/Spotify_remove_ads.lpx, enabled=true
-https://kelee.one/Tool/Loon/Lpx/Spotify_lyrics_translation.lpx, enabled=true
-https://kelee.one/Tool/Loon/Lpx/Bilibili_remove_ads.lpx, enabled=true
-https://kelee.one/Tool/Loon/Lpx/Amap_remove_ads.lpx, enabled=true
-https://kelee.one/Tool/Loon/Lpx/JD_remove_ads.lpx, enabled=true
-https://kelee.one/Tool/Loon/Lpx/PinDuoDuo_remove_ads.lpx, enabled=true
-https://kelee.one/Tool/Loon/Lpx/Taobao_remove_ads.lpx, enabled=true
-https://kelee.one/Tool/Loon/Lpx/Weixin_Official_Accounts_remove_ads.lpx, enabled=true
-https://kelee.one/Tool/Loon/Lpx/Weixin_external_links_unlock.lpx, enabled=true
-https://kelee.one/Tool/Loon/Lpx/WexinMiniPrograms_Remove_ads.lpx, enabled=true
-https://kelee.one/Tool/Loon/Lpx/FleaMarket_remove_ads.lpx, enabled=true
-https://kelee.one/Tool/Loon/Lpx/XiaobaiPrint_remove_ads.lpx, enabled=true
-https://kelee.one/Tool/Loon/Lpx/Himalaya_remove_ads.lpx, enabled=true
-https://kelee.one/Tool/Loon/Lpx/XiaChuFang_remove_ads.lpx, enabled=true
-https://kelee.one/Tool/Loon/Lpx/Zhihu_remove_ads.lpx, enabled=true
-https://raw.githubusercontent.com/fmz200/wool_scripts/main/Loon/plugin/split/partM/Meituan.lpx, enabled=true
-https://kelee.one/Tool/Loon/Lpx/QuickSearch.lpx, enabled=true
-https://kelee.one/Tool/Loon/Lpx/Prevent_DNS_Leaks.lpx, policy=Proxy, enabled=true
-https://kelee.one/Tool/Loon/Lpx/Node_detection_tool.lpx, enabled=true
-https://kelee.one/Tool/Loon/Lpx/BoxJs.lpx, policy=Proxy, enabled=true
-https://kelee.one/Tool/Loon/Lpx/Sub-Store.lpx, policy=Proxy, enabled=true
-https://kelee.one/Tool/Loon/Lpx/Script-Hub.lpx, policy=Proxy, enabled=true
+@@PLUGINS@@
 
 [Mitm]
 hostname=
