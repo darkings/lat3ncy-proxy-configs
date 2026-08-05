@@ -11,6 +11,7 @@ $headings = @(
     '### macOS 配置',
     '## Sparkle Windows',
     '### 配置方法',
+    '## 规则维护与校验',
     '## 更新说明'
 )
 $positions = foreach ($heading in $headings) {
@@ -61,5 +62,10 @@ foreach ($guidance in @(
     if ($readme -notmatch [regex]::Escape($guidance)) { throw "Missing README guidance: $guidance" }
 }
 if ($readme -match '(?m)^\s*\|.+\|\s*$') { throw 'README must not contain a comparison table' }
+
+if ($readme -notmatch 'scripts/generate_microsoft_cn\.py') { throw 'README must document Microsoft-CN generation' }
+if ($readme -notmatch 'scripts/generate_loon_configs\.py') { throw 'README must document shared Loon generation' }
+if ($readme -notmatch 'Zed 规则覆盖 `zed\.dev`') { throw 'README must document Zed routing scope' }
+if ($readme -notmatch 'KeLee.+403/503') { throw 'README must document KeLee remote-audit warning policy' }
 
 Write-Output 'PASS: Loon and Sparkle README validation'
