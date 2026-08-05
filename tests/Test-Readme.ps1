@@ -65,6 +65,7 @@ if ($readme -match '(?m)^\s*\|.+\|\s*$') { throw 'README must not contain a comp
 
 if ($readme -notmatch 'scripts/generate_microsoft_cn\.py') { throw 'README must document Microsoft-CN generation' }
 if ($readme -notmatch 'scripts/generate_loon_configs\.py') { throw 'README must document shared Loon generation' }
+if ($readme -notmatch 'Zed 规则覆盖 `zed\.dev`') { throw 'README must document Zed routing scope' }
 if ($readme -notmatch 'KeLee.+403/503') { throw 'README must document KeLee remote-audit warning policy' }
 
 Write-Output 'PASS: Loon and Sparkle README validation'

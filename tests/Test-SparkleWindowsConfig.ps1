@@ -34,7 +34,7 @@ Assert-Match '(?m)^rules:\s*$' 'Sparkle override must own routing rules'
 foreach ($group in @(
     'Auto', 'Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States',
     'Proxy', 'Spotify', 'Telegram',
-    'OpenAI', 'GitHub', 'Microsoft',
+    'OpenAI', 'GitHub', 'Zed', 'Microsoft',
     'Steam', 'Apple', 'Google', 'YouTube'
 )) {
     Assert-Match "(?m)^\s+- name: $([regex]::Escape($group))\s*$" "Missing proxy group: $group"
@@ -53,9 +53,9 @@ foreach ($allowedName in @('香港 01', '日本-HY2', 'United States 02')) {
 
 foreach ($region in @('Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States')) {
     $references = [regex]::Matches($config, "(?m)^\s{6}- $([regex]::Escape($region))\s*$").Count
-    if ($references -ne 10) { throw "Every selectable group must include regional auto group: $region" }
+    if ($references -ne 11) { throw "Every selectable group must include regional auto group: $region" }
 }
-$selectGroups = @('Proxy', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Steam', 'Apple', 'Google', 'YouTube')
+$selectGroups = @('Proxy', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Zed', 'Microsoft', 'Steam', 'Apple', 'Google', 'YouTube')
 foreach ($group in $selectGroups) {
     $block = [regex]::Match(
         $config,
@@ -70,7 +70,7 @@ foreach ($group in $selectGroups) {
     }
 }
 $topLevelOrder = @(
-    'Proxy', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Steam', 'Apple', 'Google', 'YouTube',
+    'Proxy', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Zed', 'Microsoft', 'Steam', 'Apple', 'Google', 'YouTube',
     'Auto', 'Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States'
 )
 $lastTopLevelPosition = -1
@@ -127,6 +127,7 @@ Assert-Match '(?m)^\s+- RULE-SET,Steam-CN,DIRECT\s*$' 'Steam China download dire
 Assert-Match '(?m)^\s+- RULE-SET,Apple-CN,DIRECT\s*$' 'Apple China CDN direct rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,OpenAI,OpenAI\s*$' 'OpenAI policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,GitHub,GitHub\s*$' 'GitHub policy rule is missing'
+Assert-Match '(?m)^\s+- DOMAIN-SUFFIX,zed\.dev,Zed\s*$' 'Zed policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,OneDrive,Microsoft\s*$' 'OneDrive must route through Microsoft policy'
 Assert-Match '(?m)^\s+- RULE-SET,Microsoft,Microsoft\s*$' 'Microsoft policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Steam,Steam\s*$' 'Steam store and community policy rule is missing'

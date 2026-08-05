@@ -34,7 +34,7 @@ $regions = @('香港', '台湾', '日本', '新加坡', '美国')
 $commonApps = @('Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Apple', 'Google', 'YouTube')
 $apps = @{
     iOS = $commonApps + 'TikTok'
-    macOS = $commonApps[0..4] + 'Steam' + $commonApps[5..7]
+    macOS = $commonApps[0..4] + @('Zed', 'Steam') + $commonApps[5..7]
 }
 $groupIcons = @{
     Proxy = 'Global'
@@ -42,6 +42,7 @@ $groupIcons = @{
     Telegram = 'Telegram'
     OpenAI = 'OpenAI'
     GitHub = 'github'
+    Zed = 'https://raw.githubusercontent.com/zed-industries/zed/main/crates/zed/resources/app-icon.png'
     Microsoft = 'Microsoft'
     Steam = 'Steam'
     Apple = 'Apple'
@@ -112,7 +113,11 @@ foreach ($platform in $configs.Keys) {
         if ($position -le $lastPosition) { throw "$platform policy group is out of order: $group" }
         $lastPosition = $position
         $groupLine = [regex]::Match($groups, "(?m)^$([regex]::Escape($group))=.+$").Value
-        $iconUrl = "https://raw.githubusercontent.com/Orz-3/mini/master/Color/$($groupIcons[$group]).png"
+        $iconUrl = if ($group -eq 'Zed') {
+            $groupIcons[$group]
+        } else {
+            "https://raw.githubusercontent.com/Orz-3/mini/master/Color/$($groupIcons[$group]).png"
+        }
         Assert-Match $groupLine ",\s*img-url=$([regex]::Escape($iconUrl))\s*$" "$platform $group missing its policy-group icon"
     }
 
@@ -148,12 +153,17 @@ foreach ($platform in $configs.Keys) {
     }
 
     $remoteRules = Get-Section $config 'Remote Rule'
+    if ($platform -eq 'macOS') {
+        Assert-Match $remoteRules '(?m)/darkings/lat3ncy-proxy-configs/main/loon/rules/zed\.list,\s*policy=Zed,\s*tag=Zed,' 'macOS missing Zed rule'
+    } else {
+        Assert-NoMatch $remoteRules '(?m)/loon/rules/zed\.list,' 'iOS must not contain the desktop-only Zed rule'
+    }
     Assert-Match $remoteRules '(?m)/darkings/lat3ncy-proxy-configs/main/loon/rules/microsoft-cn\.list,\s*policy=DIRECT,\s*tag=Microsoft CN,' "$platform missing Microsoft China direct rule"
     if ($remoteRules.IndexOf('/microsoft-cn.list') -gt $remoteRules.IndexOf('/Microsoft/Microsoft.list')) {
         throw "$platform Microsoft China direct rule must precede broad Microsoft rule"
     }
     foreach ($app in $apps[$platform]) {
-        if ($app -eq 'Apple') { continue }
+        if ($app -in @('Apple', 'Zed')) { continue }
         Assert-Match $remoteRules "(?m)/$([regex]::Escape($app))/$([regex]::Escape($app))\.list,\s*policy=$([regex]::Escape($app))," "$platform missing remote rule for $app"
     }
     if ($remoteRules.IndexOf('/YouTube/YouTube.list') -gt $remoteRules.IndexOf('/Google/Google.list')) {
@@ -185,6 +195,12 @@ foreach ($platform in $configs.Keys) {
     Assert-NoMatch $config '(?im)^\s*(?:ca-p12|ca-passphrase)\s*=[ \t]*\S+' "$platform must not embed certificate material"
     Assert-NoMatch $config '(?i)(?:ss|ssr|vmess|vless|trojan|hysteria2?)://|gh[opusr]_|eyJ[A-Za-z0-9_-]{20,}' "$platform may contain a node or token"
 }
+
+$zedRulePath = Join-Path $repoRoot 'loon/rules/zed.list'
+if (-not (Test-Path -LiteralPath $zedRulePath)) { throw 'Missing local Zed rule' }
+$zedRule = Get-Content -LiteralPath $zedRulePath -Raw -Encoding UTF8
+Assert-Match $zedRule '(?m)^DOMAIN-SUFFIX,zed\.dev\s*$' 'Zed rule must cover zed.dev and all service subdomains'
+Assert-NoMatch $zedRule '(?m)^DOMAIN-SUFFIX,zed-industries\.com\s*$' 'Zed rule must not include an unverified company domain'
 
 $ios = Get-Content -LiteralPath $configs.iOS -Raw -Encoding UTF8
 $mac = Get-Content -LiteralPath $configs.macOS -Raw -Encoding UTF8
