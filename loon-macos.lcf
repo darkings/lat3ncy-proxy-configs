@@ -49,6 +49,7 @@ Telegram=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-u
 OpenAI=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/OpenAI.png
 GitHub=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/github.png
 Microsoft=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Microsoft.png
+Zed=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-url=https://raw.githubusercontent.com/zed-industries/zed/main/crates/zed/resources/app-icon.png
 Steam=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Steam.png
 Apple=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Apple.png
 Google=select, Proxy, DIRECT, 香港, 台湾, 日本, 新加坡, 美国, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Google.png
@@ -76,6 +77,7 @@ https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Loon/
 https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Loon/GitHub/GitHub.list, policy=GitHub, tag=GitHub, enabled=true
 https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/loon/rules/microsoft-cn.list, policy=DIRECT, tag=Microsoft CN, enabled=true
 https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Loon/Microsoft/Microsoft.list, policy=Microsoft, tag=Microsoft, enabled=true
+https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/loon/rules/zed.list, policy=Zed, tag=Zed, enabled=true
 https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Loon/SteamCN/SteamCN.list, policy=DIRECT, tag=Steam CN, enabled=true
 https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Loon/Steam/Steam.list, policy=Steam, tag=Steam, enabled=true
 https://raw.githubusercontent.com/Repcz/Tool/X/Loon/Rules/AppleCN.list, policy=DIRECT, tag=Apple CN, enabled=true

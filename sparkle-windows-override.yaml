@@ -117,6 +117,17 @@ proxy-groups:
       - Singapore
       - United States
 
+  - name: Zed
+    type: select
+    proxies:
+      - Proxy
+      - DIRECT
+      - Hong Kong
+      - Taiwan
+      - Japan
+      - Singapore
+      - United States
+
   - name: Microsoft
     type: select
     proxies:
@@ -448,6 +459,7 @@ rules:
   - RULE-SET,Apple-CN,DIRECT
   - RULE-SET,OpenAI,OpenAI
   - RULE-SET,GitHub,GitHub
+  - DOMAIN-SUFFIX,zed.dev,Zed
   - RULE-SET,OneDrive,Microsoft
   - RULE-SET,Microsoft,Microsoft
   - RULE-SET,Steam,Steam
