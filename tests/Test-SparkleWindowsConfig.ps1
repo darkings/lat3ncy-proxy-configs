@@ -34,17 +34,17 @@ Assert-Match '(?m)^rules:\s*$' 'Sparkle override must own routing rules'
 foreach ($group in @(
     'Auto', 'Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States',
     'Proxy', 'Spotify', 'Telegram',
-    'OpenAI', 'GitHub', 'Microsoft',
-    'Steam', 'Apple', 'YouTube'
+    'OpenAI', 'GitHub', 'Zed', 'Microsoft',
+    'Steam', 'Apple', 'Google', 'YouTube'
 )) {
     Assert-Match "(?m)^\s+- name: $([regex]::Escape($group))\s*$" "Missing proxy group: $group"
 }
-$subscriptionStatusFilter = '(?i)(官网|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)'
+$subscriptionStatusFilter = '(?i)(群|邀请|返利|循环|官网|客服|网站|网址|获取|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|机场|下次|版本|官址|备用|联系|邮箱|工单|贩卖|通知|倒卖|防止|国内|地址|频道|无法|说明|使用|提示|特别|访问|支持|教程|关注|更新|作者|加入|超时|收藏|福利|好友|失联|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|EMAIL|PANEL|CHANNEL|AUTHOR|NOTICE|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)'
 $excludeFilterLines = [regex]::Matches($config, "(?m)^\s{4}exclude-filter:\s*'$([regex]::Escape($subscriptionStatusFilter))'\s*$")
-if ($excludeFilterLines.Count -ne 15) {
-    throw 'Every Sparkle proxy group that includes subscription nodes must exclude subscription status entries'
+if ($excludeFilterLines.Count -ne 7) {
+    throw 'Every Sparkle group that expands subscription nodes must exclude status entries'
 }
-foreach ($blockedName in @('香港 剩余流量 20GB', '日本 套餐到期', 'US Remaining 50G', '新加坡 Bandwidth 100G', '2026-08-01')) {
+foreach ($blockedName in @('香港 剩余流量 20GB', '日本 套餐到期', 'US Remaining 50G', '新加坡 Bandwidth 100G', '客服频道', 'Airport Notice', '2026-08-01')) {
     if ($blockedName -notmatch $subscriptionStatusFilter) { throw "Subscription status filter missed: $blockedName" }
 }
 foreach ($allowedName in @('香港 01', '日本-HY2', 'United States 02')) {
@@ -53,9 +53,9 @@ foreach ($allowedName in @('香港 01', '日本-HY2', 'United States 02')) {
 
 foreach ($region in @('Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States')) {
     $references = [regex]::Matches($config, "(?m)^\s{6}- $([regex]::Escape($region))\s*$").Count
-    if ($references -ne 9) { throw "Every selectable group must include regional auto group: $region" }
+    if ($references -ne 11) { throw "Every selectable group must include regional auto group: $region" }
 }
-$selectGroups = @('Proxy', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Steam', 'Apple', 'YouTube')
+$selectGroups = @('Proxy', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Zed', 'Microsoft', 'Steam', 'Apple', 'Google', 'YouTube')
 foreach ($group in $selectGroups) {
     $block = [regex]::Match(
         $config,
@@ -65,9 +65,12 @@ foreach ($group in $selectGroups) {
     if ($block.IndexOf('      - DIRECT') -gt $block.IndexOf('      - Hong Kong')) {
         throw "Regional auto groups must be placed after DIRECT in group: $group"
     }
+    if ($group -ne 'Proxy' -and $block -match '(?m)^\s{4}(?:include-all|exclude-filter):') {
+        throw "Application group must not expand every subscription node: $group"
+    }
 }
 $topLevelOrder = @(
-    'Proxy', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Steam', 'Apple', 'YouTube',
+    'Proxy', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Zed', 'Microsoft', 'Steam', 'Apple', 'Google', 'YouTube',
     'Auto', 'Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States'
 )
 $lastTopLevelPosition = -1
@@ -98,6 +101,7 @@ $providers = @(
     'Apple-CN',
     'Apple',
     'YouTube',
+    'Google',
     'CN-Domain',
     'NonCN-Domain',
     'CN-IP'
@@ -123,11 +127,13 @@ Assert-Match '(?m)^\s+- RULE-SET,Steam-CN,DIRECT\s*$' 'Steam China download dire
 Assert-Match '(?m)^\s+- RULE-SET,Apple-CN,DIRECT\s*$' 'Apple China CDN direct rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,OpenAI,OpenAI\s*$' 'OpenAI policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,GitHub,GitHub\s*$' 'GitHub policy rule is missing'
+Assert-Match '(?m)^\s+- DOMAIN-SUFFIX,zed\.dev,Zed\s*$' 'Zed policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,OneDrive,Microsoft\s*$' 'OneDrive must route through Microsoft policy'
 Assert-Match '(?m)^\s+- RULE-SET,Microsoft,Microsoft\s*$' 'Microsoft policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Steam,Steam\s*$' 'Steam store and community policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Apple,Apple\s*$' 'Apple international policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,YouTube,YouTube\s*$' 'YouTube policy rule is missing'
+Assert-Match '(?m)^\s+- RULE-SET,Google,Google\s*$' 'Google policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Spotify,Spotify\s*$' 'Spotify policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Telegram-Domain,Telegram\s*$' 'Telegram domain policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Telegram-IP,Telegram,no-resolve\s*$' 'Telegram IP policy rule is missing'
@@ -145,6 +151,8 @@ $steamCnPosition = $config.IndexOf('  - RULE-SET,Steam-CN,DIRECT')
 $steamPosition = $config.IndexOf('  - RULE-SET,Steam,Steam')
 $appleCnPosition = $config.IndexOf('  - RULE-SET,Apple-CN,DIRECT')
 $applePosition = $config.IndexOf('  - RULE-SET,Apple,Apple')
+$youtubePosition = $config.IndexOf('  - RULE-SET,YouTube,YouTube')
+$googlePosition = $config.IndexOf('  - RULE-SET,Google,Google')
 $finalPosition = $config.IndexOf('  - MATCH,Proxy')
 if ($tailscalePosition -lt 0 -or $adPosition -lt 0 -or $finalPosition -lt 0 -or
     $tailscalePosition -gt $adPosition -or $adPosition -gt $finalPosition) {
@@ -153,6 +161,10 @@ if ($tailscalePosition -lt 0 -or $adPosition -lt 0 -or $finalPosition -lt 0 -or
 if ($microsoftCnPosition -gt $microsoftPosition -or $oneDrivePosition -gt $microsoftPosition -or
     $steamCnPosition -gt $steamPosition -or $appleCnPosition -gt $applePosition) {
     throw 'China download/CDN and OneDrive rules must precede their broad service rules'
+}
+
+if ($youtubePosition -lt 0 -or $googlePosition -lt 0 -or $youtubePosition -gt $googlePosition) {
+    throw 'YouTube rule must precede broad Google rule'
 }
 
 foreach ($app in @('TikTok', 'Pinduoduo', 'Ximalaya', 'Zhihu', 'Bilibili')) {

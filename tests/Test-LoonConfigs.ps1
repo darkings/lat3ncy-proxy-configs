@@ -31,10 +31,10 @@ $requiredSections = @(
     'Rule', 'Remote Rule', 'Host', 'Rewrite', 'Script', 'Plugin', 'Mitm'
 )
 $regions = @('香港', '台湾', '日本', '新加坡', '美国')
-$commonApps = @('Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Apple', 'YouTube')
+$commonApps = @('Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Apple', 'Google', 'YouTube')
 $apps = @{
     iOS = $commonApps + 'TikTok'
-    macOS = $commonApps[0..4] + 'Steam' + $commonApps[5..6]
+    macOS = $commonApps[0..4] + @('Zed', 'Steam') + $commonApps[5..7]
 }
 $groupIcons = @{
     Proxy = 'Global'
@@ -42,9 +42,11 @@ $groupIcons = @{
     Telegram = 'Telegram'
     OpenAI = 'OpenAI'
     GitHub = 'github'
+    Zed = 'https://raw.githubusercontent.com/zed-industries/zed/main/crates/zed/resources/app-icon.png'
     Microsoft = 'Microsoft'
     Steam = 'Steam'
     Apple = 'Apple'
+    Google = 'Google'
     YouTube = 'YouTube'
     TikTok = 'TikTok'
     Auto = 'Urltest'
@@ -70,7 +72,8 @@ foreach ($platform in $configs.Keys) {
     Assert-Match $config '(?m)^ip-mode=dual\s*$' "$platform must use dual-stack IP mode"
     Assert-Match $config '(?m)^ipv6-vif=on\s*$' "$platform must enable the IPv6 virtual interface"
     Assert-Match $config '(?m)^dns-server=system\s*$' "$platform must retain system DNS"
-    Assert-Match $config '(?m)^disable-stun=false\s*$' "$platform must not globally block STUN"
+    Assert-Match $config '(?m)^disable-stun=true\s*$' "$platform must block STUN to reduce direct-IP leakage"
+    Assert-Match $config '(?m)^disconnect-on-policy-change=true\s*$' "$platform must reconnect sessions after policy changes"
     $general = Get-Section $config 'General'
     foreach ($value in @('100.64.0.0/10', 'fd7a:115c:a1e0::/48', '*.ts.net', '*.tailscale.com')) {
         Assert-Match $general "(?m)^skip-proxy=.*$([regex]::Escape($value))" "$platform skip-proxy missing $value"
@@ -110,7 +113,11 @@ foreach ($platform in $configs.Keys) {
         if ($position -le $lastPosition) { throw "$platform policy group is out of order: $group" }
         $lastPosition = $position
         $groupLine = [regex]::Match($groups, "(?m)^$([regex]::Escape($group))=.+$").Value
-        $iconUrl = "https://raw.githubusercontent.com/Orz-3/mini/master/Color/$($groupIcons[$group]).png"
+        $iconUrl = if ($group -eq 'Zed') {
+            $groupIcons[$group]
+        } else {
+            "https://raw.githubusercontent.com/Orz-3/mini/master/Color/$($groupIcons[$group]).png"
+        }
         Assert-Match $groupLine ",\s*img-url=$([regex]::Escape($iconUrl))\s*$" "$platform $group missing its policy-group icon"
     }
 
@@ -127,9 +134,9 @@ foreach ($platform in $configs.Keys) {
         Assert-NoMatch $appLine '(?:^|,\s*)Auto(?:,|$)' "$platform $app must not directly contain Auto"
     }
 
-    Assert-Match $groups '(?m)^Auto=url-test,\s*全球节点,' "$platform Auto must test all nodes"
+    Assert-Match $groups '(?m)^Auto=url-test,\s*全球节点,\s*interval=600,' "$platform Auto must test all nodes every 600 seconds"
     foreach ($region in $regions) {
-        Assert-Match $groups "(?m)^$region=url-test,\s*$($region)节点," "$platform $region must test its regional nodes"
+        Assert-Match $groups "(?m)^$region=url-test,\s*$($region)节点,\s*interval=600," "$platform $region must test its regional nodes every 600 seconds"
     }
 
     $rules = Get-Section $config 'Rule'
@@ -146,8 +153,32 @@ foreach ($platform in $configs.Keys) {
     }
 
     $remoteRules = Get-Section $config 'Remote Rule'
+    if ($platform -eq 'macOS') {
+        Assert-Match $remoteRules '(?m)/darkings/lat3ncy-proxy-configs/main/loon/rules/zed\.list,\s*policy=Zed,\s*tag=Zed,' 'macOS missing Zed rule'
+    } else {
+        Assert-NoMatch $remoteRules '(?m)/loon/rules/zed\.list,' 'iOS must not contain the desktop-only Zed rule'
+    }
+    Assert-Match $remoteRules '(?m)/darkings/lat3ncy-proxy-configs/main/loon/rules/microsoft-cn\.list,\s*policy=DIRECT,\s*tag=Microsoft CN,' "$platform missing Microsoft China direct rule"
+    if ($remoteRules.IndexOf('/microsoft-cn.list') -gt $remoteRules.IndexOf('/Microsoft/Microsoft.list')) {
+        throw "$platform Microsoft China direct rule must precede broad Microsoft rule"
+    }
     foreach ($app in $apps[$platform]) {
+        if ($app -in @('Apple', 'Zed')) { continue }
         Assert-Match $remoteRules "(?m)/$([regex]::Escape($app))/$([regex]::Escape($app))\.list,\s*policy=$([regex]::Escape($app))," "$platform missing remote rule for $app"
+    }
+    if ($remoteRules.IndexOf('/YouTube/YouTube.list') -gt $remoteRules.IndexOf('/Google/Google.list')) {
+        throw "$platform YouTube rule must precede broad Google rule"
+    }
+    Assert-Match $remoteRules '(?m)/Repcz/Tool/X/Loon/Rules/AppleCN\.list,\s*policy=DIRECT,\s*tag=Apple CN,' "$platform missing Apple China direct rule"
+    Assert-Match $remoteRules '(?m)/Repcz/Tool/X/Loon/Rules/AppleProxy\.list,\s*policy=Apple,\s*tag=Apple Proxy,' "$platform missing Apple proxy rule"
+    if ($remoteRules.IndexOf('/AppleCN.list') -gt $remoteRules.IndexOf('/AppleProxy.list')) {
+        throw "$platform Apple China direct rule must precede Apple proxy rule"
+    }
+    if ($platform -eq 'macOS') {
+        Assert-Match $remoteRules '(?m)/SteamCN/SteamCN\.list,\s*policy=DIRECT,\s*tag=Steam CN,' 'macOS missing Steam China direct rule'
+        if ($remoteRules.IndexOf('/SteamCN/SteamCN.list') -gt $remoteRules.IndexOf('/Steam/Steam.list')) {
+            throw 'macOS Steam China direct rule must precede Steam proxy rule'
+        }
     }
     Assert-Match $remoteRules '(?m)/LAN_SPLITTER\.lsr,\s*policy=DIRECT,' "$platform missing LAN direct rule"
     Assert-Match $remoteRules '(?m)/rule/Loon/WeChat/WeChat\.list,\s*policy=DIRECT,\s*tag=微信转圈,\s*enabled=true' "$platform missing the native Loon WeChat direct rule"
@@ -164,6 +195,12 @@ foreach ($platform in $configs.Keys) {
     Assert-NoMatch $config '(?im)^\s*(?:ca-p12|ca-passphrase)\s*=[ \t]*\S+' "$platform must not embed certificate material"
     Assert-NoMatch $config '(?i)(?:ss|ssr|vmess|vless|trojan|hysteria2?)://|gh[opusr]_|eyJ[A-Za-z0-9_-]{20,}' "$platform may contain a node or token"
 }
+
+$zedRulePath = Join-Path $repoRoot 'loon/rules/zed.list'
+if (-not (Test-Path -LiteralPath $zedRulePath)) { throw 'Missing local Zed rule' }
+$zedRule = Get-Content -LiteralPath $zedRulePath -Raw -Encoding UTF8
+Assert-Match $zedRule '(?m)^DOMAIN-SUFFIX,zed\.dev\s*$' 'Zed rule must cover zed.dev and all service subdomains'
+Assert-NoMatch $zedRule '(?m)^DOMAIN-SUFFIX,zed-industries\.com\s*$' 'Zed rule must not include an unverified company domain'
 
 $ios = Get-Content -LiteralPath $configs.iOS -Raw -Encoding UTF8
 $mac = Get-Content -LiteralPath $configs.macOS -Raw -Encoding UTF8
@@ -182,6 +219,7 @@ $iosAppPlugins = @(
     'Bilibili_remove_ads',
     'Amap_remove_ads',
     'JD_remove_ads',
+    'PinDuoDuo_remove_ads',
     'Remove_ads_by_keli',
     'Taobao_remove_ads',
     'Weixin_Official_Accounts_remove_ads',
@@ -197,10 +235,9 @@ foreach ($plugin in $iosAppPlugins) {
     Assert-Match $iosPlugins "(?m)^https://kelee\.one/Tool/Loon/Lpx/$([regex]::Escape($plugin))\.lpx,.+enabled=true\s*$" "iOS missing enabled KeLee plugin: $plugin"
     Assert-NoMatch $macPlugins "(?m)/$([regex]::Escape($plugin))\.lpx," "macOS must not contain iOS app plugin: $plugin"
 }
-$localPinduoduoPlugin = 'https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/loon/plugins/pinduoduo-cleanup.lpx'
-Assert-Match $iosPlugins "(?m)^$([regex]::Escape($localPinduoduoPlugin)),\s*enabled=true\s*$" 'iOS missing the repository Loon Pinduoduo plugin'
-Assert-NoMatch $iosPlugins '(?m)^https://kelee\.one/Tool/Loon/Lpx/PinDuoDuo_remove_ads\.lpx,' 'iOS must not keep the replaced KeLee Pinduoduo plugin'
-Assert-NoMatch $macPlugins '(?m)/loon/plugins/pinduoduo-cleanup\.lpx,' 'macOS must not contain the iOS Pinduoduo plugin'
+Assert-Match $iosPlugins '(?m)^https://kelee\.one/Tool/Loon/Lpx/PinDuoDuo_remove_ads\.lpx,\s*enabled=true\s*$' 'iOS missing KeLee Pinduoduo plugin'
+Assert-NoMatch $iosPlugins '(?m)/loon/plugins/pinduoduo-cleanup\.lpx,' 'iOS must not load the fallback repository Pinduoduo plugin'
+Assert-NoMatch $macPlugins '(?m)/PinDuoDuo_remove_ads\.lpx,' 'macOS must not contain iOS Pinduoduo plugin'
 Assert-Match $iosPlugins '(?m)^https://raw\.githubusercontent\.com/fmz200/wool_scripts/main/Loon/plugin/split/partM/Meituan\.lpx,.+enabled=true\s*$' 'iOS missing enabled fmz200 plugin: Meituan'
 Assert-NoMatch $macPlugins '(?m)/partM/Meituan\.lpx,' 'macOS must not contain iOS app plugin: Meituan'
 $iosPluginUrls = [regex]::Matches($iosPlugins, '(?m)^https?://[^,\r\n]+') | ForEach-Object { $_.Value }
