@@ -31,10 +31,10 @@ $requiredSections = @(
     'Rule', 'Remote Rule', 'Host', 'Rewrite', 'Script', 'Plugin', 'Mitm'
 )
 $regions = @('香港', '台湾', '日本', '新加坡', '美国')
-$commonApps = @('Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Apple', 'Google', 'YouTube')
+$commonApps = @('Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Google', 'YouTube')
 $apps = @{
     iOS = $commonApps + 'TikTok'
-    macOS = $commonApps[0..4] + @('Zed', 'Steam') + $commonApps[5..7]
+    macOS = $commonApps[0..4] + @('Steam') + $commonApps[5..6]
 }
 $groupIcons = @{
     Proxy = 'Global'
@@ -42,10 +42,8 @@ $groupIcons = @{
     Telegram = 'Telegram'
     OpenAI = 'OpenAI'
     GitHub = 'github'
-    Zed = 'https://raw.githubusercontent.com/zed-industries/zed/main/crates/zed/resources/app-icon.png'
     Microsoft = 'Microsoft'
     Steam = 'Steam'
-    Apple = 'Apple'
     Google = 'Google'
     YouTube = 'YouTube'
     TikTok = 'TikTok'
@@ -154,7 +152,7 @@ foreach ($platform in $configs.Keys) {
 
     $remoteRules = Get-Section $config 'Remote Rule'
     if ($platform -eq 'macOS') {
-        Assert-Match $remoteRules '(?m)/darkings/lat3ncy-proxy-configs/main/loon/rules/zed\.list,\s*policy=Zed,\s*tag=Zed,' 'macOS missing Zed rule'
+        Assert-Match $remoteRules '(?m)/darkings/lat3ncy-proxy-configs/main/loon/rules/zed\.list,\s*policy=DIRECT,\s*tag=Zed,' 'macOS missing Zed direct rule'
     } else {
         Assert-NoMatch $remoteRules '(?m)/loon/rules/zed\.list,' 'iOS must not contain the desktop-only Zed rule'
     }
@@ -163,17 +161,12 @@ foreach ($platform in $configs.Keys) {
         throw "$platform Microsoft China direct rule must precede broad Microsoft rule"
     }
     foreach ($app in $apps[$platform]) {
-        if ($app -in @('Apple', 'Zed')) { continue }
         Assert-Match $remoteRules "(?m)/$([regex]::Escape($app))/$([regex]::Escape($app))\.list,\s*policy=$([regex]::Escape($app))," "$platform missing remote rule for $app"
     }
     if ($remoteRules.IndexOf('/YouTube/YouTube.list') -gt $remoteRules.IndexOf('/Google/Google.list')) {
         throw "$platform YouTube rule must precede broad Google rule"
     }
-    Assert-Match $remoteRules '(?m)/Repcz/Tool/X/Loon/Rules/AppleCN\.list,\s*policy=DIRECT,\s*tag=Apple CN,' "$platform missing Apple China direct rule"
-    Assert-Match $remoteRules '(?m)/Repcz/Tool/X/Loon/Rules/AppleProxy\.list,\s*policy=Apple,\s*tag=Apple Proxy,' "$platform missing Apple proxy rule"
-    if ($remoteRules.IndexOf('/AppleCN.list') -gt $remoteRules.IndexOf('/AppleProxy.list')) {
-        throw "$platform Apple China direct rule must precede Apple proxy rule"
-    }
+    Assert-Match $remoteRules '(?m)/blackmatrix7/ios_rule_script/master/rule/Loon/Apple/Apple\.list,\s*policy=DIRECT,\s*tag=Apple Direct,' "$platform missing Apple direct rule"
     if ($platform -eq 'macOS') {
         Assert-Match $remoteRules '(?m)/SteamCN/SteamCN\.list,\s*policy=DIRECT,\s*tag=Steam CN,' 'macOS missing Steam China direct rule'
         if ($remoteRules.IndexOf('/SteamCN/SteamCN.list') -gt $remoteRules.IndexOf('/Steam/Steam.list')) {

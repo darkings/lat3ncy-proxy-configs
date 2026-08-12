@@ -20,6 +20,19 @@ dns:
     - "www.msftconnecttest.com"
     - "+.ts.net"
     - "+.tailscale.com"
+    # Apple 与 iCloud 完全直连：返回真实 IP，避免 fake-ip 中转，加速同步
+    - "+.apple.com"
+    - "+.apple.com.cn"
+    - "+.icloud.com"
+    - "+.icloud.com.cn"
+    - "+.icloud-content.com"
+    - "+.icloud-content.com.cn"
+    - "+.me.com"
+    - "+.mac.com"
+    - "+.mzstatic.com"
+    - "+.aaplimg.com"
+    - "+.cdn-apple.com"
+    - "+.apple-cloudkit.com"
   default-nameserver:
     - 223.5.5.5
     - 119.29.29.29
@@ -117,17 +130,6 @@ proxy-groups:
       - Singapore
       - United States
 
-  - name: Zed
-    type: select
-    proxies:
-      - Proxy
-      - DIRECT
-      - Hong Kong
-      - Taiwan
-      - Japan
-      - Singapore
-      - United States
-
   - name: Microsoft
     type: select
     proxies:
@@ -140,17 +142,6 @@ proxy-groups:
       - United States
 
   - name: Steam
-    type: select
-    proxies:
-      - Proxy
-      - DIRECT
-      - Hong Kong
-      - Taiwan
-      - Japan
-      - Singapore
-      - United States
-
-  - name: Apple
     type: select
     proxies:
       - Proxy
@@ -378,15 +369,6 @@ rule-providers:
     interval: 86400
     proxy: Proxy
 
-  Apple-CN:
-    type: http
-    behavior: domain
-    format: mrs
-    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple-cn.mrs
-    path: ./ruleset/windows-apple-cn.mrs
-    interval: 86400
-    proxy: Proxy
-
   Apple:
     type: http
     behavior: domain
@@ -456,14 +438,13 @@ rules:
   - RULE-SET,Cats-Team-AdRules,REJECT
   - RULE-SET,Microsoft-CN,DIRECT
   - RULE-SET,Steam-CN,DIRECT
-  - RULE-SET,Apple-CN,DIRECT
+  - RULE-SET,Apple,DIRECT
   - RULE-SET,OpenAI,OpenAI
   - RULE-SET,GitHub,GitHub
-  - DOMAIN-SUFFIX,zed.dev,Zed
+  - DOMAIN-SUFFIX,zed.dev,DIRECT
   - RULE-SET,OneDrive,Microsoft
   - RULE-SET,Microsoft,Microsoft
   - RULE-SET,Steam,Steam
-  - RULE-SET,Apple,Apple
   - RULE-SET,YouTube,YouTube
   - RULE-SET,Google,Google
   - RULE-SET,Spotify,Spotify
