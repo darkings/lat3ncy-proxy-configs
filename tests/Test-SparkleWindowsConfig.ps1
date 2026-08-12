@@ -34,8 +34,8 @@ Assert-Match '(?m)^rules:\s*$' 'Sparkle override must own routing rules'
 foreach ($group in @(
     'Auto', 'Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States',
     'Proxy', 'Spotify', 'Telegram',
-    'OpenAI', 'GitHub', 'Zed', 'Microsoft',
-    'Steam', 'Apple', 'Google', 'YouTube'
+    'OpenAI', 'GitHub', 'Microsoft',
+    'Steam', 'Google', 'YouTube'
 )) {
     Assert-Match "(?m)^\s+- name: $([regex]::Escape($group))\s*$" "Missing proxy group: $group"
 }
@@ -53,9 +53,9 @@ foreach ($allowedName in @('香港 01', '日本-HY2', 'United States 02')) {
 
 foreach ($region in @('Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States')) {
     $references = [regex]::Matches($config, "(?m)^\s{6}- $([regex]::Escape($region))\s*$").Count
-    if ($references -ne 11) { throw "Every selectable group must include regional auto group: $region" }
+    if ($references -ne 9) { throw "Every selectable group must include regional auto group: $region" }
 }
-$selectGroups = @('Proxy', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Zed', 'Microsoft', 'Steam', 'Apple', 'Google', 'YouTube')
+$selectGroups = @('Proxy', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Steam', 'Google', 'YouTube')
 foreach ($group in $selectGroups) {
     $block = [regex]::Match(
         $config,
@@ -70,7 +70,7 @@ foreach ($group in $selectGroups) {
     }
 }
 $topLevelOrder = @(
-    'Proxy', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Zed', 'Microsoft', 'Steam', 'Apple', 'Google', 'YouTube',
+    'Proxy', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Steam', 'Google', 'YouTube',
     'Auto', 'Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States'
 )
 $lastTopLevelPosition = -1
@@ -98,7 +98,6 @@ $providers = @(
     'OneDrive',
     'Steam-CN',
     'Steam',
-    'Apple-CN',
     'Apple',
     'YouTube',
     'Google',
@@ -118,20 +117,21 @@ Assert-NoMatch '(?m)^\s+- name:\s*OneDrive\s*$' 'OneDrive must share the Microso
 
 Assert-Match '(?m)^\s+- "\+\.ts\.net"\s*$' 'MagicDNS must bypass fake IP'
 Assert-Match '(?m)^\s+- "\+\.tailscale\.com"\s*$' 'Tailscale domains must bypass DNS and sniffing'
+Assert-Match '(?m)^\s+- "\+\.icloud\.com"\s*$' 'iCloud domains must return real IPs for direct sync'
+Assert-Match '(?m)^\s+- "\+\.apple\.com"\s*$' 'Apple domains must return real IPs for direct access'
 Assert-Match '(?m)^\s+- DOMAIN-SUFFIX,ts\.net,DIRECT\s*$' 'Tailnet domain rule is missing'
 Assert-Match '(?m)^\s+- IP-CIDR,100\.64\.0\.0/10,DIRECT,no-resolve\s*$' 'Tailscale IPv4 direct rule is missing'
 Assert-Match '(?m)^\s+- IP-CIDR6,fd7a:115c:a1e0::/48,DIRECT,no-resolve\s*$' 'Tailscale IPv6 direct rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Cats-Team-AdRules,REJECT\s*$' 'Cats-Team ad rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Microsoft-CN,DIRECT\s*$' 'Microsoft China direct rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Steam-CN,DIRECT\s*$' 'Steam China download direct rule is missing'
-Assert-Match '(?m)^\s+- RULE-SET,Apple-CN,DIRECT\s*$' 'Apple China CDN direct rule is missing'
+Assert-Match '(?m)^\s+- RULE-SET,Apple,DIRECT\s*$' 'Apple direct rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,OpenAI,OpenAI\s*$' 'OpenAI policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,GitHub,GitHub\s*$' 'GitHub policy rule is missing'
-Assert-Match '(?m)^\s+- DOMAIN-SUFFIX,zed\.dev,Zed\s*$' 'Zed policy rule is missing'
+Assert-Match '(?m)^\s+- DOMAIN-SUFFIX,zed\.dev,DIRECT\s*$' 'Zed direct rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,OneDrive,Microsoft\s*$' 'OneDrive must route through Microsoft policy'
 Assert-Match '(?m)^\s+- RULE-SET,Microsoft,Microsoft\s*$' 'Microsoft policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Steam,Steam\s*$' 'Steam store and community policy rule is missing'
-Assert-Match '(?m)^\s+- RULE-SET,Apple,Apple\s*$' 'Apple international policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,YouTube,YouTube\s*$' 'YouTube policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Google,Google\s*$' 'Google policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,Spotify,Spotify\s*$' 'Spotify policy rule is missing'
@@ -149,8 +149,8 @@ $microsoftPosition = $config.IndexOf('  - RULE-SET,Microsoft,Microsoft')
 $oneDrivePosition = $config.IndexOf('  - RULE-SET,OneDrive,Microsoft')
 $steamCnPosition = $config.IndexOf('  - RULE-SET,Steam-CN,DIRECT')
 $steamPosition = $config.IndexOf('  - RULE-SET,Steam,Steam')
-$appleCnPosition = $config.IndexOf('  - RULE-SET,Apple-CN,DIRECT')
-$applePosition = $config.IndexOf('  - RULE-SET,Apple,Apple')
+$applePosition = $config.IndexOf('  - RULE-SET,Apple,DIRECT')
+$nonCnPosition = $config.IndexOf('  - RULE-SET,NonCN-Domain,Proxy')
 $youtubePosition = $config.IndexOf('  - RULE-SET,YouTube,YouTube')
 $googlePosition = $config.IndexOf('  - RULE-SET,Google,Google')
 $finalPosition = $config.IndexOf('  - MATCH,Proxy')
@@ -159,8 +159,11 @@ if ($tailscalePosition -lt 0 -or $adPosition -lt 0 -or $finalPosition -lt 0 -or
     throw 'Rule order must be system direct, ad blocking, then final routing'
 }
 if ($microsoftCnPosition -gt $microsoftPosition -or $oneDrivePosition -gt $microsoftPosition -or
-    $steamCnPosition -gt $steamPosition -or $appleCnPosition -gt $applePosition) {
+    $steamCnPosition -gt $steamPosition) {
     throw 'China download/CDN and OneDrive rules must precede their broad service rules'
+}
+if ($applePosition -lt 0 -or $applePosition -gt $nonCnPosition) {
+    throw 'Apple direct rule must precede the broad non-China rule'
 }
 
 if ($youtubePosition -lt 0 -or $googlePosition -lt 0 -or $youtubePosition -gt $googlePosition) {
