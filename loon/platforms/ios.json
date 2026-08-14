@@ -10,7 +10,7 @@
   ],
   "PRE_REMOTE_RULES": [],
   "POST_REMOTE_RULES": [
-    "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Loon/TikTok/TikTok.list, policy=TikTok, tag=TikTok, enabled=true"
+    "https://raw.githubusercontent.com/Repcz/Tool/X/Loon/Rules/TikTok.list, policy=TikTok, tag=TikTok, enabled=true"
   ],
   "PLUGINS": [
     "https://kelee.one/Tool/Loon/Lpx/Block_HTTPDNS.lpx, pin=true, enabled=true",

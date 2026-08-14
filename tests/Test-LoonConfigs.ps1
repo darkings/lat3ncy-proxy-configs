@@ -161,7 +161,11 @@ foreach ($platform in $configs.Keys) {
         throw "$platform Microsoft China direct rule must precede broad Microsoft rule"
     }
     foreach ($app in $apps[$platform]) {
-        Assert-Match $remoteRules "(?m)/$([regex]::Escape($app))/$([regex]::Escape($app))\.list,\s*policy=$([regex]::Escape($app))," "$platform missing remote rule for $app"
+        if ($app -eq 'TikTok') {
+            Assert-Match $remoteRules '(?m)/Repcz/Tool/X/Loon/Rules/TikTok\.list,\s*policy=TikTok,' "$platform missing TikTok rule"
+        } else {
+            Assert-Match $remoteRules "(?m)/$([regex]::Escape($app))/$([regex]::Escape($app))\.list,\s*policy=$([regex]::Escape($app))," "$platform missing remote rule for $app"
+        }
     }
     if ($remoteRules.IndexOf('/YouTube/YouTube.list') -gt $remoteRules.IndexOf('/Google/Google.list')) {
         throw "$platform YouTube rule must precede broad Google rule"
@@ -242,6 +246,6 @@ Assert-NoMatch $macPlugins '(?m)/TestFlightRegionUnlock\.lpx,' 'macOS must not c
 Assert-NoMatch (Get-Section $ios 'Proxy Group') '(?m)^Steam=' 'iOS must not expose Steam'
 Assert-NoMatch (Get-Section $ios 'Remote Rule') '(?m)/Steam/Steam\.list' 'iOS must not route Steam separately'
 Assert-NoMatch (Get-Section $mac 'Proxy Group') '(?m)^TikTok=' 'macOS must not expose TikTok'
-Assert-NoMatch (Get-Section $mac 'Remote Rule') '(?m)/TikTok/TikTok\.list' 'macOS must not contain TikTok rules'
+Assert-NoMatch (Get-Section $mac 'Remote Rule') '(?m)/(?:Rules/)?TikTok\.list' 'macOS must not contain TikTok rules'
 
 Write-Output 'PASS: Loon iOS and macOS config validation'
