@@ -1,0 +1,295 @@
+# Stash iOS configuration
+# Requires Stash iOS 3.4+ for the native Tailscale proxy type.
+# Add private proxy providers locally; do not publish subscription URLs or auth keys.
+
+mode: rule
+log-level: warning
+allow-lan: false
+ipv6: true
+
+dns:
+  enable: true
+  ipv6: true
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  nameserver:
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  fake-ip-filter:
+    - "*.lan"
+    - "*.local"
+    - "*.arpa"
+    - "time.*.com"
+    - "ntp.*.com"
+    - "+.tailscale.com"
+    - "+.apple.com"
+    - "+.apple.com.cn"
+    - "+.icloud.com"
+    - "+.icloud.com.cn"
+    - "+.icloud-content.com"
+    - "+.icloud-content.com.cn"
+    - "+.me.com"
+    - "+.mac.com"
+
+# Complete first-time login from this node's "Tailscale Authentication" page.
+# auth-key and exit-node are deliberately omitted from the public configuration.
+proxies:
+  - name: Tailscale
+    type: tailscale
+    hostname: stash-ios
+    control-url: https://controlplane.tailscale.com
+    ephemeral: false
+
+# Add private subscriptions from Stash's visual editor after importing this file.
+proxy-providers: {}
+
+proxy-groups:
+  - name: Proxy
+    type: select
+    proxies:
+      - Auto
+      - DIRECT
+      - Hong Kong
+      - Taiwan
+      - Japan
+      - Singapore
+      - United States
+    include-all: true
+    filter: '(?i)^(?!Tailscale$)(?!.*(?:群|邀请|返利|官网|客服|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|机场|通知|频道|教程|更新|作者|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)).+$'
+    icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/Global.png
+
+  - name: Spotify
+    type: select
+    proxies: [Proxy, DIRECT, Hong Kong, Taiwan, Japan, Singapore, United States]
+    icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/Spotify.png
+
+  - name: Telegram
+    type: select
+    proxies: [Proxy, DIRECT, Hong Kong, Taiwan, Japan, Singapore, United States]
+    icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/Telegram.png
+
+  - name: OpenAI
+    type: select
+    proxies: [Proxy, DIRECT, Hong Kong, Taiwan, Japan, Singapore, United States]
+    icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/OpenAI.png
+
+  - name: GitHub
+    type: select
+    proxies: [Proxy, DIRECT, Hong Kong, Taiwan, Japan, Singapore, United States]
+    icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/github.png
+
+  - name: Microsoft
+    type: select
+    proxies: [Proxy, DIRECT, Hong Kong, Taiwan, Japan, Singapore, United States]
+    icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/Microsoft.png
+
+  - name: Google
+    type: select
+    proxies: [Proxy, DIRECT, Hong Kong, Taiwan, Japan, Singapore, United States]
+    icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/Google.png
+
+  - name: YouTube
+    type: select
+    proxies: [Proxy, DIRECT, Hong Kong, Taiwan, Japan, Singapore, United States]
+    icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/YouTube.png
+
+  - name: TikTok
+    type: select
+    proxies: [Proxy, DIRECT, Hong Kong, Taiwan, Japan, Singapore, United States]
+    icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/TikTok.png
+
+  - name: Auto
+    type: url-test
+    include-all: true
+    filter: '(?i)^(?!Tailscale$)(?!.*(?:群|邀请|返利|官网|客服|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|机场|通知|频道|教程|更新|作者|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)).+$'
+    interval: 600
+    lazy: true
+    icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/Urltest.png
+
+  - name: Hong Kong
+    type: url-test
+    include-all: true
+    filter: '(?i)^(?!Tailscale$)(?!.*(?:剩余|流量|套餐|到期|过期|有效期|已用|重置|TRAFFIC|EXPIRE|REMAINING|RESET)).*(?:香港|港|🇭🇰|\bHK\b|Hong[ -]?Kong).*$'
+    interval: 600
+    lazy: true
+    icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/HK.png
+
+  - name: Taiwan
+    type: url-test
+    include-all: true
+    filter: '(?i)^(?!Tailscale$)(?!.*(?:剩余|流量|套餐|到期|过期|有效期|已用|重置|TRAFFIC|EXPIRE|REMAINING|RESET)).*(?:台湾|台灣|臺灣|台北|臺北|🇹🇼|\bTW\b|Taiwan|Taipei).*$'
+    interval: 600
+    lazy: true
+    icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/TW.png
+
+  - name: Japan
+    type: url-test
+    include-all: true
+    filter: '(?i)^(?!Tailscale$)(?!.*(?:剩余|流量|套餐|到期|过期|有效期|已用|重置|TRAFFIC|EXPIRE|REMAINING|RESET)).*(?:日本|东京|東京|大阪|🇯🇵|\bJP\b|Japan|Tokyo|Osaka).*$'
+    interval: 600
+    lazy: true
+    icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/JP.png
+
+  - name: Singapore
+    type: url-test
+    include-all: true
+    filter: '(?i)^(?!Tailscale$)(?!.*(?:剩余|流量|套餐|到期|过期|有效期|已用|重置|TRAFFIC|EXPIRE|REMAINING|RESET)).*(?:新加坡|狮城|獅城|🇸🇬|\bSG\b|Singapore).*$'
+    interval: 600
+    lazy: true
+    icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/SG.png
+
+  - name: United States
+    type: url-test
+    include-all: true
+    filter: '(?i)^(?!Tailscale$)(?!.*(?:剩余|流量|套餐|到期|过期|有效期|已用|重置|TRAFFIC|EXPIRE|REMAINING|RESET)).*(?:美国|美國|🇺🇸|\bUS(?:A)?\b|United[ -]?States|America|Los[ -]?Angeles|San[ -]?Jose|Seattle|New[ -]?York).*$'
+    interval: 600
+    lazy: true
+    icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/US.png
+
+rule-providers:
+  Cats-Team-AdRules:
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/Cats-Team/AdRules/main/adrules-mihomo.mrs
+    path: ./ruleset/stash-cats-team-adrules.mrs
+    interval: 21600
+
+  Private-Domain:
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs
+    path: ./ruleset/stash-private-domain.mrs
+    interval: 86400
+
+  Private-IP:
+    behavior: ipcidr
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs
+    path: ./ruleset/stash-private-ip.mrs
+    interval: 86400
+
+  Spotify:
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs
+    path: ./ruleset/stash-spotify.mrs
+    interval: 86400
+
+  Telegram-Domain:
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs
+    path: ./ruleset/stash-telegram-domain.mrs
+    interval: 86400
+
+  Telegram-IP:
+    behavior: ipcidr
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs
+    path: ./ruleset/stash-telegram-ip.mrs
+    interval: 86400
+
+  OpenAI:
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/openai.mrs
+    path: ./ruleset/stash-openai.mrs
+    interval: 86400
+
+  GitHub:
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs
+    path: ./ruleset/stash-github.mrs
+    interval: 86400
+
+  Microsoft-CN:
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft%40cn.mrs
+    path: ./ruleset/stash-microsoft-cn.mrs
+    interval: 86400
+
+  Microsoft:
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft.mrs
+    path: ./ruleset/stash-microsoft.mrs
+    interval: 86400
+
+  Apple:
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.mrs
+    path: ./ruleset/stash-apple.mrs
+    interval: 86400
+
+  YouTube:
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs
+    path: ./ruleset/stash-youtube.mrs
+    interval: 86400
+
+  Google:
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs
+    path: ./ruleset/stash-google.mrs
+    interval: 86400
+
+  TikTok:
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tiktok.mrs
+    path: ./ruleset/stash-tiktok.mrs
+    interval: 86400
+
+  CN-Domain:
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs
+    path: ./ruleset/stash-cn-domain.mrs
+    interval: 86400
+
+  NonCN-Domain:
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/geolocation-!cn.mrs
+    path: ./ruleset/stash-non-cn-domain.mrs
+    interval: 86400
+
+  CN-IP:
+    behavior: ipcidr
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs
+    path: ./ruleset/stash-cn-ip.mrs
+    interval: 86400
+
+# Tailscale rules must remain before private-network and advertising rules.
+rules:
+  - DOMAIN-SUFFIX,tailscale.com,DIRECT
+  - DOMAIN-SUFFIX,ts.net,Tailscale
+  - IP-CIDR,100.64.0.0/10,Tailscale,no-resolve
+  - IP-CIDR6,fd7a:115c:a1e0::/48,Tailscale,no-resolve
+  - RULE-SET,Private-Domain,DIRECT
+  - RULE-SET,Private-IP,DIRECT,no-resolve
+  - RULE-SET,Cats-Team-AdRules,REJECT
+  - RULE-SET,Microsoft-CN,DIRECT
+  - RULE-SET,Apple,DIRECT
+  - RULE-SET,OpenAI,OpenAI
+  - RULE-SET,GitHub,GitHub
+  - RULE-SET,Microsoft,Microsoft
+  - RULE-SET,YouTube,YouTube
+  - RULE-SET,Google,Google
+  - RULE-SET,Spotify,Spotify
+  - RULE-SET,Telegram-Domain,Telegram
+  - RULE-SET,Telegram-IP,Telegram,no-resolve
+  - RULE-SET,TikTok,TikTok
+  - RULE-SET,CN-Domain,DIRECT
+  - RULE-SET,NonCN-Domain,Proxy
+  - RULE-SET,CN-IP,DIRECT,no-resolve
+  - MATCH,Proxy

@@ -2,11 +2,13 @@
   "scan_files": [
     "loon-ios.lcf",
     "loon-macos.lcf",
+    "stash-ios.yaml",
     "sparkle-windows-override.yaml",
     "README.md"
   ],
   "required_hosts": [
-    "raw.githubusercontent.com"
+    "raw.githubusercontent.com",
+    "cdn.jsdelivr.net"
   ],
   "warning_hosts": [
     "geodata.kelee.one",
@@ -16,6 +18,7 @@
     "connectivitycheck.platform.hicloud.com",
     "dns.alidns.com",
     "doh.pub",
+    "controlplane.tailscale.com",
     "t.me",
     "www.gstatic.com"
   ],
