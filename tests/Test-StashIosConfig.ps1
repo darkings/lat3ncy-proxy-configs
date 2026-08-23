@@ -70,7 +70,8 @@ foreach ($group in @('Proxy', 'Auto', 'Hong Kong', 'Taiwan', 'Japan', 'Singapore
 }
 Assert-Match '(?ms)^\s{2}- name: Tailscale\s*\r?\n\s{4}type: select\s*\r?\n\s{4}proxies:\s*\r?\n\s{6}- Tailscale-Node\s*$' 'Stash Tailscale strategy group is incomplete'
 Assert-Match '(?ms)^\s{2}- name: Proxy\s*\r?\n.*?^\s{6}- Auto\s*$' 'Stash Proxy group must expose Auto as a selectable policy'
-Assert-Match '(?ms)^\s{2}- name: Proxy\s*\r?\n.*?^\s{6}- Tailscale\s*$' 'Stash Proxy group must expose Tailscale as a selectable policy'
+$proxyBlock = [regex]::Match($config, '(?ms)^\s{2}- name: Proxy\s*\r?\n.*?(?=^\s{2}- name:)').Value
+if ($proxyBlock -match '(?m)^\s{6}- Tailscale\s*$') { throw 'Stash Proxy must not route ordinary internet traffic through Tailscale without an exit node' }
 
 $providers = @('Cats-Team-AdRules', 'Private-Domain', 'Private-IP', 'Spotify', 'Telegram-Domain', 'Telegram-IP', 'OpenAI', 'GitHub', 'Microsoft-CN', 'Microsoft', 'Apple', 'YouTube', 'Google', 'TikTok', 'CN-Domain', 'NonCN-Domain', 'CN-IP')
 foreach ($provider in $providers) {
