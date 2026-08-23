@@ -15,7 +15,7 @@ function Assert-NoMatch {
     if ($config -match $Pattern) { throw $Message }
 }
 
-foreach ($key in @('mode', 'dns', 'proxies', 'proxy-providers', 'proxy-groups', 'rule-providers', 'rules')) {
+foreach ($key in @('mode', 'hosts', 'dns', 'http', 'script-providers', 'proxies', 'proxy-providers', 'proxy-groups', 'rule-providers', 'rules')) {
     Assert-Match "(?m)^$([regex]::Escape($key)):\s*" "Stash config missing top-level key: $key"
 }
 
@@ -23,15 +23,24 @@ Assert-Match '(?ms)^proxies:\s*\r?\n\s+- name: Tailscale-Node\s*\r?\n\s+type: ta
 Assert-Match '(?ms)^proxies:.*?^\s+- name: Tailscale-Node.*?^\s+benchmark-disabled: true' 'Tailnet-only Tailscale node must not run a public latency test'
 Assert-NoMatch '(?m)^\s*auth-key:' 'Public Stash config must not contain a Tailscale auth key'
 Assert-NoMatch '(?m)^\s*exit-node:' 'Public Stash config must not force a Tailscale exit node'
-Assert-Match '(?m)^proxy-providers:\s*\{\}\s*$' 'Private proxy providers must remain empty in the public config'
+Assert-NoMatch '(?i)api\.9dragonfly\.com|authorization:\s*bearer|token=' 'Public Stash config must not contain a private subscription or token'
+
+Assert-Match '(?m)^hosts:\s*\r?\n\s{2}sub\.store:\s*127\.0\.0\.1\s*$' 'Sub-Store synthetic host must remain local'
+Assert-Match '(?ms)^proxy-providers:\s*\r?\n\s{2}SubStore:\s*\r?\n\s{4}url:\s*"http://sub\.store/download/ios\?target=Clash"\s*\r?\n\s{4}path:\s*\./providers/substore-ios\.yaml\s*\r?\n\s{4}interval:\s*3600\s*\r?\n\s{4}headers:\s*\r?\n\s{6}User-Agent:\s*Stash\s*$' 'Stash fixed-name Sub-Store provider is incomplete'
+foreach ($script in @('sub-store-0.min.js', 'sub-store-1.min.js')) {
+    Assert-Match "(?m)^\s{4}url:\s*https://cdn\.jsdelivr\.net/gh/sub-store-org/Sub-Store@release/$([regex]::Escape($script))\s*$" "Missing direct Sub-Store script: $script"
+}
+Assert-Match '(?ms)^http:.*?^\s{4}- match: \^https\?:\\/\\/sub\\\.store\\/\(\(download\)\|api' 'Sub-Store download request script is missing'
 
 $fakeIpMatch = [regex]::Match($config, '(?ms)^\s{2}fake-ip-filter:\s*\r?\n(.*?)(?=^\S|^\s{2}[a-zA-Z][^:]*:)')
 if (-not $fakeIpMatch.Success) { throw 'Stash fake-ip-filter is missing' }
 $fakeIpFilter = $fakeIpMatch.Groups[1].Value
 if ($fakeIpFilter -notmatch '\+\.tailscale\.com') { throw 'Tailscale control domains must return real IPs' }
 if ($fakeIpFilter -match '\+\.ts\.net') { throw 'MagicDNS names must retain fake IP mapping for routing to the native Tailscale node' }
+if ($fakeIpFilter -notmatch 'sub\.store') { throw 'Sub-Store synthetic host must not receive a fake IP' }
 
 foreach ($rule in @(
+    'DOMAIN,sub.store,DIRECT',
     'DOMAIN-SUFFIX,tailscale.com,DIRECT',
     'DOMAIN-SUFFIX,ts.net,Tailscale',
     'IP-CIDR,100.64.0.0/10,Tailscale,no-resolve',
@@ -59,6 +68,7 @@ foreach ($group in @('Proxy', 'Auto', 'Hong Kong', 'Taiwan', 'Japan', 'Singapore
     if ($block -notmatch '\(\?!Tailscale\(\?:-Node\)\?\$\)') { throw "Stash $group must exclude the Tailscale node from ordinary proxy selection" }
 }
 Assert-Match '(?ms)^\s{2}- name: Tailscale\s*\r?\n\s{4}type: select\s*\r?\n\s{4}proxies:\s*\r?\n\s{6}- Tailscale-Node\s*$' 'Stash Tailscale strategy group is incomplete'
+Assert-Match '(?ms)^\s{2}- name: Proxy\s*\r?\n.*?^\s{6}- Auto\s*$' 'Stash Proxy group must expose Auto as a selectable policy'
 Assert-Match '(?ms)^\s{2}- name: Proxy\s*\r?\n.*?^\s{6}- Tailscale\s*$' 'Stash Proxy group must expose Tailscale as a selectable policy'
 
 $providers = @('Cats-Team-AdRules', 'Private-Domain', 'Private-IP', 'Spotify', 'Telegram-Domain', 'Telegram-IP', 'OpenAI', 'GitHub', 'Microsoft-CN', 'Microsoft', 'Apple', 'YouTube', 'Google', 'TikTok', 'CN-Domain', 'NonCN-Domain', 'CN-IP')

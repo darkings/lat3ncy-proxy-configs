@@ -7,6 +7,10 @@ log-level: warning
 allow-lan: false
 ipv6: true
 
+# Sub-Store uses a local request script; never resolve this synthetic host publicly.
+hosts:
+  sub.store: 127.0.0.1
+
 dns:
   enable: true
   ipv6: true
@@ -24,6 +28,7 @@ dns:
     - "*.arpa"
     - "time.*.com"
     - "ntp.*.com"
+    - "sub.store"
     - "+.tailscale.com"
     - "+.apple.com"
     - "+.apple.com.cn"
@@ -33,6 +38,33 @@ dns:
     - "+.icloud-content.com.cn"
     - "+.me.com"
     - "+.mac.com"
+
+# Built-in Sub-Store request handling. Create a local Sub-Store subscription
+# named "ios"; the provider below fetches its Clash YAML output every hour.
+http:
+  mitm:
+    - sub.store
+  script:
+    - match: ^https?:\/\/sub\.store\/((download)|api\/(preview|sync|(utils\/node-info)))
+      name: sub-store-core
+      type: request
+      require-body: true
+      max-size: -1
+      timeout: 900
+    - match: ^https?:\/\/sub\.store
+      name: sub-store-ui
+      type: request
+      require-body: true
+      max-size: -1
+      timeout: 900
+
+script-providers:
+  sub-store-ui:
+    url: https://cdn.jsdelivr.net/gh/sub-store-org/Sub-Store@release/sub-store-0.min.js
+    interval: 86400
+  sub-store-core:
+    url: https://cdn.jsdelivr.net/gh/sub-store-org/Sub-Store@release/sub-store-1.min.js
+    interval: 86400
 
 # Complete first-time login from this node's "Tailscale Authentication" page.
 # auth-key and exit-node are deliberately omitted from the public configuration.
@@ -45,8 +77,15 @@ proxies:
     # This node is for Tailnet resources and has no required public exit node.
     benchmark-disabled: true
 
-# Add private subscriptions from Stash's visual editor after importing this file.
-proxy-providers: {}
+# The fixed name is public, while the private airport URL remains only in the
+# local Sub-Store database. Do not replace this with the private source URL.
+proxy-providers:
+  SubStore:
+    url: "http://sub.store/download/ios?target=Clash"
+    path: ./providers/substore-ios.yaml
+    interval: 3600
+    headers:
+      User-Agent: Stash
 
 proxy-groups:
   - name: Proxy
@@ -279,6 +318,7 @@ rule-providers:
 
 # Tailscale rules must remain before private-network and advertising rules.
 rules:
+  - DOMAIN,sub.store,DIRECT
   - DOMAIN-SUFFIX,tailscale.com,DIRECT
   - DOMAIN-SUFFIX,ts.net,Tailscale
   - IP-CIDR,100.64.0.0/10,Tailscale,no-resolve

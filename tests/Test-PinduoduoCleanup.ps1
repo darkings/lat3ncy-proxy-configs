@@ -2,17 +2,19 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $loonPluginPath = Join-Path $repoRoot 'loon/plugins/pinduoduo-cleanup.lpx'
+$stashOverridePath = Join-Path $repoRoot 'stash/overrides/pinduoduo-cleanup.stoverride'
 $homepageScriptPath = Join-Path $repoRoot 'loon/scripts/pinduoduo-homepage-cleanup.js'
 $scanScriptPath = Join-Path $repoRoot 'loon/scripts/pinduoduo-scan-cleanup.js'
 $vendorChunkPath = Join-Path $repoRoot 'loon/vendor/pinduoduo/9410-b8806e870a26db7d.js'
 
-foreach ($requiredPath in @($loonPluginPath, $homepageScriptPath, $scanScriptPath, $vendorChunkPath)) {
+foreach ($requiredPath in @($loonPluginPath, $stashOverridePath, $homepageScriptPath, $scanScriptPath, $vendorChunkPath)) {
     if (-not (Test-Path -LiteralPath $requiredPath)) {
         throw "Missing Loon Pinduoduo implementation: $requiredPath"
     }
 }
 
 $loonPlugin = Get-Content -Raw -LiteralPath $loonPluginPath -Encoding UTF8
+$stashOverride = Get-Content -Raw -LiteralPath $stashOverridePath -Encoding UTF8
 $homepageScript = Get-Content -Raw -LiteralPath $homepageScriptPath -Encoding UTF8
 $scanScript = Get-Content -Raw -LiteralPath $scanScriptPath -Encoding UTF8
 
@@ -22,11 +24,24 @@ foreach ($section in @('Rule', 'Rewrite', 'Script', 'MITM')) {
     }
 }
 
+foreach ($key in @('name', 'rules', 'http', 'script-providers')) {
+    if ($stashOverride -notmatch "(?m)^$([regex]::Escape($key)):\s*") {
+        throw "Stash Pinduoduo override missing key: $key"
+    }
+}
+
 $homepageScriptUrl = 'https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/loon/scripts/pinduoduo-homepage-cleanup.js'
 $scanScriptUrl = 'https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/loon/scripts/pinduoduo-scan-cleanup.js'
 foreach ($scriptUrl in @($homepageScriptUrl, $scanScriptUrl)) {
     if ($loonPlugin -notmatch [regex]::Escape($scriptUrl)) {
         throw "Loon plugin missing repository script URL: $scriptUrl"
+    }
+}
+$stashHomepageScriptUrl = 'https://cdn.jsdelivr.net/gh/darkings/lat3ncy-proxy-configs@main/loon/scripts/pinduoduo-homepage-cleanup.js'
+$stashScanScriptUrl = 'https://cdn.jsdelivr.net/gh/darkings/lat3ncy-proxy-configs@main/loon/scripts/pinduoduo-scan-cleanup.js'
+foreach ($scriptUrl in @($stashHomepageScriptUrl, $stashScanScriptUrl)) {
+    if ($stashOverride -notmatch [regex]::Escape($scriptUrl)) {
+        throw "Stash override missing direct repository script URL: $scriptUrl"
     }
 }
 
@@ -47,6 +62,15 @@ foreach ($rule in @(
         throw "Loon plugin missing Pinduoduo blocking rule: $rule"
     }
 }
+foreach ($rule in @(
+    'DOMAIN,meta.pinduoduo.com,REJECT',
+    'DOMAIN,cdl-1.pddpic.com,REJECT',
+    'DOMAIN,titan.pinduoduo.com,REJECT'
+)) {
+    if ($stashOverride -notmatch "(?m)^\s+- $([regex]::Escape($rule))\s*$") {
+        throw "Stash override missing Pinduoduo blocking rule: $rule"
+    }
+}
 foreach ($contract in @(
     'volantis3-open\/component',
     'api\/philo\/personal\/hub',
@@ -59,6 +83,16 @@ foreach ($contract in @(
 }
 if ($loonPlugin -notmatch '(?m)^hostname\s*=.*api\.pinduoduo\.com.*m\.pinduoduo\.net') {
     throw 'Loon plugin MITM hostnames must cover the scripted Pinduoduo responses'
+}
+foreach ($contract in @(
+    '(?m)^\s{4}- api\.pinduoduo\.com\s*$',
+    '(?m)^\s{4}- m\.pinduoduo\.net\s*$',
+    '(?m)^\s{2}body-rewrite:\s*$',
+    '(?m)^\s{2}script:\s*$'
+)) {
+    if ($stashOverride -notmatch $contract) {
+        throw "Stash Pinduoduo override missing contract: $contract"
+    }
 }
 foreach ($contract in @('delete result\.icon_set', 'bottom_tabs', 'buffer_bottom_tabs', 'allowedBottomLinks')) {
     if ($homepageScript -notmatch $contract) {
@@ -102,4 +136,4 @@ if ($LASTEXITCODE -ne 0 -or $nodeOutput -notcontains 'PASS: Loon homepage script
     throw 'Loon homepage cleanup behavior contract failed'
 }
 
-Write-Output 'PASS: Loon Pinduoduo cleanup validation'
+Write-Output 'PASS: Loon and Stash Pinduoduo cleanup validation'
