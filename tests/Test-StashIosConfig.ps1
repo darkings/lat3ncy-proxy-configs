@@ -19,7 +19,7 @@ foreach ($key in @('mode', 'dns', 'proxies', 'proxy-providers', 'proxy-groups', 
     Assert-Match "(?m)^$([regex]::Escape($key)):\s*" "Stash config missing top-level key: $key"
 }
 
-Assert-Match '(?ms)^proxies:\s*\r?\n\s+- name: Tailscale\s*\r?\n\s+type: tailscale\s*\r?\n\s+hostname: stash-ios\s*\r?\n\s+control-url: https://controlplane\.tailscale\.com\s*\r?\n\s+ephemeral: false' 'Stash native Tailscale node is incomplete'
+Assert-Match '(?ms)^proxies:\s*\r?\n\s+- name: Tailscale-Node\s*\r?\n\s+type: tailscale\s*\r?\n\s+hostname: ios\s*\r?\n\s+control-url: https://controlplane\.tailscale\.com\s*\r?\n\s+ephemeral: false' 'Stash native Tailscale node is incomplete'
 Assert-NoMatch '(?m)^\s*auth-key:' 'Public Stash config must not contain a Tailscale auth key'
 Assert-NoMatch '(?m)^\s*exit-node:' 'Public Stash config must not force a Tailscale exit node'
 Assert-Match '(?m)^proxy-providers:\s*\{\}\s*$' 'Private proxy providers must remain empty in the public config'
@@ -48,15 +48,16 @@ if ($tailscalePosition -lt 0 -or $privatePosition -lt 0 -or $adPosition -lt 0 -o
     throw 'Stash rules must order Tailscale, private networks, ads, then final routing'
 }
 
-$expectedGroups = @('Proxy', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Google', 'YouTube', 'TikTok', 'Auto', 'Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States')
+$expectedGroups = @('Proxy', 'Tailscale', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Google', 'YouTube', 'TikTok', 'Auto', 'Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States')
 foreach ($group in $expectedGroups) {
     Assert-Match "(?m)^\s+- name: $([regex]::Escape($group))\s*$" "Stash missing proxy group: $group"
 }
 foreach ($group in @('Proxy', 'Auto', 'Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States')) {
     $block = [regex]::Match($config, "(?ms)^\s{2}- name: $([regex]::Escape($group))\s*\r?\n.*?(?=^\s{2}- name:|^rule-providers:)").Value
     if ($block -notmatch '(?m)^\s{4}include-all:\s*true\s*$') { throw "Stash $group must include locally added providers" }
-    if ($block -notmatch '\(\?!Tailscale\$\)') { throw "Stash $group must exclude the Tailscale node from ordinary proxy selection" }
+    if ($block -notmatch '\(\?!Tailscale\(\?:-Node\)\?\$\)') { throw "Stash $group must exclude the Tailscale node from ordinary proxy selection" }
 }
+Assert-Match '(?ms)^\s{2}- name: Tailscale\s*\r?\n\s{4}type: select\s*\r?\n\s{4}proxies:\s*\r?\n\s{6}- Tailscale-Node\s*$' 'Stash Tailscale strategy group is incomplete'
 Assert-Match '(?ms)^\s{2}- name: Proxy\s*\r?\n.*?^\s{6}- Tailscale\s*$' 'Stash Proxy group must expose Tailscale as a selectable policy'
 
 $providers = @('Cats-Team-AdRules', 'Private-Domain', 'Private-IP', 'Spotify', 'Telegram-Domain', 'Telegram-IP', 'OpenAI', 'GitHub', 'Microsoft-CN', 'Microsoft', 'Apple', 'YouTube', 'Google', 'TikTok', 'CN-Domain', 'NonCN-Domain', 'CN-IP')

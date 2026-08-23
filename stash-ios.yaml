@@ -37,9 +37,9 @@ dns:
 # Complete first-time login from this node's "Tailscale Authentication" page.
 # auth-key and exit-node are deliberately omitted from the public configuration.
 proxies:
-  - name: Tailscale
+  - name: Tailscale-Node
     type: tailscale
-    hostname: stash-ios
+    hostname: ios
     control-url: https://controlplane.tailscale.com
     ephemeral: false
 
@@ -59,8 +59,13 @@ proxy-groups:
       - Singapore
       - United States
     include-all: true
-    filter: '(?i)^(?!Tailscale$)(?!.*(?:群|邀请|返利|官网|客服|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|机场|通知|频道|教程|更新|作者|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)).+$'
+    filter: '(?i)^(?!Tailscale(?:-Node)?$)(?!.*(?:群|邀请|返利|官网|客服|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|机场|通知|频道|教程|更新|作者|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)).+$'
     icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/Global.png
+
+  - name: Tailscale
+    type: select
+    proxies:
+      - Tailscale-Node
 
   - name: Spotify
     type: select
@@ -105,7 +110,7 @@ proxy-groups:
   - name: Auto
     type: url-test
     include-all: true
-    filter: '(?i)^(?!Tailscale$)(?!.*(?:群|邀请|返利|官网|客服|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|机场|通知|频道|教程|更新|作者|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)).+$'
+    filter: '(?i)^(?!Tailscale(?:-Node)?$)(?!.*(?:群|邀请|返利|官网|客服|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|机场|通知|频道|教程|更新|作者|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)).+$'
     interval: 600
     lazy: true
     icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/Urltest.png
@@ -113,7 +118,7 @@ proxy-groups:
   - name: Hong Kong
     type: url-test
     include-all: true
-    filter: '(?i)^(?!Tailscale$)(?!.*(?:剩余|流量|套餐|到期|过期|有效期|已用|重置|TRAFFIC|EXPIRE|REMAINING|RESET)).*(?:香港|港|🇭🇰|\bHK\b|Hong[ -]?Kong).*$'
+    filter: '(?i)^(?!Tailscale(?:-Node)?$)(?!.*(?:剩余|流量|套餐|到期|过期|有效期|已用|重置|TRAFFIC|EXPIRE|REMAINING|RESET)).*(?:香港|港|🇭🇰|\bHK\b|Hong[ -]?Kong).*$'
     interval: 600
     lazy: true
     icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/HK.png
@@ -121,7 +126,7 @@ proxy-groups:
   - name: Taiwan
     type: url-test
     include-all: true
-    filter: '(?i)^(?!Tailscale$)(?!.*(?:剩余|流量|套餐|到期|过期|有效期|已用|重置|TRAFFIC|EXPIRE|REMAINING|RESET)).*(?:台湾|台灣|臺灣|台北|臺北|🇹🇼|\bTW\b|Taiwan|Taipei).*$'
+    filter: '(?i)^(?!Tailscale(?:-Node)?$)(?!.*(?:剩余|流量|套餐|到期|过期|有效期|已用|重置|TRAFFIC|EXPIRE|REMAINING|RESET)).*(?:台湾|台灣|臺灣|台北|臺北|🇹🇼|\bTW\b|Taiwan|Taipei).*$'
     interval: 600
     lazy: true
     icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/TW.png
@@ -129,7 +134,7 @@ proxy-groups:
   - name: Japan
     type: url-test
     include-all: true
-    filter: '(?i)^(?!Tailscale$)(?!.*(?:剩余|流量|套餐|到期|过期|有效期|已用|重置|TRAFFIC|EXPIRE|REMAINING|RESET)).*(?:日本|东京|東京|大阪|🇯🇵|\bJP\b|Japan|Tokyo|Osaka).*$'
+    filter: '(?i)^(?!Tailscale(?:-Node)?$)(?!.*(?:剩余|流量|套餐|到期|过期|有效期|已用|重置|TRAFFIC|EXPIRE|REMAINING|RESET)).*(?:日本|东京|東京|大阪|🇯🇵|\bJP\b|Japan|Tokyo|Osaka).*$'
     interval: 600
     lazy: true
     icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/JP.png
@@ -137,7 +142,7 @@ proxy-groups:
   - name: Singapore
     type: url-test
     include-all: true
-    filter: '(?i)^(?!Tailscale$)(?!.*(?:剩余|流量|套餐|到期|过期|有效期|已用|重置|TRAFFIC|EXPIRE|REMAINING|RESET)).*(?:新加坡|狮城|獅城|🇸🇬|\bSG\b|Singapore).*$'
+    filter: '(?i)^(?!Tailscale(?:-Node)?$)(?!.*(?:剩余|流量|套餐|到期|过期|有效期|已用|重置|TRAFFIC|EXPIRE|REMAINING|RESET)).*(?:新加坡|狮城|獅城|🇸🇬|\bSG\b|Singapore).*$'
     interval: 600
     lazy: true
     icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/SG.png
@@ -145,7 +150,7 @@ proxy-groups:
   - name: United States
     type: url-test
     include-all: true
-    filter: '(?i)^(?!Tailscale$)(?!.*(?:剩余|流量|套餐|到期|过期|有效期|已用|重置|TRAFFIC|EXPIRE|REMAINING|RESET)).*(?:美国|美國|🇺🇸|\bUS(?:A)?\b|United[ -]?States|America|Los[ -]?Angeles|San[ -]?Jose|Seattle|New[ -]?York).*$'
+    filter: '(?i)^(?!Tailscale(?:-Node)?$)(?!.*(?:剩余|流量|套餐|到期|过期|有效期|已用|重置|TRAFFIC|EXPIRE|REMAINING|RESET)).*(?:美国|美國|🇺🇸|\bUS(?:A)?\b|United[ -]?States|America|Los[ -]?Angeles|San[ -]?Jose|Seattle|New[ -]?York).*$'
     interval: 600
     lazy: true
     icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/US.png
