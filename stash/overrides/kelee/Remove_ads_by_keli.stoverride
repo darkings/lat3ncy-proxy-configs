@@ -180,7 +180,7 @@ http:
   - ^https:\/\/acs\.m\.taobao\.com\/gw\/mtop\.film\.mtopadvertiseapi\.queryloadingbanner\/ - reject-dict
   - ^https:\/\/acs\.m\.taobao\.com\/gw\/mtop\.film\.life\.popup\.get\/ - reject-dict
   - ^https:\/\/d\.socdm\.com\/adsv\/ - reject-dict
-  - ^https?:\/\/m\.client\.10010\.com\/mobileService\/customer\/accountListData\.htm - mock status=200 data='{"imgIndex":"0","adv":{"startup_adv":{"advCntList":[],"buttonList":[]}},"respCode":"0000"}'
+  - ^https?:\/\/m\.client\.10010\.com\/mobileService\/customer\/accountListData\.htm - reject-dict
   body-rewrite:
   - ^https?:\/\/cmds\.omesoft\.com\/HypnotistWS\.asmx response-body-replace-regex <GetADResult>\.\*\?<\/GetADResult> <GetADResult>{"ret":0,"msg":"正常","err_code":0,"data":{"ad":[]}}</GetADResult>
   - ^https?:\/\/api\.fenxianglife\.com\/njia\/index\/popup\/v2 response-jq .data.list=[]

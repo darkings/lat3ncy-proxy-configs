@@ -473,18 +473,8 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             m_json = re.search(r'data\s*=\s*"(\{.*\})"', rest_fixed, re.S)
             if m_json:
                 json_str = m_json.group(1)
-                # Shorten overly long JSON for Stash line-length limits (Bilibili splash etc.)
-                # For Bilibili splash, use reject-dict (Stash-valid) - mock with JSON/base64 still invalid in Stash for this pattern, empty dict still hides splash
-                if 'splash' in pattern.lower() and 'bilibili' in pattern.lower():
-                    # Original expects {"code":0,"data":{"list":[]}} but Stash mock quoting fails for this URL; reject-dict returns {} which also yields no splash (ad-blocking preserved)
-                    url_rewrite.append(f"{pattern} - reject-dict")
-                    continue
-                if 'closeType' in json_str:
-                    # Stash mock with closeType JSON still invalid for this ? URL (like splash), use reject-dict which yields empty material and still hides the win (ad-blocking preserved)
-                    url_rewrite.append(f"{pattern} - reject-dict")
-                    continue
-                if '"code":-404' in json_str or "'code':-404" in json_str:
-                    # -404 mock with ? URL invalid in Stash (even " - 404" is invalid), use reject-dict which yields empty and still hides the ad
+                # 通用：所有脚本的 mock JSON 在 Stash 对 ?/$ 尾复杂 pattern 下均 invalid，统一用 reject-dict 保去广告（空字典/空列表均使广告位无素材）
+                if "?" in pattern or pattern.endswith("$") or "mock-data-is-base64" in rest_fixed.lower():
                     url_rewrite.append(f"{pattern} - reject-dict")
                     continue
                 elif len(json_str) > 100:
@@ -496,8 +486,8 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
                         json_str = '{"ret":0}'
                 rest_fixed = re.sub(r'data\s*=\s*"\{.*\}"', f"data='{json_str}'", rest_fixed, count=1, flags=re.S)
             else:
-                # For grpc protobuf mocks with mock-data-is-base64, Stash invalid for ?/$ patterns (mock- data-is-base64 split), use reject-dict which yields empty and still hides the mode
-                if 'grpc' in pattern.lower() and 'mock-data-is-base64' in rest_fixed.lower():
+                # 通用：所有脚本的 base64 mock 在 Stash 对 ?/$ 尾均可能 invalid，统一 reject-dict
+                if "mock-data-is-base64" in rest_fixed.lower() and ("?" in pattern or pattern.endswith("$") or len(pattern) > 60):
                     url_rewrite.append(f"{pattern} - reject-dict")
                     continue
                 def _repl_base64(m):

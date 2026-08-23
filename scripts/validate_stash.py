@@ -49,16 +49,21 @@ def check_file(p: pathlib.Path):
         if pattern.startswith("(^"):
             errs.append(f"{p.name}: url-rewrite pattern 以 (^ 开头应为 ^(: {s[:120]}")
         # 已通过 " - " 拆分，rest 以指令开头为正确；仅当原串含 " 307 " 但不含 " - 307 " 时才算缺 dash（已在上一行涵盖）
-        # mock 专项
+        # mock 专项（对所有脚本生效：?/$ 尾的 mock JSON/base64 在 Stash 必 invalid）
         if rest.startswith("mock"):
+            if "?" in pattern or pattern.endswith("$"):
+                errs.append(f"{p.name}: mock 用于 ?/$ 尾 pattern 在 Stash 必 invalid，应改为 - reject-dict: {s[:120]}")
             if "data-type" in rest:
                 errs.append(f"{p.name}: mock 含残留 data-type: {s[:120]}")
             if "status-code" in rest:
                 errs.append(f"{p.name}: mock 含残留 status-code 应为 statusCode: {s[:120]}")
             if 'data="' in rest and "mock-data-is-base64" not in rest:
                 errs.append(f"{p.name}: mock data 用双引号应为单引号: {s[:120]}")
-            if "status=" not in rest and "statusCode=" not in rest:
+            if "status=" not in rest and "statusCode=" not in rest and "mock-data-is-base64" not in rest:
+                # mock-data-is-base64 的 base64 mock 可无 statusCode，单独校验
                 errs.append(f"{p.name}: mock 缺 status=/statusCode=: {s[:120]}")
+            if "mock-data-is-base64" in rest and ("?" in pattern or pattern.endswith("$")):
+                errs.append(f"{p.name}: mock-data-is-base64 用于 ?/$ 尾 pattern 在 Stash 必 invalid: {s[:120]}")
             # 行长
             if len(s) > 400:
                 errs.append(f"{p.name}: mock 行长 {len(s)} >400 可能截断: {s[:80]}...")

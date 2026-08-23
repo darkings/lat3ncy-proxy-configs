@@ -33,7 +33,7 @@ http:
   - ^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/subscribe\/v\d\/subscribe\/tagAlbumList$ - reject-dict
   - ^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/track-feed\/v\d\/chase\/recommend\/ - reject-dict
   - ^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/social-web\/follow-stream\/category\/\d+$ - reject-dict
-  - ^https:\/\/(m|mwsa)\.ximalaya\.com\/community\/square\/v\d\/stream\? - mock data='{"data":{"cards":[{"content":{},"type":"RECOMMENDS"}]},"ret":0}' status=200
+  - ^https:\/\/(m|mwsa)\.ximalaya\.com\/community\/square\/v\d\/stream\? - reject-dict
   - ^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/mobile-playpage\/playpage\/recommendContentV\d\/ - reject-dict
   - ^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/mobile-playpage\/playpage\/recommend\/resource\/allocation\/ - reject-dict
   - ^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/firework-portal\/v\d+\/sync\? - reject-dict
