@@ -96,7 +96,6 @@ proxy-groups:
     type: select
     proxies:
       - Auto
-      - Tailscale
       - DIRECT
       - Hong Kong
       - Taiwan
