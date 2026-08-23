@@ -28,7 +28,7 @@ http:
   - line3-h5-mobile-api.biligame.com
   url-rewrite:
   - ^https:\/\/app\.bilibili\.com\/x\/v2\/splash\/list\? - reject-dict
-  - ^https:\/\/api\.bilibili\.com\/pgc\/activity\/deliver\/material\/receive\? - mock data='{"code":0,"data":{"closeType":"close_win"}}' statusCode=200
+  - ^https:\/\/api\.bilibili\.com\/pgc\/activity\/deliver\/material\/receive\? - reject-dict
   - ^https:\/\/ap[ip]\.bilibili\.com\/x\/(resource\/(top\/activity|patch\/tab(\/v2)?)|v2\/search\/square|vip\/ads\/materials)\? - mock data='{"code":-404,"message":"-404","ttl":1,"data":null}' statusCode=200
   - ^https:\/\/line3-h5-mobile-api\.biligame\.com\/game\/live\/large_card_material\? - reject-dict
   - ^https:\/\/api\.live\.bilibili\.com\/xlive\/e-commerce-interface\/v1\/ecommerce-user\/get_shopping_info\? - reject-dict

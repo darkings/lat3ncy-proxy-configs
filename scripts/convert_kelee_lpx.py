@@ -480,7 +480,9 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
                     url_rewrite.append(f"{pattern} - reject-dict")
                     continue
                 if 'closeType' in json_str:
-                    json_str = '{"code":0,"data":{"closeType":"close_win"}}'
+                    # Stash mock with closeType JSON still invalid for this ? URL (like splash), use reject-dict which yields empty material and still hides the win (ad-blocking preserved)
+                    url_rewrite.append(f"{pattern} - reject-dict")
+                    continue
                 elif len(json_str) > 100:
                     if '"code":-404' in json_str or "'code':-404" in json_str:
                         json_str = '{"code":-404,"message":"-404","ttl":1,"data":null}'
