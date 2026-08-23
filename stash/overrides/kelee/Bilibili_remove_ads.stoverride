@@ -32,9 +32,9 @@ http:
   - ^https:\/\/ap[ip]\.bilibili\.com\/x\/(resource\/(top\/activity|patch\/tab(\/v2)?)|v2\/search\/square|vip\/ads\/materials)\? - reject-dict
   - ^https:\/\/line3-h5-mobile-api\.biligame\.com\/game\/live\/large_card_material\? - reject-dict
   - ^https:\/\/api\.live\.bilibili\.com\/xlive\/e-commerce-interface\/v1\/ecommerce-user\/get_shopping_info\? - reject-dict
-  - ^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.interface\.v1\.Teenagers\/ModeStatus$ - mock data='AAAAABMKEQgCEgl0ZWVuYWdlcnMgAioA' mock-data-is-base64=true statusCode=200
-  - ^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.interface\.v1\.Search\/DefaultWords$ - mock data='AAAAACEaHeaQnOe0ouinhumikeOAgeeVquWJp+aIlnVw5Li7KAE=' mock-data-is-base64=true statusCode=200
-  - ^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.(view\.v1\.View\/TFInfo|viewunite\.v1\.View\/(PlayPause|ViewEndPage))$ - mock data='AAAAAAA=' mock-data-is-base64=true statusCode=200
+  - ^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.interface\.v1\.Teenagers\/ModeStatus$ - reject-dict
+  - ^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.interface\.v1\.Search\/DefaultWords$ - reject-dict
+  - ^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.(view\.v1\.View\/TFInfo|viewunite\.v1\.View\/(PlayPause|ViewEndPage))$ - reject-dict
   body-rewrite:
   - ^https:\/\/api\.bilibili\.com\/x\/pd-proxy\/tracker\? response-jq .data[][]?="stun.chat.bilibili.com:3478"
   - ^https:\/\/app\.bilibili\.com\/x\/v2\/splash\/(show|event\/list2)\? response-jq .data |= with_entries(if .key | IN("show", "event_list") then .value = [] else . end)

@@ -496,6 +496,10 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
                         json_str = '{"ret":0}'
                 rest_fixed = re.sub(r'data\s*=\s*"\{.*\}"', f"data='{json_str}'", rest_fixed, count=1, flags=re.S)
             else:
+                # For grpc protobuf mocks with mock-data-is-base64, Stash invalid for ?/$ patterns (mock- data-is-base64 split), use reject-dict which yields empty and still hides the mode
+                if 'grpc' in pattern.lower() and 'mock-data-is-base64' in rest_fixed.lower():
+                    url_rewrite.append(f"{pattern} - reject-dict")
+                    continue
                 def _repl_base64(m):
                     key = m.group(1)
                     val = m.group(2)
