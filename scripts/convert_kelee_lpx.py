@@ -483,6 +483,11 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
                     # Stash mock with closeType JSON still invalid for this ? URL (like splash), use reject-dict which yields empty material and still hides the win (ad-blocking preserved)
                     url_rewrite.append(f"{pattern} - reject-dict")
                     continue
+                if '"code":-404' in json_str or "'code':-404" in json_str:
+                    # -404 mock with ? URL also invalid in Stash for this pattern, use 404 status as valid fallback (ad-blocking: resource not found)
+                    # Stash-valid is " - 404" or " - reject-dict"; use 404 to preserve -404 semantics
+                    url_rewrite.append(f"{pattern} - 404")
+                    continue
                 elif len(json_str) > 100:
                     if '"code":-404' in json_str or "'code':-404" in json_str:
                         json_str = '{"code":-404,"message":"-404","ttl":1,"data":null}'
