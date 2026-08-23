@@ -58,7 +58,7 @@ macOS 版面向 Mac 本机客户端，不作为局域网网关。它使用 Steam
 
 ## Stash iOS 与 Tailscale
 
-Stash 版要求 iOS 客户端 3.4 或更高版本，使用名为 `Tailscale` 的策略组包裹 `Tailscale-Node` 原生节点（Tailscale 机器名为 `ios`）。它不依赖同时启动独立的 Tailscale App：`*.ts.net`、`100.64.0.0/10` 和 `fd7a:115c:a1e0::/48` 会进入该策略组，`*.tailscale.com` 登录与控制面则保持直连，避免认证和建链递归。配置没有指定 exit node，因此普通互联网流量仍由 Proxy 与各应用策略处理。
+Stash 版要求 iOS 客户端 3.4 或更高版本，使用名为 `Tailscale` 的策略组包裹 `Tailscale-Node` 原生节点（Tailscale 机器名为 `ios`）。它不依赖同时启动独立的 Tailscale App：`*.ts.net`、`100.64.0.0/10` 和 `fd7a:115c:a1e0::/48` 会进入该策略组，`*.tailscale.com` 登录与控制面则保持直连，避免认证和建链递归。该节点关闭普通公网延迟测试，因为没有指定 exit node；普通互联网流量仍由 Proxy 与各应用策略处理。
 
 导入 `stash-ios.yaml` 后，先从可视化编辑器把私人 Clash/Stash 节点订阅添加到 `proxy-providers`。Proxy、Auto 和五个地区组会自动纳入这些节点；Proxy 额外提供 `Tailscale` 手动选项，Auto 和五个地区组会排除 Tailscale 与流量提示节点。如果还没添加 provider，普通代理组会按 Stash 规则退化为直连，但 Tailnet 仍可独立配置。
 
