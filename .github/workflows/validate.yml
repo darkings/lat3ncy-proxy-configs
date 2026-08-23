@@ -33,6 +33,7 @@ jobs:
         shell: pwsh
         run: |
           ./tests/Test-LoonConfigs.ps1
+          ./tests/Test-StashIosConfig.ps1
           ./tests/Test-MicrosoftCnRule.ps1
           ./tests/Test-Readme.ps1
           ./tests/Test-SparkleWindowsConfig.ps1
@@ -45,17 +46,22 @@ jobs:
       - name: Validate generated Loon configurations
         run: python scripts/generate_loon_configs.py --check
 
-      - name: Parse Sparkle YAML
+      - name: Parse YAML configurations
         run: |
           python - <<'PY'
           from pathlib import Path
           import yaml
 
-          config = yaml.safe_load(Path('sparkle-windows-override.yaml').read_text(encoding='utf-8'))
-          assert isinstance(config, dict)
-          assert config['rule-providers']['Google']['format'] == 'mrs'
-          assert config['rules'].index('RULE-SET,YouTube,YouTube') < config['rules'].index('RULE-SET,Google,Google')
-          print('PASS: Sparkle YAML parse and rule ordering')
+          sparkle = yaml.safe_load(Path('sparkle-windows-override.yaml').read_text(encoding='utf-8'))
+          assert isinstance(sparkle, dict)
+          assert sparkle['rule-providers']['Google']['format'] == 'mrs'
+          assert sparkle['rules'].index('RULE-SET,YouTube,YouTube') < sparkle['rules'].index('RULE-SET,Google,Google')
+
+          stash = yaml.safe_load(Path('stash-ios.yaml').read_text(encoding='utf-8'))
+          assert isinstance(stash, dict)
+          assert stash['proxies'][0]['type'] == 'tailscale'
+          assert stash['rules'].index('DOMAIN-SUFFIX,ts.net,Tailscale') < stash['rules'].index('MATCH,Proxy')
+          print('PASS: Stash and Sparkle YAML parse and rule ordering')
           PY
 
       - name: Audit remote resources

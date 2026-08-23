@@ -1,6 +1,6 @@
 # 自用代理配置
 
-这个仓库保存我当前自用的 Loon iOS、Loon macOS 和 Sparkle Windows 配置。配置按自己的设备、常用应用和 Tailscale 网络维护，不作为适合所有环境的通用模板。公开内容不包含私人节点订阅、MITM 证书、密码或 Token。
+这个仓库保存我当前自用的 Loon iOS、Loon macOS、Stash iOS 和 Sparkle Windows 配置。配置按自己的设备、常用应用和 Tailscale 网络维护，不作为适合所有环境的通用模板。公开内容不包含私人节点订阅、MITM 证书、密码或 Token。
 
 ## 配置下载
 
@@ -16,13 +16,25 @@ Loon macOS：
 https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/loon-macos.lcf
 ```
 
+Stash iOS：
+
+```text
+https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/stash-ios.yaml
+```
+
+Stash iOS 直连镜像（jsDelivr）：
+
+```text
+https://cdn.jsdelivr.net/gh/darkings/lat3ncy-proxy-configs@main/stash-ios.yaml
+```
+
 Sparkle Windows：
 
 ```text
 https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/sparkle-windows-override.yaml
 ```
 
-Loon 配置使用对应 Raw 链接导入，导入后需在本地添加节点订阅并生成、安装 MITM 证书。Windows YAML 不包含节点，不能作为普通订阅单独激活，需要在 Sparkle 中作为远程 YAML 覆写绑定到节点订阅或内置 Sub-Store 的 ClashMeta 输出。
+Loon 配置使用对应 Raw 链接导入，导入后需在本地添加节点订阅并生成、安装 MITM 证书。Stash 配置同样不包含私人代理订阅，导入后需从可视化编辑器在本地添加 provider；Tailscale 使用配置内的原生节点单独完成交互认证，不需要把 `auth-key` 写入文件。Windows YAML 不包含节点，不能作为普通订阅单独激活，需要在 Sparkle 中作为远程 YAML 覆写绑定到节点订阅或内置 Sub-Store 的 ClashMeta 输出。
 
 ## Loon iOS 与 macOS
 
@@ -43,6 +55,16 @@ iOS 版包含 TikTok、BoxJs、Sub-Store、Script-Hub 等移动端策略和工�
 ### macOS 配置
 
 macOS 版面向 Mac 本机客户端，不作为局域网网关。它使用 Steam 策略替代移动端 TikTok，只保留广告平台过滤、DNS 泄漏防护、QuickSearch、节点检测和 Sub-Store，减少移动应用专项 MITM 范围。
+
+## Stash iOS 与 Tailscale
+
+Stash 版要求 iOS 客户端 3.4 或更高版本，直接使用 Stash 原生 `type: tailscale` 节点。它不依赖同时启动独立的 Tailscale App：`*.ts.net`、`100.64.0.0/10` 和 `fd7a:115c:a1e0::/48` 会进入名为 `Tailscale` 的节点，`*.tailscale.com` 登录与控制面则保持直连，避免认证和建链递归。配置没有指定 exit node，因此普通互联网流量仍由 Proxy 与各应用策略处理。
+
+导入 `stash-ios.yaml` 后，先从可视化编辑器把私人 Clash/Stash 节点订阅添加到 `proxy-providers`。Proxy、Auto 和五个地区组会自动纳入这些节点，并排除 Tailscale 与流量提示节点；如果还没添加 provider，普通代理组会按 Stash 规则退化为直连，但 Tailnet 仍可独立配置。
+
+随后打开代理列表中的 `Tailscale` 节点菜单，进入“Tailscale 认证”并完成首次登录。公开文件故意省略 `auth-key`，也不要把认证密钥、私人订阅或 Tailnet 专属主机名提交到仓库。认证成功后，建议在 Tailscale 管理后台为该 Stash 设备关闭 Key Expiry；如果 Tailnet 使用 IPv6 地址，还需在 Stash“网络设置”中开启 Tunnel IPv6 Routing。
+
+`*.ts.net` 没有加入 `fake-ip-filter` 是有意设计：Stash 需要保留域名映射，才能把 MagicDNS 名称交给内置 Tailscale 节点。只有 Tailscale 登录与控制域名返回真实 IP 并直连。Cats-Team 广告规则每 6 小时更新，其余 MetaCubeX MRS 规则每天更新，以降低 iOS Network Extension 的规则内存占用。
 
 ## Sparkle Windows
 
@@ -85,11 +107,13 @@ python scripts/generate_microsoft_cn.py
 
 生成器会递归处理 `v2fly/domain-list-community` 的 include，只保留继承或显式标记为 `@cn` 的域名，并输出确定性排序的 `loon/rules/microsoft-cn.list`。更新后应审阅差异，再运行测试；不要直接把整个 Microsoft 列表设为直连。
 
-GitHub Actions 会检查 Loon/Sparkle 配置结构、策略与规则顺序、Microsoft-CN 生成结果、拼多多本地回退行为、README、YAML 解析、远程资源和敏感信息。远程审计严格检查 GitHub Raw；KeLee 与 geodata 对通用 HTTP 客户端返回的 403/503 只记录警告。也可以在本地运行 `python scripts/check_remote_resources.py` 进行相同审计。
+GitHub Actions 会检查 Loon/Stash/Sparkle 配置结构、策略与规则顺序、Microsoft-CN 生成结果、拼多多本地回退行为、README、YAML 解析、远程资源和敏感信息。远程审计严格检查 GitHub Raw；KeLee 与 geodata 对通用 HTTP 客户端返回的 403/503 只记录警告。也可以在本地运行 `python scripts/check_remote_resources.py` 进行相同审计。
 
 ## 更新说明
 
 Loon 主配置不会实时自动更新。仓库发布新版后，需要使用对应 Raw 链接刷新或重新导入；远程规则和插件由 Loon 的资源更新机制刷新。
+
+Stash 主配置更新时需要刷新 Raw 配置；设备本地添加的 provider 和 Tailscale 登录状态不应写回公开文件，更新前应确认本地编辑不会被覆盖。MRS 规则由 Stash 按各自的 `interval` 在后台刷新。
 
 Sparkle 更新时，在“覆写”页面点击远程覆写的刷新按钮，再重新加载目标订阅；不需要删除或重新导入节点订阅。Sub-Store 输出按 Sparkle 中设置的订阅更新周期刷新，Cats-Team 与 MetaCubeX 规则由 Mihomo 按 `interval` 自动更新。
 

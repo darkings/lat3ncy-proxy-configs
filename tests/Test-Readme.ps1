@@ -9,6 +9,7 @@ $headings = @(
     '## Loon iOS 与 macOS',
     '### iOS 配置',
     '### macOS 配置',
+    '## Stash iOS 与 Tailscale',
     '## Sparkle Windows',
     '### 配置方法',
     '## 规则维护与校验',
@@ -24,12 +25,16 @@ for ($i = 1; $i -lt $positions.Count; $i++) {
 }
 
 $base = 'https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/'
-foreach ($file in @('loon-ios.lcf', 'loon-macos.lcf', 'sparkle-windows-override.yaml')) {
+foreach ($file in @('loon-ios.lcf', 'loon-macos.lcf', 'stash-ios.yaml', 'sparkle-windows-override.yaml')) {
     $url = "$base$file"
     if ($readme -notmatch [regex]::Escape($url)) { throw "Missing download URL: $file" }
     $codeBlock = '(?m)^```text\r?\n{0}\r?\n```\s*$' -f [regex]::Escape($url)
     if ($readme -notmatch $codeBlock) { throw "Download URL must use its own text code block: $file" }
 }
+$directStashUrl = 'https://cdn.jsdelivr.net/gh/darkings/lat3ncy-proxy-configs@main/stash-ios.yaml'
+if ($readme -notmatch [regex]::Escape($directStashUrl)) { throw 'Missing direct Stash jsDelivr URL' }
+$directStashCodeBlock = '(?m)^```text\r?\n{0}\r?\n```\s*$' -f [regex]::Escape($directStashUrl)
+if ($readme -notmatch $directStashCodeBlock) { throw 'Direct Stash URL must use its own text code block' }
 
 foreach ($removedPath in @(
     'quantumultx.conf',
@@ -51,6 +56,9 @@ foreach ($guidance in @(
     '剩余流量、套餐到期',
     'MITM 证书',
     'macOS 还将 `100.100.100.100/32` 加入 `skip-proxy`',
+    'Stash 版要求 iOS 客户端 3.4 或更高版本',
+    '进入“Tailscale 认证”并完成首次登录',
+    '`*.ts.net` 没有加入 `fake-ip-filter` 是有意设计',
     '不能作为普通订阅单独激活',
     '不要启用“全局覆写”',
     '关闭 Sparkle 的 DNS 和嗅探接管',
@@ -68,4 +76,4 @@ if ($readme -notmatch 'scripts/generate_loon_configs\.py') { throw 'README must 
 if ($readme -notmatch 'Zed 与 Apple（含 iCloud）') { throw 'README must document the direct-connect scope' }
 if ($readme -notmatch 'KeLee.+403/503') { throw 'README must document KeLee remote-audit warning policy' }
 
-Write-Output 'PASS: Loon and Sparkle README validation'
+Write-Output 'PASS: Loon, Stash, and Sparkle README validation'
