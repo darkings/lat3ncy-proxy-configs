@@ -28,13 +28,19 @@ Stash iOS 直连镜像（jsDelivr）：
 https://cdn.jsdelivr.net/gh/darkings/lat3ncy-proxy-configs@main/stash-ios.yaml
 ```
 
+Stash 拼多多净化可选覆写（jsDelivr）：
+
+```text
+https://cdn.jsdelivr.net/gh/darkings/lat3ncy-proxy-configs@main/stash/overrides/pinduoduo-cleanup.stoverride
+```
+
 Sparkle Windows：
 
 ```text
 https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/sparkle-windows-override.yaml
 ```
 
-Loon 配置使用对应 Raw 链接导入，导入后需在本地添加节点订阅并生成、安装 MITM 证书。Stash 配置同样不包含私人代理订阅，导入后需从可视化编辑器在本地添加 provider；Tailscale 使用配置内的原生节点单独完成交互认证，不需要把 `auth-key` 写入文件。Windows YAML 不包含节点，不能作为普通订阅单独激活，需要在 Sparkle 中作为远程 YAML 覆写绑定到节点订阅或内置 Sub-Store 的 ClashMeta 输出。
+Loon 配置使用对应 Raw 链接导入，导入后需在本地添加节点订阅并生成、安装 MITM 证书。Stash 配置不会保存私人机场 URL，而是从设备本机名为 `ios` 的 Sub-Store 订阅读取节点；Tailscale 使用配置内的原生节点单独完成交互认证，不需要把 `auth-key` 写入文件。Windows YAML 不包含节点，不能作为普通订阅单独激活，需要在 Sparkle 中作为远程 YAML 覆写绑定到节点订阅或内置 Sub-Store 的 ClashMeta 输出。
 
 ## Loon iOS 与 macOS
 
@@ -60,9 +66,13 @@ macOS 版面向 Mac 本机客户端，不作为局域网网关。它使用 Steam
 
 Stash 版要求 iOS 客户端 3.4 或更高版本，使用名为 `Tailscale` 的策略组包裹 `Tailscale-Node` 原生节点（Tailscale 机器名为 `ios`）。它不依赖同时启动独立的 Tailscale App：`*.ts.net`、`100.64.0.0/10` 和 `fd7a:115c:a1e0::/48` 会进入该策略组，`*.tailscale.com` 登录与控制面则保持直连，避免认证和建链递归。该节点关闭普通公网延迟测试，因为没有指定 exit node；普通互联网流量仍由 Proxy 与各应用策略处理。
 
-导入 `stash-ios.yaml` 后，先从可视化编辑器把私人 Clash/Stash 节点订阅添加到 `proxy-providers`。Proxy、Auto 和五个地区组会自动纳入这些节点；Proxy 额外提供 `Tailscale` 手动选项，Auto 和五个地区组会排除 Tailscale 与流量提示节点。如果还没添加 provider，普通代理组会按 Stash 规则退化为直连，但 Tailnet 仍可独立配置。
+导入 `stash-ios.yaml` 后，先启用 Stash 并用 Safari 打开 `https://sub.store`，在本机 Sub-Store 中创建名称严格为 `ios` 的订阅，再把私人机场地址保存在这个订阅中。主配置已内置 `SubStore` 远程代理集，每小时读取 `http://sub.store/download/ios?target=Clash`，以通用 Clash YAML 作为节点交换格式；不要把机场地址填到“通用 → 订阅链接”，也不要把它提交到仓库。首次创建后在“远程代理集”中手动刷新一次 `SubStore`，Proxy、Auto 和五个地区组就会自动纳入节点；Proxy 额外提供 `Tailscale` 手动选项，Auto 和地区组会排除 Tailscale 与流量提示节点。
 
 随后打开代理列表中的 `Tailscale-Node` 节点菜单，进入“Tailscale 认证”并完成首次登录。公开文件故意省略 `auth-key`，也不要把认证密钥、私人订阅或 Tailnet 专属主机名提交到仓库。认证成功后，建议在 Tailscale 管理后台为该 Stash 设备关闭 Key Expiry；如果 Tailnet 使用 IPv6 地址，还需在 Stash“网络设置”中开启 Tunnel IPv6 Routing。
+
+`sub.store` 被固定映射到 `127.0.0.1`，下载请求只由本机 Sub-Store 脚本处理，避免脚本关闭时把本地订阅数据发往公网同名域名。Sub-Store 脚本从其官方 `release` 分支的 jsDelivr 镜像加载，首次没有代理节点也能下载。若 `https://sub.store` 无法打开，应先确认 Stash 已启动，并生成、安装和信任 Stash MITM 证书。
+
+去广告分为两层：Cats-Team AdRules 默认在规则层拦截广告域名，不需要 MITM；应用响应净化必须使用 Stash 覆写和 MITM。仓库提供上面的拼多多可选覆写，添加到 Stash“覆写”并启用后才会生效。Loon 的 `.lpx` 不能直接写进 Stash YAML；其他应用应安装作者原生发布的 `.stoverride`，不要把第三方 Loon 插件批量转换后公开分发。
 
 `*.ts.net` 没有加入 `fake-ip-filter` 是有意设计：Stash 需要保留域名映射，才能把 MagicDNS 名称交给内置 Tailscale 节点。只有 Tailscale 登录与控制域名返回真实 IP 并直连。Cats-Team 广告规则每 6 小时更新，其余 MetaCubeX MRS 规则每天更新，以降低 iOS Network Extension 的规则内存占用。
 

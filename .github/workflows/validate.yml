@@ -60,8 +60,14 @@ jobs:
           stash = yaml.safe_load(Path('stash-ios.yaml').read_text(encoding='utf-8'))
           assert isinstance(stash, dict)
           assert stash['proxies'][0]['type'] == 'tailscale'
+          assert stash['proxy-providers']['SubStore']['url'] == 'http://sub.store/download/ios?target=Clash'
           assert stash['rules'].index('DOMAIN-SUFFIX,ts.net,Tailscale') < stash['rules'].index('MATCH,Proxy')
-          print('PASS: Stash and Sparkle YAML parse and rule ordering')
+
+          pinduoduo = yaml.safe_load(Path('stash/overrides/pinduoduo-cleanup.stoverride').read_text(encoding='utf-8'))
+          assert isinstance(pinduoduo, dict)
+          assert 'api.pinduoduo.com' in pinduoduo['http']['mitm']
+          assert pinduoduo['script-providers']['pinduoduo-homepage-cleanup']['url'].startswith('https://cdn.jsdelivr.net/')
+          print('PASS: Stash, Stash override, and Sparkle YAML parse and rule ordering')
           PY
 
       - name: Audit remote resources

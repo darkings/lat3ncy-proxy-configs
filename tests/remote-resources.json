@@ -3,6 +3,7 @@
     "loon-ios.lcf",
     "loon-macos.lcf",
     "stash-ios.yaml",
+    "stash/overrides/pinduoduo-cleanup.stoverride",
     "sparkle-windows-override.yaml",
     "README.md"
   ],
@@ -19,10 +20,12 @@
     "dns.alidns.com",
     "doh.pub",
     "controlplane.tailscale.com",
+    "sub.store",
     "t.me",
     "www.gstatic.com"
   ],
   "local_first_prefixes": [
-    "https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/"
+    "https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/",
+    "https://cdn.jsdelivr.net/gh/darkings/lat3ncy-proxy-configs@main/"
   ]
 }
