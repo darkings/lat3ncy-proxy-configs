@@ -40,7 +40,7 @@ dns:
     - "+.mac.com"
 
 # Built-in Sub-Store request handling. Create a local Sub-Store subscription
-# named "ios"; the provider below fetches its Clash YAML output every hour.
+# named "ios"; the provider below fetches its Stash output every hour.
 http:
   mitm:
     - sub.store
@@ -81,7 +81,7 @@ proxies:
 # local Sub-Store database. Do not replace this with the private source URL.
 proxy-providers:
   SubStore:
-    url: "http://sub.store/download/ios?target=Clash"
+    url: "http://sub.store/download/ios?target=Stash"
     path: ./providers/substore-ios.yaml
     interval: 3600
     headers:
