@@ -57,6 +57,7 @@ foreach ($group in @('Proxy', 'Auto', 'Hong Kong', 'Taiwan', 'Japan', 'Singapore
     if ($block -notmatch '(?m)^\s{4}include-all:\s*true\s*$') { throw "Stash $group must include locally added providers" }
     if ($block -notmatch '\(\?!Tailscale\$\)') { throw "Stash $group must exclude the Tailscale node from ordinary proxy selection" }
 }
+Assert-Match '(?ms)^\s{2}- name: Proxy\s*\r?\n.*?^\s{6}- Tailscale\s*$' 'Stash Proxy group must expose Tailscale as a selectable policy'
 
 $providers = @('Cats-Team-AdRules', 'Private-Domain', 'Private-IP', 'Spotify', 'Telegram-Domain', 'Telegram-IP', 'OpenAI', 'GitHub', 'Microsoft-CN', 'Microsoft', 'Apple', 'YouTube', 'Google', 'TikTok', 'CN-Domain', 'NonCN-Domain', 'CN-IP')
 foreach ($provider in $providers) {
