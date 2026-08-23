@@ -20,6 +20,7 @@ foreach ($key in @('mode', 'dns', 'proxies', 'proxy-providers', 'proxy-groups', 
 }
 
 Assert-Match '(?ms)^proxies:\s*\r?\n\s+- name: Tailscale-Node\s*\r?\n\s+type: tailscale\s*\r?\n\s+hostname: ios\s*\r?\n\s+control-url: https://controlplane\.tailscale\.com\s*\r?\n\s+ephemeral: false' 'Stash native Tailscale node is incomplete'
+Assert-Match '(?ms)^proxies:.*?^\s+- name: Tailscale-Node.*?^\s+benchmark-disabled: true' 'Tailnet-only Tailscale node must not run a public latency test'
 Assert-NoMatch '(?m)^\s*auth-key:' 'Public Stash config must not contain a Tailscale auth key'
 Assert-NoMatch '(?m)^\s*exit-node:' 'Public Stash config must not force a Tailscale exit node'
 Assert-Match '(?m)^proxy-providers:\s*\{\}\s*$' 'Private proxy providers must remain empty in the public config'

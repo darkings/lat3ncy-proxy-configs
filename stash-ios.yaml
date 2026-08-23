@@ -42,6 +42,8 @@ proxies:
     hostname: ios
     control-url: https://controlplane.tailscale.com
     ephemeral: false
+    # This node is for Tailnet resources and has no required public exit node.
+    benchmark-disabled: true
 
 # Add private subscriptions from Stash's visual editor after importing this file.
 proxy-providers: {}
