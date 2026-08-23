@@ -474,11 +474,14 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             if m_json:
                 json_str = m_json.group(1)
                 # Shorten overly long JSON for Stash line-length limits (Bilibili splash etc.)
-                # For Bilibili splash, keep mock but with minimal functionally equivalent JSON to preserve ad-blocking (not reject-dict)
+                # For Bilibili splash, use base64 to avoid Stash quoting issues, preserving ad-blocking
                 if 'splash' in pattern.lower() and 'bilibili' in pattern.lower():
+                    # base64 of {"code":0,"data":{"list":[]}} -> eyJjb2RlIjowLCJkYXRhIjp7Imxpc3QiOltdfX0=
+                    b64 = "eyJjb2RlIjowLCJkYXRhIjp7Imxpc3QiOltdfX0="
+                    rest_fixed = re.sub(r'data\s*=\s*"\{.*\}"', f"data='{b64}' mock-data-is-base64=true", rest_fixed, count=1, flags=re.S)
+                    # Mark as handled, skip further json shortening
                     json_str = '{"code":0,"data":{"list":[]}}'
-                    # Replace data with short JSON, keep statusCode handling below
-                    rest_fixed = re.sub(r'data\s*=\s*"\{.*\}"', f"data='{json_str}'", rest_fixed, count=1, flags=re.S)
+                    # Directly go to status handling
                 if 'closeType' in json_str:
                     json_str = '{"code":0,"data":{"closeType":"close_win"}}'
                 elif len(json_str) > 100:
