@@ -474,13 +474,15 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             if m_json:
                 json_str = m_json.group(1)
                 # Shorten overly long JSON for Stash line-length limits (Bilibili splash etc.)
+                # For Bilibili splash, use reject-dict as safe fallback for Stash (mock too fragile)
+                if 'splash' in pattern.lower() and 'bilibili' in pattern.lower():
+                    url_rewrite.append(f"{pattern} - reject-dict")
+                    continue
                 if len(json_str) > 100:
                     if '"code":-404' in json_str or "'code':-404" in json_str:
                         json_str = '{"code":-404,"message":"-404","ttl":1,"data":null}'
                     elif '"code":0' in json_str:
-                        if 'splash' in pattern.lower():
-                            json_str = '{"code":0,"data":{"list":[]}}'
-                        elif 'closeType' in json_str:
+                        if 'closeType' in json_str:
                             json_str = '{"code":0,"data":{"closeType":"close_win"}}'
                         else:
                             json_str = '{"code":0}'
