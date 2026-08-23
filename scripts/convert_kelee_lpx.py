@@ -474,10 +474,13 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             if m_json:
                 json_str = m_json.group(1)
                 # Shorten overly long JSON for Stash line-length limits (Bilibili splash etc.)
-                # For Bilibili splash, use reject-dict as safe fallback for Stash (mock too fragile)
+                # For Bilibili splash, keep mock but with minimal functionally equivalent JSON (not reject-dict, to preserve ad-blocking)
                 if 'splash' in pattern.lower() and 'bilibili' in pattern.lower():
-                    url_rewrite.append(f"{pattern} - reject-dict")
-                    continue
+                    # Original splash mock: code 0 with empty list → minimal still hides splash
+                    json_str = '{"code":0,"data":{"list":[]}}'
+                    rest_fixed = re.sub(r'data\s*=\s*"\{.*\}"', f"data='{json_str}'", rest_fixed, count=1, flags=re.S)
+                    # Fall through to normal mock handling (ensure status etc.)
+                # For pgc closeType, always shorten (Stash mock fragile with container/showTime)
                 # For pgc closeType, always shorten (Stash mock fragile with container/showTime)
                 if 'closeType' in json_str:
                     json_str = '{"code":0,"data":{"closeType":"close_win"}}'
