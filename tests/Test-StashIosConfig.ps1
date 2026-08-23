@@ -26,7 +26,7 @@ Assert-NoMatch '(?m)^\s*exit-node:' 'Public Stash config must not force a Tailsc
 Assert-NoMatch '(?i)api\.9dragonfly\.com|authorization:\s*bearer|token=' 'Public Stash config must not contain a private subscription or token'
 
 Assert-Match '(?m)^hosts:\s*\r?\n\s{2}sub\.store:\s*127\.0\.0\.1\s*$' 'Sub-Store synthetic host must remain local'
-Assert-Match '(?ms)^proxy-providers:\s*\r?\n\s{2}SubStore:\s*\r?\n\s{4}url:\s*"http://sub\.store/download/ios\?target=Clash"\s*\r?\n\s{4}path:\s*\./providers/substore-ios\.yaml\s*\r?\n\s{4}interval:\s*3600\s*\r?\n\s{4}headers:\s*\r?\n\s{6}User-Agent:\s*Stash\s*$' 'Stash fixed-name Sub-Store provider is incomplete'
+Assert-Match '(?ms)^proxy-providers:\s*\r?\n\s{2}SubStore:\s*\r?\n\s{4}url:\s*"http://sub\.store/download/ios\?target=Stash"\s*\r?\n\s{4}path:\s*\./providers/substore-ios\.yaml\s*\r?\n\s{4}interval:\s*3600\s*\r?\n\s{4}headers:\s*\r?\n\s{6}User-Agent:\s*Stash\s*$' 'Stash fixed-name Sub-Store provider is incomplete'
 foreach ($script in @('sub-store-0.min.js', 'sub-store-1.min.js')) {
     Assert-Match "(?m)^\s{4}url:\s*https://cdn\.jsdelivr\.net/gh/sub-store-org/Sub-Store@release/$([regex]::Escape($script))\s*$" "Missing direct Sub-Store script: $script"
 }

@@ -60,7 +60,7 @@ jobs:
           stash = yaml.safe_load(Path('stash-ios.yaml').read_text(encoding='utf-8'))
           assert isinstance(stash, dict)
           assert stash['proxies'][0]['type'] == 'tailscale'
-          assert stash['proxy-providers']['SubStore']['url'] == 'http://sub.store/download/ios?target=Clash'
+          assert stash['proxy-providers']['SubStore']['url'] == 'http://sub.store/download/ios?target=Stash'
           assert stash['rules'].index('DOMAIN-SUFFIX,ts.net,Tailscale') < stash['rules'].index('MATCH,Proxy')
 
           pinduoduo = yaml.safe_load(Path('stash/overrides/pinduoduo-cleanup.stoverride').read_text(encoding='utf-8'))
