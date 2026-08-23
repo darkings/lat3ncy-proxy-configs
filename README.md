@@ -60,7 +60,7 @@ macOS 版面向 Mac 本机客户端，不作为局域网网关。它使用 Steam
 
 Stash 版要求 iOS 客户端 3.4 或更高版本，直接使用 Stash 原生 `type: tailscale` 节点。它不依赖同时启动独立的 Tailscale App：`*.ts.net`、`100.64.0.0/10` 和 `fd7a:115c:a1e0::/48` 会进入名为 `Tailscale` 的节点，`*.tailscale.com` 登录与控制面则保持直连，避免认证和建链递归。配置没有指定 exit node，因此普通互联网流量仍由 Proxy 与各应用策略处理。
 
-导入 `stash-ios.yaml` 后，先从可视化编辑器把私人 Clash/Stash 节点订阅添加到 `proxy-providers`。Proxy、Auto 和五个地区组会自动纳入这些节点，并排除 Tailscale 与流量提示节点；如果还没添加 provider，普通代理组会按 Stash 规则退化为直连，但 Tailnet 仍可独立配置。
+导入 `stash-ios.yaml` 后，先从可视化编辑器把私人 Clash/Stash 节点订阅添加到 `proxy-providers`。Proxy、Auto 和五个地区组会自动纳入这些节点；Proxy 额外提供 `Tailscale` 手动选项，Auto 和五个地区组会排除 Tailscale 与流量提示节点。如果还没添加 provider，普通代理组会按 Stash 规则退化为直连，但 Tailnet 仍可独立配置。
 
 随后打开代理列表中的 `Tailscale` 节点菜单，进入“Tailscale 认证”并完成首次登录。公开文件故意省略 `auth-key`，也不要把认证密钥、私人订阅或 Tailnet 专属主机名提交到仓库。认证成功后，建议在 Tailscale 管理后台为该 Stash 设备关闭 Key Expiry；如果 Tailnet 使用 IPv6 地址，还需在 Stash“网络设置”中开启 Tunnel IPv6 Routing。
 
