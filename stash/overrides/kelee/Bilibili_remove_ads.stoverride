@@ -27,14 +27,14 @@ http:
   - api.live.bilibili.com
   - line3-h5-mobile-api.biligame.com
   url-rewrite:
-  - ^https:\/\/app\.bilibili\.com\/x\/v2\/splash\/list\? - mock status=200 data='{"code":0,"data":{"list":[]}}'
-  - ^https:\/\/api\.bilibili\.com\/pgc\/activity\/deliver\/material\/receive\? - mock status=200 data='{"code":0,"data":{"closeType":"close_win"}}'
-  - ^https:\/\/ap[ip]\.bilibili\.com\/x\/(resource\/(top\/activity|patch\/tab(\/v2)?)|v2\/search\/square|vip\/ads\/materials)\? - mock status=200 data='{"code":-404,"message":"-404","ttl":1,"data":null}'
+  - ^https:\/\/app\.bilibili\.com\/x\/v2\/splash\/list\? - mock data='{"code":0,"data":{"list":[]}}' statusCode=200
+  - ^https:\/\/api\.bilibili\.com\/pgc\/activity\/deliver\/material\/receive\? - mock data='{"code":0,"data":{"closeType":"close_win"}}' statusCode=200
+  - ^https:\/\/ap[ip]\.bilibili\.com\/x\/(resource\/(top\/activity|patch\/tab(\/v2)?)|v2\/search\/square|vip\/ads\/materials)\? - mock data='{"code":-404,"message":"-404","ttl":1,"data":null}' statusCode=200
   - ^https:\/\/line3-h5-mobile-api\.biligame\.com\/game\/live\/large_card_material\? - reject-dict
   - ^https:\/\/api\.live\.bilibili\.com\/xlive\/e-commerce-interface\/v1\/ecommerce-user\/get_shopping_info\? - reject-dict
-  - ^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.interface\.v1\.Teenagers\/ModeStatus$ - mock status=200 data='AAAAABMKEQgCEgl0ZWVuYWdlcnMgAioA' mock-data-is-base64=true
-  - ^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.interface\.v1\.Search\/DefaultWords$ - mock status=200 data='AAAAACEaHeaQnOe0ouinhumikeOAgeeVquWJp+aIlnVw5Li7KAE=' mock-data-is-base64=true
-  - ^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.(view\.v1\.View\/TFInfo|viewunite\.v1\.View\/(PlayPause|ViewEndPage))$ - mock status=200 data='AAAAAAA=' mock-data-is-base64=true
+  - ^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.interface\.v1\.Teenagers\/ModeStatus$ - mock data='AAAAABMKEQgCEgl0ZWVuYWdlcnMgAioA' mock-data-is-base64=true statusCode=200
+  - ^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.interface\.v1\.Search\/DefaultWords$ - mock data='AAAAACEaHeaQnOe0ouinhumikeOAgeeVquWJp+aIlnVw5Li7KAE=' mock-data-is-base64=true statusCode=200
+  - ^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.(view\.v1\.View\/TFInfo|viewunite\.v1\.View\/(PlayPause|ViewEndPage))$ - mock data='AAAAAAA=' mock-data-is-base64=true statusCode=200
   body-rewrite:
   - ^https:\/\/api\.bilibili\.com\/x\/pd-proxy\/tracker\? response-jq .data[][]?="stun.chat.bilibili.com:3478"
   - ^https:\/\/app\.bilibili\.com\/x\/v2\/splash\/(show|event\/list2)\? response-jq .data |= with_entries(if .key | IN("show", "event_list") then .value = [] else . end)
