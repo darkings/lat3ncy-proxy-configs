@@ -478,14 +478,14 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
                 if 'splash' in pattern.lower() and 'bilibili' in pattern.lower():
                     url_rewrite.append(f"{pattern} - reject-dict")
                     continue
-                if len(json_str) > 100:
+                # For pgc closeType, always shorten (Stash mock fragile with container/showTime)
+                if 'closeType' in json_str:
+                    json_str = '{"code":0,"data":{"closeType":"close_win"}}'
+                elif len(json_str) > 100:
                     if '"code":-404' in json_str or "'code':-404" in json_str:
                         json_str = '{"code":-404,"message":"-404","ttl":1,"data":null}'
                     elif '"code":0' in json_str:
-                        if 'closeType' in json_str:
-                            json_str = '{"code":0,"data":{"closeType":"close_win"}}'
-                        else:
-                            json_str = '{"code":0}'
+                        json_str = '{"code":0}'
                     elif len(json_str) > 200:
                         json_str = '{"ret":0}'
                 rest_fixed = re.sub(r'data\s*=\s*"\{.*\}"', f"data='{json_str}'", rest_fixed, count=1, flags=re.S)
