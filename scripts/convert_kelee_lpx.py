@@ -473,6 +473,19 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             m_json = re.search(r'data\s*=\s*"(\{.*\})"', rest_fixed, re.S)
             if m_json:
                 json_str = m_json.group(1)
+                # Shorten overly long JSON for Stash line-length limits (Bilibili splash etc.)
+                if len(json_str) > 100:
+                    if '"code":-404' in json_str or "'code':-404" in json_str:
+                        json_str = '{"code":-404,"message":"-404","ttl":1,"data":null}'
+                    elif '"code":0' in json_str:
+                        if 'splash' in pattern.lower():
+                            json_str = '{"code":0,"data":{"list":[]}}'
+                        elif 'closeType' in json_str:
+                            json_str = '{"code":0,"data":{"closeType":"close_win"}}'
+                        else:
+                            json_str = '{"code":0}'
+                    elif len(json_str) > 200:
+                        json_str = '{"ret":0}'
                 rest_fixed = re.sub(r'data\s*=\s*"\{.*\}"', f"data='{json_str}'", rest_fixed, count=1, flags=re.S)
             else:
                 def _repl_base64(m):
