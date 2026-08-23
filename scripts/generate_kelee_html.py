@@ -15,10 +15,10 @@ OUT_HTML = REPO_ROOT / "stash/overrides/kelee/index.html"
 HASHES_JSON = REPO_ROOT / "stash/overrides/kelee/.hashes.json"
 
 # Public base for Stash install; override with KELEE_PUBLIC_BASE when needed.
-# Use raw.githubusercontent.com by default to guarantee UTF-8, stash.ponyo.fun can be set via env.
-PUBLIC_BASE = os.environ.get("KELEE_PUBLIC_BASE", "https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/stash/overrides/kelee").rstrip("/")
+# Default is self-hosted stash.ponyo.fun (Keli upstream → convert → deploy), GitHub Raw is fallback via env.
+PUBLIC_BASE = os.environ.get("KELEE_PUBLIC_BASE", "https://stash.ponyo.fun").rstrip("/")
 RAW_BASE = PUBLIC_BASE
-JSD_BASE = os.environ.get("KELEE_MIRROR_BASE", "https://cdn.jsdelivr.net/gh/darkings/lat3ncy-proxy-configs@main/stash/overrides/kelee").rstrip("/")
+JSD_BASE = os.environ.get("KELEE_MIRROR_BASE", "https://stash.ponyo.fun").rstrip("/")
 
 def load_meta():
     # Load list.json for full metadata (icon, desc, author, date, tag)
