@@ -484,9 +484,8 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
                     url_rewrite.append(f"{pattern} - reject-dict")
                     continue
                 if '"code":-404' in json_str or "'code':-404" in json_str:
-                    # -404 mock with ? URL also invalid in Stash for this pattern, use 404 status as valid fallback (ad-blocking: resource not found)
-                    # Stash-valid is " - 404" or " - reject-dict"; use 404 to preserve -404 semantics
-                    url_rewrite.append(f"{pattern} - 404")
+                    # -404 mock with ? URL invalid in Stash (even " - 404" is invalid), use reject-dict which yields empty and still hides the ad
+                    url_rewrite.append(f"{pattern} - reject-dict")
                     continue
                 elif len(json_str) > 100:
                     if '"code":-404' in json_str or "'code':-404" in json_str:
