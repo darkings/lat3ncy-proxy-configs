@@ -91,6 +91,18 @@ def main():
             print("regenerated index.html")
         except Exception as e:
             print(f"failed to regenerate html: {e}", file=sys.stderr)
+        # 离线 Stash 校验（先分析差异后编写的 validate_stash.py），失败则阻断发布
+        try:
+            import validate_stash
+            try:
+                validate_stash.main()
+            except SystemExit as se:
+                if se.code != 0:
+                    print(f"Stash 校验失败，阻断发布 (exit {se.code})", file=sys.stderr)
+                    sys.exit(1)
+        except Exception as e:
+            print(f"Stash 校验异常: {e}", file=sys.stderr)
+            sys.exit(1)
         # also update list.json timestamp?
         # Exit with code 2 to signal workflow to commit
         sys.exit(2 if changed else 0)

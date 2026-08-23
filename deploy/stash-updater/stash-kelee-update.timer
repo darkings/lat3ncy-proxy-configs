@@ -1,0 +1,11 @@
+[Unit]
+Description=Scheduled KeLee Stash override update
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+Persistent=true
+RandomizedDelaySec=5min
+Unit=stash-kelee-update.service
+
+[Install]
+WantedBy=timers.target
