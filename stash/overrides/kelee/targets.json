@@ -1,0 +1,80 @@
+[
+  {
+    "filename": "Block_HTTPDNS.lpx",
+    "name": "HTTPDNS拦截器",
+    "dependency": true
+  },
+  {
+    "filename": "BlockAdvertisers.lpx",
+    "name": "广告平台拦截器",
+    "dependency": true
+  },
+  {
+    "filename": "Bilibili_remove_ads.lpx",
+    "name": "哔哩哔哩去广告"
+  },
+  {
+    "filename": "Amap_remove_ads.lpx",
+    "name": "高德地图去广告"
+  },
+  {
+    "filename": "JD_remove_ads.lpx",
+    "name": "京东去广告"
+  },
+  {
+    "filename": "PinDuoDuo_remove_ads.lpx",
+    "name": "拼多多去广告"
+  },
+  {
+    "filename": "Taobao_remove_ads.lpx",
+    "name": "淘宝去广告"
+  },
+  {
+    "filename": "Weixin_Official_Accounts_remove_ads.lpx",
+    "name": "微信公众号去广告"
+  },
+  {
+    "filename": "Remove_ads_by_keli.lpx",
+    "name": "可莉广告过滤器"
+  },
+  {
+    "filename": "AppleWeatherEnhancer.lpx",
+    "name": "Apple天气增强"
+  },
+  {
+    "filename": "QQ_Redirect.lpx",
+    "name": "QQ链接解锁"
+  },
+  {
+    "filename": "Spotify_remove_ads.lpx",
+    "name": "Spotify去广告"
+  },
+  {
+    "filename": "Spotify_lyrics_translation.lpx",
+    "name": "Spotify歌词增强"
+  },
+  {
+    "filename": "Weixin_external_links_unlock.lpx",
+    "name": "微信外部链接解锁"
+  },
+  {
+    "filename": "WexinMiniPrograms_Remove_ads.lpx",
+    "name": "微信小程序去广告"
+  },
+  {
+    "filename": "FleaMarket_remove_ads.lpx",
+    "name": "闲鱼去广告"
+  },
+  {
+    "filename": "XiaobaiPrint_remove_ads.lpx",
+    "name": "小白智慧打印去广告"
+  },
+  {
+    "filename": "Himalaya_remove_ads.lpx",
+    "name": "喜马拉雅去广告"
+  },
+  {
+    "filename": "XiaChuFang_remove_ads.lpx",
+    "name": "下厨房去广告"
+  }
+]

@@ -1,0 +1,20 @@
+# 微信公众号去广告
+# 过滤微信公众号广告
+# author: RuCu6[https://github.com/RuCu6]
+# homepage: https://hub.kelee.one
+# icon: https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/Weixin.png
+# date: 2026-06-01 17:11:35
+# lpx: https://kelee.one/Tool/Loon/Lpx/Weixin_Official_Accounts_remove_ads.lpx
+# converted: Loon .lpx -> Stash .stoverride (auto)
+# note: kelee.one resources require Loon UA; if Stash fetch fails, add proxy or use GitHub mirror
+name: 微信公众号去广告
+desc: 过滤微信公众号广告
+icon: https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/Weixin.png
+rules:
+- DOMAIN-SUFFIX,wxs.qq.com,REJECT
+http:
+  mitm:
+  - mp.weixin.qq.com
+  url-rewrite:
+  - ^https:\/\/mp\.weixin\.qq\.com\/mp\/(cps_product_info|getappmsgad|jsmonitor|masonryfeed|relatedarticle)\? - reject-dict
+  - ^https:\/\/mp\.weixin\.qq\.com\/mp\/relatedsearchword - reject-dict
