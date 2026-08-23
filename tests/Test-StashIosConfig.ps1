@@ -15,7 +15,7 @@ function Assert-NoMatch {
     if ($config -match $Pattern) { throw $Message }
 }
 
-foreach ($key in @('mode', 'hosts', 'dns', 'http', 'script-providers', 'proxies', 'proxy-providers', 'proxy-groups', 'rule-providers', 'rules')) {
+foreach ($key in @('mode', 'hosts', 'dns', 'http', 'script-providers', 'subscribe-url', 'proxies', 'proxy-providers', 'proxy-groups', 'rule-providers', 'rules')) {
     Assert-Match "(?m)^$([regex]::Escape($key)):\s*" "Stash config missing top-level key: $key"
 }
 
@@ -27,6 +27,7 @@ Assert-NoMatch '(?i)api\.9dragonfly\.com|authorization:\s*bearer|token=' 'Public
 
 Assert-Match '(?m)^hosts:\s*\r?\n\s{2}sub\.store:\s*127\.0\.0\.1\s*$' 'Sub-Store synthetic host must remain local'
 Assert-Match '(?ms)^proxy-providers:\s*\r?\n\s{2}SubStore:\s*\r?\n\s{4}url:\s*"http://sub\.store/download/ios\?target=Stash"\s*\r?\n\s{4}path:\s*\./providers/substore-ios\.yaml\s*\r?\n\s{4}interval:\s*3600\s*\r?\n\s{4}headers:\s*\r?\n\s{6}User-Agent:\s*Stash\s*$' 'Stash fixed-name Sub-Store provider is incomplete'
+Assert-Match '(?m)^subscribe-url:\s*"http://sub\.store/download/ios\?target=Stash"\s*$' 'Stash subscription info URL is missing'
 foreach ($script in @('sub-store-0.min.js', 'sub-store-1.min.js')) {
     Assert-Match "(?m)^\s{4}url:\s*https://cdn\.jsdelivr\.net/gh/sub-store-org/Sub-Store@release/$([regex]::Escape($script))\s*$" "Missing direct Sub-Store script: $script"
 }
@@ -64,7 +65,7 @@ foreach ($group in $expectedGroups) {
 }
 foreach ($group in @('Proxy', 'Auto', 'Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States')) {
     $block = [regex]::Match($config, "(?ms)^\s{2}- name: $([regex]::Escape($group))\s*\r?\n.*?(?=^\s{2}- name:|^rule-providers:)").Value
-    if ($block -notmatch '(?m)^\s{4}include-all:\s*true\s*$') { throw "Stash $group must include locally added providers" }
+    if ($block -notmatch '(?ms)^\s{4}use:\s*\r?\n\s{6}- SubStore\s*$') { throw "Stash $group must reference the SubStore provider explicitly" }
     if ($block -notmatch '\(\?!Tailscale\(\?:-Node\)\?\$\)') { throw "Stash $group must exclude the Tailscale node from ordinary proxy selection" }
 }
 Assert-Match '(?ms)^\s{2}- name: Tailscale\s*\r?\n\s{4}type: select\s*\r?\n\s{4}proxies:\s*\r?\n\s{6}- Tailscale-Node\s*$' 'Stash Tailscale strategy group is incomplete'

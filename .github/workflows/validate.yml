@@ -61,6 +61,11 @@ jobs:
           assert isinstance(stash, dict)
           assert stash['proxies'][0]['type'] == 'tailscale'
           assert stash['proxy-providers']['SubStore']['url'] == 'http://sub.store/download/ios?target=Stash'
+          assert stash['subscribe-url'] == 'http://sub.store/download/ios?target=Stash'
+          provider_groups = {'Proxy', 'Auto', 'Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States'}
+          for group in stash['proxy-groups']:
+              if group['name'] in provider_groups:
+                  assert group['use'] == ['SubStore']
           assert stash['rules'].index('DOMAIN-SUFFIX,ts.net,Tailscale') < stash['rules'].index('MATCH,Proxy')
 
           pinduoduo = yaml.safe_load(Path('stash/overrides/pinduoduo-cleanup.stoverride').read_text(encoding='utf-8'))
