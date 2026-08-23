@@ -468,20 +468,17 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             # Stash expects: - mock status=200 data='{"json"}' (no data-type, status not status-code, single quotes)
             # Strip data-type (Stash uses header for content-type, mock assumes json/text auto)
             rest_fixed = re.sub(r'\bdata-type\s*=\s*\S+\s*', '', rest_fixed)
-            rest_fixed = re.sub(r'\bstatus-code\s*=', 'status=', rest_fixed)
+            rest_fixed = re.sub(r'\bstatus-code\s*=', 'statusCode=', rest_fixed)
             # Fix quoting for data="{"json"}" -> data='{"json"}'
             m_json = re.search(r'data\s*=\s*"(\{.*\})"', rest_fixed, re.S)
             if m_json:
                 json_str = m_json.group(1)
                 # Shorten overly long JSON for Stash line-length limits (Bilibili splash etc.)
-                # For Bilibili splash, keep mock but with minimal functionally equivalent JSON (not reject-dict, to preserve ad-blocking)
+                # For Bilibili splash, keep mock but with minimal functionally equivalent JSON to preserve ad-blocking (not reject-dict)
                 if 'splash' in pattern.lower() and 'bilibili' in pattern.lower():
-                    # Original splash mock: code 0 with empty list → minimal still hides splash
                     json_str = '{"code":0,"data":{"list":[]}}'
+                    # Replace data with short JSON, keep statusCode handling below
                     rest_fixed = re.sub(r'data\s*=\s*"\{.*\}"', f"data='{json_str}'", rest_fixed, count=1, flags=re.S)
-                    # Fall through to normal mock handling (ensure status etc.)
-                # For pgc closeType, always shorten (Stash mock fragile with container/showTime)
-                # For pgc closeType, always shorten (Stash mock fragile with container/showTime)
                 if 'closeType' in json_str:
                     json_str = '{"code":0,"data":{"closeType":"close_win"}}'
                 elif len(json_str) > 100:
@@ -502,9 +499,16 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
                 rest_fixed = re.sub(r'(data(?:-path)?)\s*=\s*"', r"\1='", rest_fixed)
                 rest_fixed = re.sub(r"'([^']*?)\"(?=\s+\w+=|\s*$)", r"'\1'", rest_fixed)
                 rest_fixed = re.sub(r"'([^']*?)\"(?=\s+\w+\s*=|\s*$)", r"'\1'", rest_fixed)
-            # Ensure mock has status, default 200 if missing
-            if 'status=' not in rest_fixed:
-                rest_fixed = f"status=200 {rest_fixed}".strip()
+            # Ensure mock has status, default 200 if missing (Stash prefers statusCode at end, Himalaya style)
+            if 'status=' not in rest_fixed and 'statusCode=' not in rest_fixed:
+                rest_fixed = f"{rest_fixed} statusCode=200".strip()
+            # Normalize: data before statusCode
+            import re as _re2
+            m_s2 = _re2.search(r'\bstatusCode=200\b', rest_fixed)
+            m_d2 = _re2.search(r"data='[^']+'", rest_fixed)
+            if m_s2 and m_d2 and rest_fixed.index("statusCode=200") < rest_fixed.index("data='"):
+                rest_fixed = _re2.sub(r'\bstatusCode=200\s*', '', rest_fixed).strip()
+                rest_fixed = f"{rest_fixed} statusCode=200".strip()
             url_rewrite.append(f"{pattern} - mock {rest_fixed}".strip())
             # Also add comment about original
         elif low.startswith("response-body-") or low.startswith("response-header-"):
