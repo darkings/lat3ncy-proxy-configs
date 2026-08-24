@@ -944,11 +944,6 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             provider_name = registry.url_to_name[cdn_pre]
         else:
             provider_name = sanitize_provider_name(tag, script_url, provider_names)
-        # 若 URL 已存在，直接复用已有 provider 名，多 match 共用一个
-        if cdn_pre and cdn_pre in registry.url_to_name:
-            provider_name = registry.url_to_name[cdn_pre]
-        else:
-            provider_name = sanitize_provider_name(tag, script_url, provider_names)
         entry = {}
         if "match" in parsed:
             entry["match"] = parsed["match"]

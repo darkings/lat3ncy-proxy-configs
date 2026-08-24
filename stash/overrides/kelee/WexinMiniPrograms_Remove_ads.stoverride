@@ -225,50 +225,50 @@ http:
   - ^https:\/\/chong\.qq\.com\/tws\/usernumberinfo\/GetUserInfo\? response-jq "del(.data.request.number.markSeat.servicehallOperList, .data.request.number.servicehallOperList, .data.request.number.markSeat.servicehallFuncList, .data.request.number.servicehallFuncList)"
   script:
   - match: ^https:\/\/webapi\.qmai\.cn\/web\/catering\/design\/homePage-Config
-    name: kff-1
+    name: kff
     type: response
     require-body: true
   - match: ^https:\/\/ump\.ems\.com\.cn\/new-generation-extend\/redis\/pageInfoByChannel
-    name: ems-1
+    name: ems
     type: response
     require-body: true
   - match: ^https:\/\/mapi\.xiaotucc\.com\/(mall\/main|main_page\/index\/getActivity)
-    name: xiaotucc-1
+    name: xiaotucc
     type: response
     require-body: true
   - match: ^https:\/\/minifm\.maxxipoint\.com\/banner\/list
-    name: familymart-1
+    name: familymart
     type: response
     require-body: true
   - match: ^https:\/\/lawsonapi\.yorentown\.com\/area\/sh-lawson\/app\/v1\/home
-    name: lawson-1
+    name: lawson
     type: response
     require-body: true
   - match: ^https:\/\/miniapp\.sexytea2013\.com\/cms\/slot\/queryByCodes\?codes=INDEX_TOP_BANNER
-    name: chayanyuese-remove-ads-1
+    name: chayanyuese-remove-ads
     type: response
     require-body: true
   - match: ^https:\/\/coco-com\.e\.verystar\.net\/v1\/home\/info
-    name: coco-1
+    name: coco
     type: response
     require-body: true
   - match: ^https:\/\/htwkop\.xiaojukeji\.com\/gateway\?api=hm\.fa\.homeConfig
-    name: qingju-1
+    name: qingju
     type: response
     require-body: true
   - match: ^https:\/\/cappapi\.alittle-tea\.com\/open\?method=catering\.set\.ad
-    name: alittle-tea-1
+    name: alittle-tea
     type: response
     require-body: true
   - match: ^https:\/\/api\.prod\.dj\.mstand\.cn\/scrm\/mini\/app\/index\/info
-    name: m-stand-1
+    name: m-stand
     type: response
     require-body: true
   - match: ^https:\/\/passenger\.t3go\.cn\/(solution\-|common\-)?(passenger\-)?(activity\-|app\-)?api\/notoken\/(trip\/)?api\/(home\/|common\/)?(v[1-3]\/)?(ad\/getNegativescreen|solution\/passenger\/open\/getHomeMenu|leftmenu|getHomeInfoGlobal)
-    name: t3-1
+    name: t3
     type: response
     require-body: true
   - match: ^https:\/\/newton\.gumingnc\.com\/newton-buyer\/newton\/buyer\/(ump|touch|external\/front)
-    name: ming-1
+    name: ming
     type: response
     require-body: true

@@ -11,12 +11,12 @@ http:
   - weatherkit.apple.com
   script:
   - match: ^https?:\/\/weatherkit\.apple\.com\/api\/v1\/availability\/
-    name: response-bundle-1
+    name: response-bundle
     type: response
     require-body: true
     argument: '[ColorfulClouds,ColorfulClouds,EU_EAQI,,devapi.qweather.com,,,Argument,WARN]'
   - match: ^https?:\/\/weatherkit\.apple\.com\/api\/v2\/weather\/
-    name: response-bundle-1
+    name: response-bundle
     type: response
     require-body: true
     binary-body-mode: true

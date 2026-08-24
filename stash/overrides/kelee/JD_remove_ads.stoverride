@@ -12,6 +12,6 @@ http:
   - ^https:\/\/api\.m\.jd\.com\/client\.action\?functionId=basicConfig response-jq ".data.JDMessage.socketmonitor.isSocketEstablishedAhead = 0 | .data.JDMessage.socketmonitor.isSocketReport = 0 | .data.JDHttpToolKit.httpdns.httpdns = 0"
   script:
   - match: ^https:\/\/api\.m\.jd\.com\/client\.action\?functionId=(deliverLayer|getTabHomeInfo|myOrderInfo|orderTrackBusiness|personinfoBusiness|start|welcomeHome)
-    name: jd-remove-ads-1
+    name: jd-remove-ads
     type: response
     require-body: true

@@ -7,6 +7,6 @@ http:
   - security.wechat.com
   script:
   - match: ^https\:\/\/(weixin110\.qq|security.wechat)\.com\/cgi-bin\/mmspamsupport-bin\/newredirectconfirmcgi\?
-    name: weixin-external-links-unlock-1
+    name: weixin-external-links-unlock
     type: response
     require-body: true

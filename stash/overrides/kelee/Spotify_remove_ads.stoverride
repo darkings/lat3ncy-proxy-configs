@@ -12,7 +12,7 @@ http:
   - ^https:\/\/(?:\w+-spclient|spclient\.wg)\.spotify\.com(?::443)?\/artistview\/v1\/artist\/(.*)&platform=iphone https://spclient.wg.spotify.com/artistview/v1/artist/$1&platform=ipad 302
   script:
   - match: ^https:\/\/(?:\w+-spclient|spclient\.wg)\.spotify\.com(?::443)?\/(?:bootstrap|user-customization-service)
-    name: spotify-remove-ads-1
+    name: spotify-remove-ads
     type: response
     require-body: true
     binary-body-mode: true

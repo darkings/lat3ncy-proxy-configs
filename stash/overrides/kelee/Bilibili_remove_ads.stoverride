@@ -59,26 +59,26 @@ http:
     content-type: text/plain
   script:
   - match: ^https:\/\/(?:grpc\.biliapi\.net|app\.bilibili\.com)\/bilibili\.community\.service\.dm\.v1\.DM\/DmSegMobile$
-    name: bilibili-proto-request-kokoryh-1
+    name: bilibili-proto-request-kokoryh
     type: request
     require-body: true
     binary-body-mode: true
     timeout: 10
     argument: '[off]'
   - match: ^https:\/\/(?:grpc\.biliapi\.net|app\.bilibili\.com)\/bilibili\.(?:app\.viewunite\.v1\.View\/View|main\.community\.reply\.v1\.Reply\/MainList)$
-    name: bilibili-proto-request-kokoryh-1
+    name: bilibili-proto-request-kokoryh
     type: request
     require-body: true
     binary-body-mode: true
     timeout: 10
     argument: '[true, off]'
   - match: ^https:\/\/(grpc\.biliapi\.net|app\.bilibili\.com)\/bilibili\.(app\.(show\.v1\.Popular\/Index|dynamic\.v2\.Dynamic\/DynAll|view(unite)?\.v1\.View\/(View|ViewProgress|RelatesFeed|AIRelateAsync)|playurl\.v1\.PlayURL\/PlayView|playerunite\.v1\.Player\/PlayViewUnite)|polymer\.app\.search\.v1\.Search\/SearchAll|community\.service\.dm\.v1\.DM\/DmView|main\.community\.reply\.v1\.Reply\/MainList|pgc\.gateway\.player\.v2\.PlayURL\/PlayView)$
-    name: bilibili-proto-response-kokoryh-1
+    name: bilibili-proto-response-kokoryh
     type: response
     require-body: true
     binary-body-mode: true
     argument: '[show, true, false, off]'
   - match: ^https:\/\/api\.live\.bilibili\.com\/xlive\/(?:app-interface\/v2\/index\/feed|app-room\/v1\/index\/getInfoBy(?:Room|User))\?
-    name: bilibili-json-kokoryh-1
+    name: bilibili-json-kokoryh
     type: response
     require-body: true
