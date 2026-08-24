@@ -147,11 +147,13 @@ def quote_expression(value: str) -> str:
     return f'"{v}"'
 
 def to_cdn_url(url: str) -> str:
-    """raw.githubusercontent -> cdn.jsdelivr，供国内 Stash 可直连"""
+    """raw.githubusercontent -> 国内可直连镜像，优先 ghproxy（cdn 已验证仍超时）"""
     m = re.match(r'https://raw\.githubusercontent\.com/([^/]+)/([^/]+)/(?:refs/heads/)?([^/]+)/(.+)', url)
     if m:
         user, repo, branch, path = m.groups()
-        return f'https://cdn.jsdelivr.net/gh/{user}/{repo}@{branch}/{path}'
+        raw = f'https://raw.githubusercontent.com/{user}/{repo}/{branch}/{path}'
+        # ghproxy 在国内比 jsDelivr 更稳，raw 仍被墙时直接走代理
+        return f'https://ghproxy.net/{raw}'
     return url
 
 class ScriptRegistry:
