@@ -120,87 +120,91 @@ def check_file(p: pathlib.Path):
         stats["mock"] = 0
     stats["mock"] += len(mock_list)
 
-    # Layer 2: URL Rewrite Syntax  Stash 支持 "pattern 307 $1" 与 "pattern - reject" 两种
+    # Layer 2: URL Rewrite Syntax  Stash 统一: 302/307/transparent = PATTERN TARGET ACTION ; reject = PATTERN - reject*
+    # 硬校验: 禁止 PATTERN - 302/307/transparent  与  PATTERN 302/307/transparent TARGET
+    # 兼容 301/308 归一到 302/307
+    REDIRECT_SET = {"302", "307", "301", "308", "transparent"}
+    REJECT_SET = {"reject", "reject-200", "reject-img", "reject-dict", "reject-array"}
+    def validate_url_rewrite(rule: str):
+        s0 = str(rule).strip()
+        if not s0:
+            return "E_URL_TOKEN_COUNT"
+        parts = s0.split()
+        if len(parts) < 2:
+            return "E_URL_TOKEN_COUNT"
+        # E_REDIRECT_DASH_PLACEHOLDER: PATTERN - 302/307/transparent TARGET
+        if len(parts) >= 3 and parts[1] == "-" and parts[2] in REDIRECT_SET:
+            return "E_REDIRECT_DASH_PLACEHOLDER"
+        # E_REDIRECT_ORDER: PATTERN 302/307/transparent TARGET (ACTION 在中间)
+        if len(parts) >= 2 and parts[1] in REDIRECT_SET:
+            return "E_REDIRECT_ORDER"
+        # 正确 Redirect 必须 ACTION 在最后
+        if parts[-1] in REDIRECT_SET:
+            if len(parts) < 3:
+                return "E_URL_TOKEN_COUNT"
+            if parts[1] == "-":
+                return "E_REDIRECT_DASH_PLACEHOLDER"
+            return None
+        # Reject 必须 PATTERN - reject*
+        if parts[-1] in REJECT_SET:
+            if len(parts) < 3 or parts[1] != "-":
+                return "E_REJECT_PLACEHOLDER"
+            return None
+        # 也兼容 reject* 在第二位但已带 -
+        if len(parts) >= 2 and parts[1] in REJECT_SET:
+            return "E_REJECT_PLACEHOLDER"
+        return "E_URL_ACTION_UNKNOWN"
+
     for entry in url_list:
+        s = entry.strip() if isinstance(entry, str) else ""
         if not isinstance(entry, str):
             add("URL", "E_SCHEMA_TYPE", f"{p.name}: url-rewrite 非字符串: {entry}")
             continue
-        s = entry.strip()
-        if p.name == "Spotify_remove_ads.stoverride":
-            # 该文件 302 规则经 Stash 真机验证有效，跳过 url-rewrite 校验仅做 RE2
+        err = validate_url_rewrite(s)
+        if err == "E_REDIRECT_DASH_PLACEHOLDER":
+            add("URL", "E_REDIRECT_DASH_PLACEHOLDER", f"{p.name}: 发现 'PATTERN - 302/307/transparent TARGET' 应为 'PATTERN TARGET ACTION': {s[:160]}")
+            continue
+        if err == "E_REDIRECT_ORDER":
+            add("URL", "E_REDIRECT_ORDER", f"{p.name}: 发现 'PATTERN 302/307/transparent TARGET' 应为 'PATTERN TARGET ACTION': {s[:160]}")
+            continue
+        if err == "E_REJECT_PLACEHOLDER":
+            add("URL", "E_REJECT_PLACEHOLDER", f'{p.name}: reject 缺占位符 "-": {s[:160]} (正确: PATTERN - reject)')
+            continue
+        if err is None:
+            # Redirect 正确格式，校验 RE2 与 pattern 前缀
+            parts = s.split()
+            pattern = parts[0]
+            action = parts[-1]
+            target = " ".join(parts[1:-1])
+            if pattern.startswith("(^"):
+                add("URL", "E_PATTERN_PREFIX", f"{p.name}: url-rewrite pattern 以 (^ 应为 ^(: {s[:160]}")
             try:
-                pat = s.split(" - ")[0].strip() if " - " in s else s.split()[0].strip()
+                pat_for_re2 = pattern
                 if HAS_RE2:
-                    re2lib.compile(pat)
+                    re2lib.compile(pat_for_re2)
                 else:
-                    re.compile(pat)
+                    if re.search(r"\(\?<[=!]", pat_for_re2) or r"\K" in pat_for_re2:
+                        raise ValueError("lookahead")
+                    re.compile(pat_for_re2)
                 stats["regex_ok"] += 1
             except Exception as e:
-                add("REGEX", "E_RE2_UNSUPPORTED", f"{p.name}: RE2 不支持 pattern '{pat[:80]}': {e}")
+                add("REGEX", "E_RE2_UNSUPPORTED", f"{p.name}: RE2 不支持 pattern '{pattern[:80]}': {e}")
                 stats["regex_fail"] += 1
+            if action in REDIRECT_SET and target == "-":
+                add("URL", "E_REDIRECT_DASH_PLACEHOLDER", f"{p.name}: Redirect target 不能为 '-': {s[:160]}")
+            if action in REDIRECT_SET and not (target.startswith("http") or target.startswith("$")):
+                add("URL", "E_REDIRECT_ORDER", f'{p.name}: {action} 缺少重定向目标URL: {s[:160]}')
             continue
-        # 307/302 等重定向在 Stash 为 "REGEX 307 TARGET" 无需 " - "
-        if re.match(r'.*\s(302|307|301|308)\s', s):
-            m2 = re.match(r'^(\S+)\s+(302|307|301|308)\s+(.*)$', s)
-            if m2:
-                pattern, action, rest = m2.group(1), m2.group(2), m2.group(3)
-                # 校验 pattern 与 rest
-                if pattern.startswith("(^"):
-                    add("URL", "E_PATTERN_PREFIX", f"{p.name}: url-rewrite pattern 以 (^ 开头应为 ^(: {s[:160]}")
-                try:
-                    pat_for_re2 = pattern
-                    if HAS_RE2:
-                        re2lib.compile(pat_for_re2)
-                    else:
-                        if re.search(r"\(\?<[=!]", pat_for_re2) or r"\K" in pat_for_re2:
-                            raise ValueError("lookahead")
-                        re.compile(pat_for_re2)
-                    stats["regex_ok"] += 1
-                except Exception as e:
-                    add("REGEX", "E_RE2_UNSUPPORTED", f"{p.name}: RE2 不支持 pattern '{pattern[:80]}': {e}")
-                    stats["regex_fail"] += 1
-                if not rest or not (rest.startswith("http") or rest.startswith("$")):
-                    add("URL", "E_REDIRECT_ORDER", f'{p.name}: {action} 缺少重定向目标URL: {s[:160]}')
-                continue
-            # fallback to generic error
-            add("URL", "E_SYNTAX", f"{p.name}: url-rewrite 307 正则不匹配: {s[:160]}")
+        # err == E_URL_TOKEN_COUNT or UNKNOWN
+        if err == "E_URL_TOKEN_COUNT":
+            add("URL", "E_URL_TOKEN_COUNT", f"{p.name}: url-rewrite token 数不足: {s[:160]}")
             continue
-        # 其他 url-rewrite 必须含 " - "
-        if " - " not in s:
-            add("URL", "E_MISSING_PLACEHOLDER", f"{p.name}: url-rewrite 缺 ' - ' (应为 'pattern - action'): {s[:160]}")
-            continue
-            continue
-        if " 302 " in s or " 307 " in s:
-            try:
-                pat = s.split(" - ")[0].strip() if " - " in s else s.split()[0].strip()
-                if HAS_RE2:
-                    re2lib.compile(pat)
-                else:
-                    re.compile(pat)
-                stats["regex_ok"] += 1
-            except Exception as e:
-                add("REGEX", "E_RE2_UNSUPPORTED", f"{p.name}: RE2 不支持 pattern '{pat[:80]}': {e}")
-                stats["regex_fail"] += 1
-            continue
+        # fallback: 其他未知
         m = URL_RULE.match(s)
         if not m:
             add("URL", "E_SYNTAX", f"{p.name}: url-rewrite 正则不匹配: {s[:160]}")
             continue
         pattern, target, action_rest = m.group(1), m.group(2), m.group(3) or ""
-        # Stash url-rewrite with " - " -> groups: pattern=before, target="-", action_rest=after
-        # Validate target placeholder
-        if target != "-":
-            # Check E_REJECT_PLACEHOLDER and E_REDIRECT_ORDER helper
-            # If action starts with reject, target must be "-"
-            first_tok = target  # when split by " - ", target is "-"
-            # Actually for line "pattern - reject", URL_RULE gives pattern=pattern, target="-", action_rest="reject"
-            # So this branch means missing placeholder
-            # Try to detect legacy: "^xxx reject" without placeholder
-            if s.split()[1] in URL_ACTIONS or s.split()[1].startswith("reject"):
-                add("URL", "E_REJECT_PLACEHOLDER", f'{p.name}: reject 缺占位符 "-": {s[:160]} (正确: ^xxx - reject)')
-            else:
-                add("URL", "E_MISSING_PLACEHOLDER", f"{p.name}: url-rewrite target 非 '-': {s[:160]}")
-            continue
         action = (action_rest or "").strip().split()[0] if action_rest else ""
         # E_UNKNOWN_ACTION
         if action not in URL_ACTIONS:

@@ -30,6 +30,60 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 LOON_UA = "Loon/764 CFNetwork/1498.700.1 Darwin/23.6.0 iPhone/17.6.1"
 FETCH_HEADERS = {"User-Agent": LOON_UA, "Accept": "*/*"}
 
+REDIRECT_ACTIONS = {"302", "307", "transparent"}
+REJECT_ACTIONS = {"reject", "reject-200", "reject-img", "reject-dict", "reject-array"}
+
+def parse_url_rewrite(line: str) -> dict:
+    raw = line.strip()
+    parts = raw.split()
+    if len(parts) < 2:
+        raise ValueError(f"E_URL_TOO_FEW_TOKENS: {line}")
+    pattern = parts[0]
+    if parts[-1] in REJECT_ACTIONS:
+        return {"pattern": pattern, "action": parts[-1], "target": None, "source": line}
+    if parts[1] in REJECT_ACTIONS:
+        return {"pattern": pattern, "action": parts[1], "target": None, "source": line}
+    if parts[1] in REDIRECT_ACTIONS:
+        if len(parts) < 3:
+            raise ValueError(f"E_REDIRECT_TARGET_MISSING: {line}")
+        return {"pattern": pattern, "action": parts[1], "target": " ".join(parts[2:]), "source": line}
+    if parts[-1] in REDIRECT_ACTIONS:
+        if len(parts) < 3:
+            raise ValueError(f"E_REDIRECT_TARGET_MISSING: {line}")
+        target = " ".join(parts[1:-1])
+        if target == "-":
+            raise ValueError(f"E_REDIRECT_DASH_PLACEHOLDER: {line}")
+        return {"pattern": pattern, "action": parts[-1], "target": target, "source": line}
+    raise ValueError(f"E_URL_ACTION_UNKNOWN: {line}")
+
+def serialize_stash_url_rewrite(rule: dict) -> str:
+    pattern = rule["pattern"].strip()
+    action = rule["action"].strip().lower()
+    target = rule.get("target")
+    if action in REDIRECT_ACTIONS:
+        if not target:
+            raise ValueError(f'E_REDIRECT_TARGET_MISSING: {rule.get("source", "")}')
+        target = target.strip()
+        if target == "-":
+            raise ValueError(f'E_REDIRECT_DASH_PLACEHOLDER: {rule.get("source", "")}')
+        return f"{pattern} {target} {action}"
+    if action in REJECT_ACTIONS:
+        return f"{pattern} - {action}"
+    raise ValueError(f"E_URL_ACTION_UNKNOWN: {action}")
+
+def normalize_stash_url_rewrite(rule: str) -> str:
+    parts = rule.strip().split()
+    if len(parts) < 2:
+        return rule
+    actions = {"302","307","transparent","reject","reject-200","reject-img","reject-dict","reject-array"}
+    if parts[-1] in actions:
+        return rule
+    if len(parts) >= 4 and parts[1] == "-" and parts[2] in {"302","307","transparent"}:
+        return " ".join([parts[0], " ".join(parts[3:]), parts[2]])
+    if len(parts) >= 3 and parts[1] in {"302","307","transparent"}:
+        return " ".join([parts[0], " ".join(parts[2:]), parts[1]])
+    return rule
+
 # ---------- Fetch ----------
 def fetch_text(url: str, headers: dict = FETCH_HEADERS, timeout: int = 20) -> str:
     req = urllib.request.Request(url, headers=headers)
@@ -285,8 +339,8 @@ def parse_mock_args(line: str) -> Dict:
 # ---------- Classifier ----------
 def classify_rule(ast: RuleAST) -> RuleAST:
     action = (ast.action or "").lower()
-    # URL Rewrite allow list
-    if action in {"302","307","301","308","reject","reject-200","reject-img","reject-dict","reject-array"}:
+    # URL Rewrite allow list (redirect incl. transparent)
+    if action in {"302","307","301","308","transparent","reject","reject-200","reject-img","reject-dict","reject-array"}:
         ast.targetModule = "url-rewrite"
         return ast
     if action.startswith("mock"):
@@ -306,7 +360,7 @@ def classify_rule(ast: RuleAST) -> RuleAST:
     return ast
 
 # ---------- Generators ----------
-URL_ALLOW_ACTIONS = {"302","307","301","308","reject","reject-200","reject-img","reject-dict","reject-array"}
+URL_ALLOW_ACTIONS = {"302","307","301","308","transparent","reject","reject-200","reject-img","reject-dict","reject-array"}
 HEADER_MAP = {
     "header-add": "request-add",
     "header-del": "request-del",
@@ -554,54 +608,35 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
         if mod == "url-rewrite" and (ast.action or "").lower() == "mock":
             raise ValueError(f"E_MOCK_IN_URL_REWRITE {ast.match} in {ast.raw}")
         if mod == "url-rewrite":
-            # 仅允许白名单
-            act = (ast.action or "").lower()
-            if act not in URL_ALLOW_ACTIONS:
-                # try reject variations
-                if act.startswith("reject"):
-                    act = ast.action  # keep original case?
-                else:
-                    unsupported_rewrites.append(f"# E_INVALID_ACTION {ast.raw}")
+            # 统一走通用 Parser + Serializer，禁止自行拼接
+            act_raw = (ast.action or "").strip()
+            # 兼容部分分类器把 "302 https://..." 整体当 action 的情况
+            # 需从 ast.action + ast.target 重建原始行片段
+            raw_line = ast.raw.strip()
+            # 优先用 ast 字段重建最简 Loon 行: "pattern action target"
+            if act_raw.lower() in URL_ALLOW_ACTIONS or act_raw.lower() in REDIRECT_ACTIONS or act_raw.lower() in REJECT_ACTIONS:
+                loon_line = f"{ast.match} {act_raw} {ast.target or ''}".strip()
+            else:
+                # action 含空格（如 "302 https://..."），直接用 raw
+                loon_line = raw_line
+            try:
+                rule = parse_url_rewrite(loon_line)
+            except Exception as e:
+                # 尝试从 raw 直接解析（处理 "PATTERN - reject" 等）
+                try:
+                    # 对 "PATTERN - reject" 先转 "PATTERN reject"
+                    alt = re.sub(r'\s-\s', ' ', raw_line).strip()
+                    rule = parse_url_rewrite(alt)
+                except:
+                    unsupported_rewrites.append(f"# {e} {ast.raw}")
                     continue
-            # Reject: ^url - reject  (must have placeholder)
-            if act.startswith("reject"):
-                # hard check placeholder
-                if act not in URL_ALLOW_ACTIONS:
-                    # allow but warn
-                    pass
-                url_rewrite.append(f"{ast.match} - {act}")
-                continue
-            # 302/307/301/308  Stash: REGEX 302 TARGET  (无 - )
-            if act in {"302","307","301","308"}:
-                target = (ast.target or "").strip()
-                pat = ast.match
-                if pat.startswith("(^"):
-                    pat = "^(" + pat[2:]
-                # 1. 去掉 Loon 的外层捕获包裹 ^(A)(B)(C) -> ^A(B)C
-                # QQ 例: ^(https:\/\/c\.pc\.qq\.com\/middlem\.html\?pfurl=)(http.*)(&pfuin=.*) -> ^https:\/\/c\.pc\.qq\.com\/middlem\.html\?pfurl=(http.*)&pfuin=.*
-                m_wrap = re.match(r'^\^\((.*)\)\((http\.\*)\)\((.*)\)$', pat)
-                if m_wrap:
-                    pat = f"^{m_wrap.group(1)}({m_wrap.group(2)}){m_wrap.group(3)}"
-                    # 3 组 -> 1 组，$2 -> $1
-                    if target == "$2":
-                        target = "$1"
-                    else:
-                        target = target.replace("$2", "$1").replace("$3", "$2")
-                else:
-                    # 2 组: ^(A)(http.*) -> ^A(http.*)
-                    m_wrap2 = re.match(r'^\^\((.*)\)\((http\.\*)\)$', pat)
-                    if m_wrap2:
-                        pat = f"^{m_wrap2.group(1)}({m_wrap2.group(2)})"
-                        if target == "$2":
-                            target = "$1"
-                # 2. Stash url-rewrite 无需 " - "，直接 "REGEX 307 TARGET"
-                if target:
-                    url_rewrite.append(f"{pat} {act} {target}")
-                else:
-                    url_rewrite.append(f"{pat} {act}")
-                continue
-            # transparent etc.
-            url_rewrite.append(f"{ast.match} - {act}")
+            # 归一化：302/307/transparent 的 target 可能是 "-" 占位，需校验
+            try:
+                out = serialize_stash_url_rewrite(rule)
+                url_rewrite.append(out)
+            except Exception as e:
+                unsupported_rewrites.append(f"# {e} {ast.raw}")
+            continue
 
         elif mod == "mock":
             # Loon: ^url - mock data-type=json status-code=200 data='{}'
@@ -643,10 +678,13 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
         elif mod == "header-rewrite":
             act = (ast.action or "").lower()
             target_rest = (ast.target or "").strip()
-            # 核心修复: header 带 URL 应转为 url-rewrite 302 (Spotify 场景)
+            # 核心修复: header 带 URL 应转为 url-rewrite 302 (Spotify 场景) 统一走 Serializer
             if target_rest.startswith("http://") or target_rest.startswith("https://"):
-                # Stash 不支持 header 带 URL 的写法，实为重定向
-                url_rewrite.append(f"{ast.match} - 302 {target_rest}")
+                try:
+                    _r = parse_url_rewrite(f"{ast.match} 302 {target_rest}")
+                    url_rewrite.append(serialize_stash_url_rewrite(_r))
+                except Exception:
+                    url_rewrite.append(f"{ast.match} {target_rest} 302")
                 continue
             # 映射
             mapped = HEADER_MAP.get(act, act)
@@ -828,6 +866,8 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             unsupported_rewrites.append(f"# unsupported module {mod}: {ast.raw}")
 
     if url_rewrite:
+        # 最终统一清洗：覆盖所有漏网路径（redirect_from_rules直接拼接、header转写等）
+        url_rewrite = [normalize_stash_url_rewrite(x) for x in url_rewrite]
         http["url-rewrite"] = url_rewrite
     if body_rewrite:
         http["body-rewrite"] = body_rewrite
