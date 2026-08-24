@@ -284,7 +284,31 @@ def check_file(p: pathlib.Path):
             add("REGEX", "E_RE2_UNSUPPORTED", f"{p.name}: RE2 不支持 header pattern '{pat[:80]}': {e}")
             stats["regex_fail"] += 1
 
-    # Body Rewrite RE2
+    # Body Rewrite — v3: tokenizer 保留 jq 整体，不以 split 破坏
+    BODY_ACTIONS = {
+        "request-jq","response-jq","request-json-add","response-json-add",
+        "request-json-del","response-json-del","request-json-replace","response-json-replace",
+        "request-replace-regex","response-replace-regex","request-replace","response-replace"
+    }
+    def tokenize_rule_v(s: str):
+        res=[]; cur=""; in_s=False; in_d=False; esc=False
+        for c in s:
+            if esc:
+                cur+=c; esc=False; continue
+            if c=="\\":
+                esc=True; cur+=c; continue
+            if c=="'" and not in_d:
+                in_s=not in_s; cur+=c; continue
+            if c=='"' and not in_s:
+                in_d=not in_d; cur+=c; continue
+            if c==" " and not in_s and not in_d:
+                if cur:
+                    res.append(cur); cur=""
+                continue
+            cur+=c
+        if cur:
+            res.append(cur)
+        return res
     for entry in body_list:
         if not isinstance(entry, str):
             add("BODY", "E_SCHEMA_TYPE", f"{p.name}: body-rewrite 非字符串: {entry}")
@@ -296,7 +320,30 @@ def check_file(p: pathlib.Path):
             add("BODY", "E_TOO_LONG", f"{p.name}: body-rewrite 行长 {len(s)} >4096")
         if "jq-path" in s:
             add("BODY", "E_JQ_PATH", f"{p.name}: body-rewrite 含未内联 jq-path: {s[:160]}")
-        pat = s.split()[0] if s else ""
+        # v3 Round Trip token count: 必须至少 3 tokens (match action expression)
+        toks = tokenize_rule_v(s)
+        # 去除最外层单引号包裹（yaml  dump 的外层）
+        if len(toks)==1 and toks[0].startswith("'") and toks[0].endswith("'"):
+            inner = toks[0][1:-1]
+            toks = tokenize_rule_v(inner)
+        if len(toks) < 3:
+            add("BODY", "E_BODY_TOKEN_COUNT", f"{p.name}: body-rewrite token 数 <3，应为 'match action expression': {s[:160]}")
+        else:
+            act = toks[1]
+            if act not in BODY_ACTIONS:
+                add("BODY", "E_BODY_ACTION_UNKNOWN", f"{p.name}: body-rewrite 未知 action '{act}': {s[:160]}")
+            if "jq" in act and len(toks) < 3:
+                add("BODY", "E_JQ_EMPTY", f"{p.name}: body-rewrite jq 缺 expression: {s[:160]}")
+            # 禁止错误格式: response-jq .data |= xxx 未加引号包裹
+            if "jq" in act and len(toks) >=3:
+                expr = " ".join(toks[2:])
+                # 若 expression 未被双引号包裹，则为 E_JQ_ARGUMENT_SPLIT
+                if expr and not (expr.strip().startswith('"') and expr.strip().endswith('"')) and "|" in expr:
+                    # Stash 要求 jq 为单个带引号参数，允许外层已处理
+                    if not (s.strip().startswith("'") or '"' in s):
+                        add("BODY", "E_JQ_ARGUMENT_SPLIT", f"{p.name}: jq 被空格拆开，应整体引号包裹: {s[:160]}")
+        # RE2 for match pattern (first token)
+        pat = toks[0].strip("'\"") if toks else ""
         try:
             if HAS_RE2:
                 re2lib.compile(pat)
