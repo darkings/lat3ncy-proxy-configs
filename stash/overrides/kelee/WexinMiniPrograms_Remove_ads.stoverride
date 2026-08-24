@@ -1,12 +1,3 @@
-# 微信小程序去广告
-# 收录常用小程序的去广告，作者署名在插件内。
-# author: 可莉🅥[https://github.com/luestr/ProxyResource/blob/main/README.md]
-# homepage: https://hub.kelee.one
-# icon: https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/WeixinMiniPrograms.png
-# date: 2026-06-01 17:11:35
-# lpx: https://kelee.one/Tool/Loon/Lpx/WexinMiniPrograms_Remove_ads.lpx
-# converted: Loon .lpx -> Stash .stoverride (auto) v2
-# note: kelee.one resources require Loon UA; if Stash fetch fails, add proxy or use GitHub mirror
 name: 微信小程序去广告
 desc: 收录常用小程序的去广告，作者署名在插件内。
 icon: https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/WeixinMiniPrograms.png
@@ -17,43 +8,6 @@ rules:
 - DOMAIN,ads-shopping.shouqianba.com,REJECT
 - DOMAIN,ad.maoyan.com,REJECT
 - DOMAIN,e.jparking.cn,REJECT
-script-providers:
-  kff-1:
-    url: https://stash.ponyo.fun/scripts/kff.js
-    interval: 86400
-  ems-1:
-    url: https://stash.ponyo.fun/scripts/ems.js
-    interval: 86400
-  xiaotucc-1:
-    url: https://stash.ponyo.fun/scripts/xiaotucc.js
-    interval: 86400
-  familymart-1:
-    url: https://stash.ponyo.fun/scripts/familymart.js
-    interval: 86400
-  lawson-1:
-    url: https://stash.ponyo.fun/scripts/lawson.js
-    interval: 86400
-  chayanyuese-remove-ads-1:
-    url: https://stash.ponyo.fun/scripts/chayanyuese-remove-ads.js
-    interval: 86400
-  coco-1:
-    url: https://stash.ponyo.fun/scripts/coco.js
-    interval: 86400
-  qingju-1:
-    url: https://stash.ponyo.fun/scripts/qingju.js
-    interval: 86400
-  alittle-tea-1:
-    url: https://stash.ponyo.fun/scripts/alittle-tea.js
-    interval: 86400
-  m-stand-1:
-    url: https://stash.ponyo.fun/scripts/m-stand.js
-    interval: 86400
-  t3-1:
-    url: https://stash.ponyo.fun/scripts/t3.js
-    interval: 86400
-  ming-1:
-    url: https://stash.ponyo.fun/scripts/ming.js
-    interval: 86400
 http:
   mitm:
   - 3pp.starbucks.com.cn
@@ -271,50 +225,50 @@ http:
   - ^https:\/\/chong\.qq\.com\/tws\/usernumberinfo\/GetUserInfo\? response-jq "del(.data.request.number.markSeat.servicehallOperList, .data.request.number.servicehallOperList, .data.request.number.markSeat.servicehallFuncList, .data.request.number.servicehallFuncList)"
   script:
   - match: ^https:\/\/webapi\.qmai\.cn\/web\/catering\/design\/homePage-Config
-    name: kff-1
+    name: kff
     type: response
     require-body: true
   - match: ^https:\/\/ump\.ems\.com\.cn\/new-generation-extend\/redis\/pageInfoByChannel
-    name: ems-1
+    name: ems
     type: response
     require-body: true
   - match: ^https:\/\/mapi\.xiaotucc\.com\/(mall\/main|main_page\/index\/getActivity)
-    name: xiaotucc-1
+    name: xiaotucc
     type: response
     require-body: true
   - match: ^https:\/\/minifm\.maxxipoint\.com\/banner\/list
-    name: familymart-1
+    name: familymart
     type: response
     require-body: true
   - match: ^https:\/\/lawsonapi\.yorentown\.com\/area\/sh-lawson\/app\/v1\/home
-    name: lawson-1
+    name: lawson
     type: response
     require-body: true
   - match: ^https:\/\/miniapp\.sexytea2013\.com\/cms\/slot\/queryByCodes\?codes=INDEX_TOP_BANNER
-    name: chayanyuese-remove-ads-1
+    name: chayanyuese-remove-ads
     type: response
     require-body: true
   - match: ^https:\/\/coco-com\.e\.verystar\.net\/v1\/home\/info
-    name: coco-1
+    name: coco
     type: response
     require-body: true
   - match: ^https:\/\/htwkop\.xiaojukeji\.com\/gateway\?api=hm\.fa\.homeConfig
-    name: qingju-1
+    name: qingju
     type: response
     require-body: true
   - match: ^https:\/\/cappapi\.alittle-tea\.com\/open\?method=catering\.set\.ad
-    name: alittle-tea-1
+    name: alittle-tea
     type: response
     require-body: true
   - match: ^https:\/\/api\.prod\.dj\.mstand\.cn\/scrm\/mini\/app\/index\/info
-    name: m-stand-1
+    name: m-stand
     type: response
     require-body: true
   - match: ^https:\/\/passenger\.t3go\.cn\/(solution\-|common\-)?(passenger\-)?(activity\-|app\-)?api\/notoken\/(trip\/)?api\/(home\/|common\/)?(v[1-3]\/)?(ad\/getNegativescreen|solution\/passenger\/open\/getHomeMenu|leftmenu|getHomeInfoGlobal)
-    name: t3-1
+    name: t3
     type: response
     require-body: true
   - match: ^https:\/\/newton\.gumingnc\.com\/newton-buyer\/newton\/buyer\/(ump|touch|external\/front)
-    name: ming-1
+    name: ming
     type: response
     require-body: true

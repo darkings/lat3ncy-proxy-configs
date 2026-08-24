@@ -1,61 +1,39 @@
-# Spotify歌词增强
-# 将Spotify的外语歌词翻译为简体中文，并提供双语翻译支持。
-# author: VirgilClyne[https://github.com/VirgilClyne]
-# homepage: https://hub.kelee.one
-# icon: https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/Spotify.png
-# date: 2026-06-01 17:11:35
-# lpx: https://kelee.one/Tool/Loon/Lpx/Spotify_lyrics_translation.lpx
-# converted: Loon .lpx -> Stash .stoverride (auto) v2
-# note: kelee.one resources require Loon UA; if Stash fetch fails, add proxy or use GitHub mirror
 name: Spotify歌词增强
 desc: 将Spotify的外语歌词翻译为简体中文，并提供双语翻译支持。
 icon: https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/Spotify.png
-script-providers:
-  spotify-response-1:
-    url: https://stash.ponyo.fun/scripts/spotify-response.js
-    interval: 86400
-  spotify-request-1:
-    url: https://stash.ponyo.fun/scripts/spotify-request.js
-    interval: 86400
-  translate-response-1:
-    url: https://stash.ponyo.fun/scripts/translate-response.js
-    interval: 86400
-  external-lyrics-response-1:
-    url: https://stash.ponyo.fun/scripts/external-lyrics-response.js
-    interval: 86400
 http:
   mitm:
   - api.spotify.com
   - spclient.wg.spotify.com
   script:
   - match: ^https?:\/\/api\.spotify\.com\/v1\/tracks\?
-    name: spotify-response-1
+    name: spotify-response
     type: response
     require-body: true
   - match: ^https?:\/\/spclient\.wg\.spotify\.com\/color-lyrics\/v2\/track\/(.+)\?(.*)format=json
-    name: spotify-request-1
+    name: spotify-request
     type: request
     require-body: true
   - match: ^https?:\/\/spclient\.wg\.spotify\.com\/color-lyrics\/v2\/track\/\w+\?(.*)
-    name: spotify-request-1
+    name: spotify-request
     type: request
     require-body: true
     binary-body-mode: true
   - match: ^https?:\/\/spclient\.wg\.spotify\.com\/color-lyrics\/v2\/track\/(.+)\?(.*)format=json(.*)subtype=Translate
-    name: translate-response-1
+    name: translate-response
     type: response
     require-body: true
   - match: ^https?:\/\/spclient\.wg\.spotify\.com\/color-lyrics\/v2\/track\/\w+\?(.*)subtype=Translate
-    name: translate-response-1
+    name: translate-response
     type: response
     require-body: true
     binary-body-mode: true
   - match: ^https?:\/\/spclient\.wg\.spotify\.com\/color-lyrics\/v2\/track\/(.+)\?(.*)format=json(.*)subtype=External
-    name: external-lyrics-response-1
+    name: external-lyrics-response
     type: response
     require-body: true
   - match: ^https?:\/\/spclient\.wg\.spotify\.com\/color-lyrics\/v2\/track\/\w+\?(.*)subtype=External
-    name: external-lyrics-response-1
+    name: external-lyrics-response
     type: response
     require-body: true
     binary-body-mode: true
