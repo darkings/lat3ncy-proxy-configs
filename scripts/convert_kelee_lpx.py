@@ -30,6 +30,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 LOON_UA = "Loon/764 CFNetwork/1498.700.1 Darwin/23.6.0 iPhone/17.6.1"
 FETCH_HEADERS = {"User-Agent": LOON_UA, "Accept": "*/*"}
 
+RUNTIME_ASSET_MIRRORS = {
+    "https://kelee.one/Resource/JavaScript/PinDuoDuo/9410-b8806e870a26db7d.js":
+        "9410-b8806e870a26db7d.js",
+}
+
 REDIRECT_ACTIONS = {"302", "307", "transparent"}
 REJECT_ACTIONS = {"reject", "reject-200", "reject-img", "reject-dict", "reject-array"}
 
@@ -103,6 +108,20 @@ def fetch_text(url: str, headers: dict = FETCH_HEADERS, timeout: int = 20) -> st
                 continue
             raise
     raise RuntimeError(f"fetch failed {url}")
+
+
+def mirror_runtime_assets(script_text: str) -> str:
+    """Mirror script-loaded KeLee assets and rewrite them to the direct site."""
+    rewritten = script_text
+    for source_url, filename in RUNTIME_ASSET_MIRRORS.items():
+        if source_url not in rewritten:
+            continue
+        asset_text = fetch_text(source_url)
+        asset_path = REPO_ROOT / "stash" / "overrides" / "kelee" / "scripts" / filename
+        asset_path.parent.mkdir(parents=True, exist_ok=True)
+        asset_path.write_text(asset_text, encoding="utf-8")
+        rewritten = rewritten.replace(source_url, f"https://stash.ponyo.fun/scripts/{filename}")
+    return rewritten
 
 # ---------- LPX parsing ----------
 HEADER_RE = re.compile(r"^#!(.*?)=(.*)$")
@@ -708,10 +727,10 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             # 重新拼接 expression 保留原始空格/符号
             # 对于 jq-path 等特殊，先用 ast.target
             rest = ast.target or ""
-            # 映射 Loon -> Stash 的 body action
-            # response-body-json-jq -> response-jq
-            # response-body-json-del -> response-jq (del)
-            # response-body-json-replace -> response-jq
+            # 映射 Loon -> Stash 的 body action。
+            # Stash 原生支持 json-del/json-replace；不要无意义地绕成 jq，
+            # 否则会改变缺失/null 字段的处理语义，也更容易被引号破坏。
+            # jq 表达式是规则剩余部分，不能再包成一个 jq 字符串字面量。
             # response-body-replace-regex -> response-replace-regex
             stash_action = None
             expression = ""
@@ -754,45 +773,32 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             elif low == "response-body-json-del":
                 keys = rest.strip().split()
                 if keys:
-                    expression = jq_for_del(keys)
-                    stash_action = "response-jq"
+                    expression = " ".join(keys)
+                    stash_action = "response-json-del"
                 else:
                     unsupported_rewrites.append(f"# E_JQ_EMPTY {ast.raw}")
                     continue
             elif low == "request-body-json-del":
                 keys = rest.strip().split()
                 if keys:
-                    expression = jq_for_del(keys)
-                    stash_action = "request-jq"
+                    expression = " ".join(keys)
+                    stash_action = "request-json-del"
                 else:
                     unsupported_rewrites.append(f"# E_JQ_EMPTY {ast.raw}")
                     continue
             elif low == "response-body-json-replace":
                 toks = tokenize_rule(rest)
-                # 清理引号
-                cleaned = []
-                for t in toks:
-                    if (t.startswith('"') and t.endswith('"')) or (t.startswith("'") and t.endswith("'")):
-                        cleaned.append(t[1:-1])
-                    else:
-                        cleaned.append(t)
-                if len(cleaned) >= 2:
-                    expression = jq_for_replace(cleaned)
-                    stash_action = "response-jq"
+                if len(toks) >= 2 and len(toks) % 2 == 0:
+                    expression = rest.strip()
+                    stash_action = "response-json-replace"
                 else:
                     unsupported_rewrites.append(f"# E_JQ_EMPTY {ast.raw}")
                     continue
             elif low == "request-body-json-replace":
                 toks = tokenize_rule(rest)
-                cleaned = []
-                for t in toks:
-                    if (t.startswith('"') and t.endswith('"')) or (t.startswith("'") and t.endswith("'")):
-                        cleaned.append(t[1:-1])
-                    else:
-                        cleaned.append(t)
-                if len(cleaned) >= 2:
-                    expression = jq_for_replace(cleaned)
-                    stash_action = "request-jq"
+                if len(toks) >= 2 and len(toks) % 2 == 0:
+                    expression = rest.strip()
+                    stash_action = "request-json-replace"
                 else:
                     unsupported_rewrites.append(f"# E_JQ_EMPTY {ast.raw}")
                     continue
@@ -853,14 +859,12 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             if "jq" in stash_action and not expression:
                 unsupported_rewrites.append(f"# E_JQ_EMPTY {ast.raw}")
                 continue
-            # 生成 Stash body-rewrite：表达式用双引号包裹，整体由 yaml 自动单引号包裹（保留 | = ( ) 等）
-            # 避免手动外层单引号导致 yaml 三引号 '''...'''
-            if stash_action in {"response-jq","request-jq"}:
-                body_rewrite.append(f"{pattern} {stash_action} {quote_expression(expression)}")
-            elif stash_action in {"response-replace-regex","request-replace-regex"}:
+            # PyYAML 负责 YAML 标量引用；这里写入 Stash 实际要解析的原始表达式。
+            # 对 jq/json 动作增加字面双引号会把表达式变成 jq 字符串，而不是执行它。
+            if stash_action in {"response-replace-regex","request-replace-regex"}:
                 body_rewrite.append(f"{pattern} {stash_action} {expression}")
             else:
-                body_rewrite.append(f"{pattern} {stash_action} {quote_expression(expression)}")
+                body_rewrite.append(f"{pattern} {stash_action} {expression}")
 
         else:
             unsupported_rewrites.append(f"# unsupported module {mod}: {ast.raw}")
@@ -926,6 +930,7 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
         if fetch_script_fallback and script_url and "kelee.one" in script_url and script_url.endswith(".js"):
             try:
                 full_js = fetch_text(script_url)
+                full_js = mirror_runtime_assets(full_js)
                 js_name = f"{base_for_file}.js"
                 local_js = REPO_ROOT / "stash" / "overrides" / "kelee" / "scripts" / js_name
                 local_js.parent.mkdir(parents=True, exist_ok=True)
@@ -966,9 +971,9 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
         elif "require_body" in parsed:
             entry["require-body"] = bool(parsed["require_body"])
         if "binary_body_mode" in parsed:
-            entry["binary-body-mode"] = bool(parsed["binary_body_mode"])
+            entry["binary-mode"] = bool(parsed["binary_body_mode"])
         if "binary-body-mode" in parsed:
-            entry["binary-body-mode"] = bool(parsed["binary-body-mode"])
+            entry["binary-mode"] = bool(parsed["binary-body-mode"])
         if "timeout" in parsed:
             try:
                 entry["timeout"] = int(parsed["timeout"])

@@ -35,8 +35,10 @@ $directStashUrl = 'https://cdn.jsdelivr.net/gh/darkings/lat3ncy-proxy-configs@ma
 if ($readme -notmatch [regex]::Escape($directStashUrl)) { throw 'Missing direct Stash jsDelivr URL' }
 $directStashCodeBlock = '(?m)^```text\r?\n{0}\r?\n```\s*$' -f [regex]::Escape($directStashUrl)
 if ($readme -notmatch $directStashCodeBlock) { throw 'Direct Stash URL must use its own text code block' }
-$stashPinduoduoUrl = 'https://cdn.jsdelivr.net/gh/darkings/lat3ncy-proxy-configs@main/stash/overrides/pinduoduo-cleanup.stoverride'
+$stashPinduoduoUrl = 'https://stash.ponyo.fun/PinDuoDuo_remove_ads.stoverride'
 if ($readme -notmatch [regex]::Escape($stashPinduoduoUrl)) { throw 'Missing direct Stash Pinduoduo override URL' }
+$stashProviderUrl = 'https://stash.ponyo.fun/kelee-scripts.stoverride'
+if ($readme -notmatch [regex]::Escape($stashProviderUrl)) { throw 'Missing direct Stash script-provider override URL' }
 
 foreach ($removedPath in @(
     'quantumultx.conf',

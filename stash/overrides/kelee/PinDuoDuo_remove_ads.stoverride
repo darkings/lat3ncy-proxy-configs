@@ -1,3 +1,12 @@
+# 拼多多去广告
+# 移除开屏广告、底栏多多视频、会场入口、聊天页面精选推荐及推广，精简首页和个人中心。
+# author: ZenmoFeiShi[https://github.com/ZenmoFeiShi], 可莉🅥[https://github.com/luestr/ProxyResource/blob/main/README.md]
+# homepage: https://hub.kelee.one
+# icon: https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/PinDuoDuo.png
+# date: 2026-07-11 20:21:39
+# lpx: https://kelee.one/Tool/Loon/Lpx/PinDuoDuo_remove_ads.lpx
+# converted: Loon .lpx -> Stash .stoverride (auto) v2
+# note: kelee.one resources require Loon UA; if Stash fetch fails, add proxy or use GitHub mirror
 name: 拼多多去广告
 desc: 移除开屏广告、底栏多多视频、会场入口、聊天页面精选推荐及推广，精简首页和个人中心。
 icon: https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/PinDuoDuo.png
@@ -45,14 +54,14 @@ http:
   - ^https:\/\/api\.pinduoduo\.com\/api\/buffon\/nasus\/recommend\? - reject-dict
   - ^https:\/\/api\.pinduoduo\.com\/api\/caterham\/v2\/query\/goods_detail_with_tags\? - reject-dict
   body-rewrite:
-  - ^https:\/\/api\.pinduoduo\.com\/api\/alexa\/homepage\/hub\? response-jq "del(.result.dy_module.irregular_banner_dy, .result.icon_set, .result.search_bar_hot_query, .result.dy_module.irregular_banner_dy)"
-  - ^https:\/\/api\.pinduoduo\.com\/api\/alexa\/homepage\/hub\? response-jq ".result.bottom_tabs? |= map(select(.link | IN(\"index.html\", \"chat_list.html\", \"personal.html\"))) | .result.buffer_bottom_tabs? |= map(select(.link | IN(\"index.html\", \"chat_list.html\", \"personal.html\"))) | .result.all_top_opts |= map(del(.selected_image, .image, .height, .width))"
-  - ^https:\/\/api\.pinduoduo\.com\/search\? response-jq "del(.expansion)"
-  - ^https:\/\/api\.pinduoduo\.com\/api\/philo\/personal\/hub\? response-jq "del(.monthly_card_entrance, .personal_center_style_v2_vo, .icon_set.icons, .icon_set.top_personal_icons, .personal_banner)"
-  - ^https:\/\/api\.pinduoduo\.com\/api\/oak\/integration\/render\? response-jq "del(.bottom_section_list, .ui.bottom_section, .ui.live_section.float_info)"
-  - ^https:\/\/api\.pinduoduo\.com\/api\/caterham\/v3\/query\/order_detail_group\? response-jq "del(.data.goods_list)"
-  - ^https:\/\/api\.pinduoduo\.com\/order\/ response-jq "del(.marketing_banner_vo, .shipping.banner_above_recommend)"
-  - ^https:\/\/api\.pinduoduo\.com\/api\/aristotle\/order_list_v4\? response-jq ".orders |= map(.order_buttons |= map(del(.order_growth_tip)))"
+  - ^https:\/\/api\.pinduoduo\.com\/api\/alexa\/homepage\/hub\? response-json-del result.dy_module.irregular_banner_dy result.icon_set result.search_bar_hot_query result.dy_module.irregular_banner_dy
+  - ^https:\/\/api\.pinduoduo\.com\/api\/alexa\/homepage\/hub\? response-jq .result.bottom_tabs? |= map(select(.link | IN("index.html", "chat_list.html", "personal.html"))) | .result.buffer_bottom_tabs? |= map(select(.link | IN("index.html", "chat_list.html", "personal.html"))) | .result.all_top_opts |= map(del(.selected_image, .image, .height, .width))
+  - ^https:\/\/api\.pinduoduo\.com\/search\? response-json-del expansion
+  - ^https:\/\/api\.pinduoduo\.com\/api\/philo\/personal\/hub\? response-json-del monthly_card_entrance personal_center_style_v2_vo icon_set.icons icon_set.top_personal_icons personal_banner
+  - ^https:\/\/api\.pinduoduo\.com\/api\/oak\/integration\/render\? response-json-del bottom_section_list ui.bottom_section ui.live_section.float_info
+  - ^https:\/\/api\.pinduoduo\.com\/api\/caterham\/v3\/query\/order_detail_group\? response-json-del data.goods_list
+  - ^https:\/\/api\.pinduoduo\.com\/order\/ response-json-del marketing_banner_vo shipping.banner_above_recommend
+  - ^https:\/\/api\.pinduoduo\.com\/api\/aristotle\/order_list_v4\? response-jq .orders |= map(.order_buttons |= map(del(.order_growth_tip)))
   script:
   - match: ^https:\/\/m\.pinduoduo\.net\/mdkd\/package\?from_app_scan
     name: pinduoduo-remove-ads

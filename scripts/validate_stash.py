@@ -372,30 +372,22 @@ def check_file(p: pathlib.Path):
             add("BODY", "E_TOO_LONG", f"{p.name}: body-rewrite 行长 {len(s)} >4096")
         if "jq-path" in s:
             add("BODY", "E_JQ_PATH", f"{p.name}: body-rewrite 含未内联 jq-path: {s[:160]}")
-        # v3 Round Trip token count: 必须至少 3 tokens (match action expression)
-        toks = tokenize_rule_v(s)
-        # 去除最外层单引号包裹（yaml  dump 的外层）
-        if len(toks)==1 and toks[0].startswith("'") and toks[0].endswith("'"):
-            inner = toks[0][1:-1]
-            toks = tokenize_rule_v(inner)
-        if len(toks) < 3:
+        # YAML 解析后规则应由 match、action、完整 expression 三段组成；
+        # expression 可以包含任意空格和管道，不能按 shell 参数再次强制加引号。
+        parts = s.split(None, 2)
+        if len(parts) < 3:
             add("BODY", "E_BODY_TOKEN_COUNT", f"{p.name}: body-rewrite token 数 <3，应为 'match action expression': {s[:160]}")
         else:
-            act = toks[1]
+            act = parts[1]
+            expr = parts[2].strip()
             if act not in BODY_ACTIONS:
                 add("BODY", "E_BODY_ACTION_UNKNOWN", f"{p.name}: body-rewrite 未知 action '{act}': {s[:160]}")
-            if "jq" in act and len(toks) < 3:
+            if "jq" in act and not expr:
                 add("BODY", "E_JQ_EMPTY", f"{p.name}: body-rewrite jq 缺 expression: {s[:160]}")
-            # 禁止错误格式: response-jq .data |= xxx 未加引号包裹
-            if "jq" in act and len(toks) >=3:
-                expr = " ".join(toks[2:])
-                # 若 expression 未被双引号包裹，则为 E_JQ_ARGUMENT_SPLIT
-                if expr and not (expr.strip().startswith('"') and expr.strip().endswith('"')) and "|" in expr:
-                    # Stash 要求 jq 为单个带引号参数，允许外层已处理
-                    if not (s.strip().startswith("'") or '"' in s):
-                        add("BODY", "E_JQ_ARGUMENT_SPLIT", f"{p.name}: jq 被空格拆开，应整体引号包裹: {s[:160]}")
+            if "jq" in act and len(expr) >= 2 and expr[0] == expr[-1] and expr[0] in {'"', "'"}:
+                add("BODY", "E_JQ_QUOTED_EXPRESSION", f"{p.name}: jq 表达式被整体引号包裹，会变成字符串字面量: {s[:160]}")
         # RE2 for match pattern (first token)
-        pat = toks[0].strip("'\"") if toks else ""
+        pat = parts[0].strip("'\"") if parts else ""
         try:
             if HAS_RE2:
                 re2lib.compile(pat)
@@ -438,10 +430,13 @@ def check_file(p: pathlib.Path):
         # E_WRONG_REQUIRE_BODY
         if "requires-body" in item:
             add("SCRIPT", "E_WRONG_REQUIRE_BODY", f'{p.name}: script {name} 含 Loon 的 requires-body，应为 require-body')
+        if "binary-body-mode" in item:
+            add("SCRIPT", "E_WRONG_BINARY_MODE", f'{p.name}: script {name} 含 Loon 的 binary-body-mode，应为 binary-mode')
         # also check wrong key requires-body in provider?
         if "require-body" in item and not isinstance(item["require-body"], bool):
-            # Stash expects bool
-            pass
+            add("SCRIPT", "E_SCHEMA_TYPE", f'{p.name}: script {name} 的 require-body 应为 bool')
+        if "binary-mode" in item and not isinstance(item["binary-mode"], bool):
+            add("SCRIPT", "E_SCHEMA_TYPE", f'{p.name}: script {name} 的 binary-mode 应为 bool')
     for pname, pinfo in providers.items():
         if not isinstance(pinfo, dict) or "url" not in pinfo:
             add("SCRIPT", "E_SCHEMA_MISSING", f"{p.name}: provider {pname} 缺 url")

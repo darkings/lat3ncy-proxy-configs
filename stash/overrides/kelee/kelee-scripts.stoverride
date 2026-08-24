@@ -2,12 +2,6 @@ name: kelee-scripts
 desc: KeLee Scripts Hub (26 providers)
 icon: https://raw.githubusercontent.com/KOP-XIAO/QuantumultX/master/Icons/Kelee.png
 script-providers:
-  amap-remove-ads:
-    url: https://stash.ponyo.fun/scripts/amap-remove-ads.js
-    interval: 86400
-  response-bundle:
-    url: https://github.com/NSRingo/WeatherKit/releases/download/v3.1.0/response.bundle.js
-    interval: 86400
   bilibili-proto-request-kokoryh:
     url: https://stash.ponyo.fun/scripts/bilibili-proto-request-kokoryh.js
     interval: 86400
@@ -17,11 +11,23 @@ script-providers:
   bilibili-json-kokoryh:
     url: https://stash.ponyo.fun/scripts/bilibili-json-kokoryh.js
     interval: 86400
+  amap-remove-ads:
+    url: https://stash.ponyo.fun/scripts/amap-remove-ads.js
+    interval: 86400
   jd-remove-ads:
     url: https://stash.ponyo.fun/scripts/jd-remove-ads.js
     interval: 86400
   pinduoduo-remove-ads:
     url: https://stash.ponyo.fun/scripts/pinduoduo-remove-ads.js
+    interval: 86400
+  taobao-remove-ads:
+    url: https://stash.ponyo.fun/scripts/taobao-remove-ads.js
+    interval: 86400
+  response-bundle:
+    url: https://github.com/NSRingo/WeatherKit/releases/download/v3.1.0/response.bundle.js
+    interval: 86400
+  spotify-remove-ads:
+    url: https://stash.ponyo.fun/scripts/spotify-remove-ads.js
     interval: 86400
   spotify-response:
     url: https://stash.ponyo.fun/scripts/spotify-response.js
@@ -34,12 +40,6 @@ script-providers:
     interval: 86400
   external-lyrics-response:
     url: https://stash.ponyo.fun/scripts/external-lyrics-response.js
-    interval: 86400
-  spotify-remove-ads:
-    url: https://stash.ponyo.fun/scripts/spotify-remove-ads.js
-    interval: 86400
-  taobao-remove-ads:
-    url: https://stash.ponyo.fun/scripts/taobao-remove-ads.js
     interval: 86400
   weixin-external-links-unlock:
     url: https://stash.ponyo.fun/scripts/weixin-external-links-unlock.js

@@ -4,12 +4,15 @@
     "loon-macos.lcf",
     "stash-ios.yaml",
     "stash/overrides/pinduoduo-cleanup.stoverride",
+    "stash/overrides/kelee/scripts/pinduoduo-remove-ads.js",
     "sparkle-windows-override.yaml",
     "README.md"
   ],
   "required_hosts": [
     "raw.githubusercontent.com",
-    "cdn.jsdelivr.net"
+    "cdn.jsdelivr.net",
+    "github.com",
+    "stash.ponyo.fun"
   ],
   "warning_hosts": [
     "geodata.kelee.one",
@@ -20,6 +23,7 @@
     "dns.alidns.com",
     "doh.pub",
     "controlplane.tailscale.com",
+    "pfile.pddpic.com",
     "sub.store",
     "t.me",
     "www.gstatic.com"
