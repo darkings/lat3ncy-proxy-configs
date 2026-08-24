@@ -5,7 +5,7 @@
 # icon: https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/Himalaya.png
 # date: 2026-06-01 17:11:35
 # lpx: https://kelee.one/Tool/Loon/Lpx/Himalaya_remove_ads.lpx
-# converted: Loon .lpx -> Stash .stoverride (auto)
+# converted: Loon .lpx -> Stash .stoverride (auto) v2
 # note: kelee.one resources require Loon UA; if Stash fetch fails, add proxy or use GitHub mirror
 name: 喜马拉雅去广告
 desc: 移除开屏广告、播放器广告、各类推荐内容，精简频道和我的页面。
@@ -33,7 +33,6 @@ http:
   - ^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/subscribe\/v\d\/subscribe\/tagAlbumList$ - reject-dict
   - ^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/track-feed\/v\d\/chase\/recommend\/ - reject-dict
   - ^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/social-web\/follow-stream\/category\/\d+$ - reject-dict
-  - ^https:\/\/(m|mwsa)\.ximalaya\.com\/community\/square\/v\d\/stream\? - reject-dict
   - ^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/mobile-playpage\/playpage\/recommendContentV\d\/ - reject-dict
   - ^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/mobile-playpage\/playpage\/recommend\/resource\/allocation\/ - reject-dict
   - ^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/firework-portal\/v\d+\/sync\? - reject-dict
@@ -50,3 +49,8 @@ http:
   - ^https:\/\/mobwsa\.ximalaya\.com\/mobile-playpage\/playpage\/tabs\/v2\/ response-jq del(.data.playpage.resourceMap.defaultResource, .data.playpage.resourceMap.playPageTip)
   - ^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/mobile-user\/v\d\/homePage\/ response-jq del(.data.freeListenV2)
   - ^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/mobile-user\/v\d\/homePage\/ response-jq .data.serviceModule.entrances |= map(select(.name == "全部服务"))
+  mock:
+  - match: ^https:\/\/(m|mwsa)\.ximalaya\.com\/community\/square\/v\d\/stream\?
+    status-code: 200
+    body: '{"data":{"cards":[{"content":{},"type":"RECOMMENDS"}]},"ret":0}'
+    content-type: application/json

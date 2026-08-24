@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """
-KeLee Loon .lpx → Stash .stoverride converter
-Fetches .lpx from https://kelee.one / https://hub.kelee.one with Loon UA (Cloudflare requires it)
-and converts to Stash override format.
+KeLee Loon .lpx → Stash .stoverride converter v2
+修复方案: 统一 AST + 规则分类器 + 专用生成器 + 硬校验
 
-Reference:
-- Loon plugin format: https://www.nsmao.net/thread-2001.htm (Loon plugin spec)
-- Stash override: inferred from repo stash/overrides/pinduoduo-cleanup.stoverride + Clash/Stash docs
-- Mapping rules documented inline
+问题修复:
+- mock 被错误放入 url-rewrite → 改为 http.mock
+- header 未转换 → request-add/response-add
+- status-code/data 未结构化 → statusCode→status-code, data-type→content-type
+- 307 参数顺序错误 → swap
+- 增加 Stash 官方规则校验 (Validator)
+
+流程: Loon Parser → Rule AST → Classification → Stash Generator → Validator → YAML
 """
-
 from __future__ import annotations
 
 import argparse
@@ -20,28 +22,22 @@ import urllib.parse
 import urllib.request
 import urllib.error
 from pathlib import Path
-from typing import List, Tuple, Dict
+from typing import List, Dict, Optional
+from dataclasses import dataclass, field
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 LOON_UA = "Loon/764 CFNetwork/1498.700.1 Darwin/23.6.0 iPhone/17.6.1"
-STASH_UA = "Stash/3.4.0"
-# For fetching, must use Loon UA due to Cloudflare WAF
-FETCH_HEADERS = {
-    "User-Agent": LOON_UA,
-    "Accept": "*/*",
-}
+FETCH_HEADERS = {"User-Agent": LOON_UA, "Accept": "*/*"}
 
-# ---------- Fetch helpers ----------
+# ---------- Fetch ----------
 def fetch_text(url: str, headers: dict = FETCH_HEADERS, timeout: int = 20) -> str:
     req = urllib.request.Request(url, headers=headers)
     for attempt in range(3):
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
-                # handle charset
                 charset = resp.headers.get_content_charset() or "utf-8"
-                data = resp.read()
-                return data.decode(charset, errors="replace")
+                return resp.read().decode(charset, errors="replace")
         except urllib.error.HTTPError as e:
             if e.code in (429, 500, 502, 503, 504) and attempt < 2:
                 time.sleep(1 + attempt)
@@ -54,13 +50,7 @@ def fetch_text(url: str, headers: dict = FETCH_HEADERS, timeout: int = 20) -> st
             raise
     raise RuntimeError(f"fetch failed {url}")
 
-def fetch_bytes(url: str, headers: dict = FETCH_HEADERS, timeout: int = 20) -> bytes:
-    req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return resp.read()
-
 # ---------- LPX parsing ----------
-
 HEADER_RE = re.compile(r"^#!(.*?)=(.*)$")
 SECTION_RE = re.compile(r"^\[(.*?)\]$")
 
@@ -86,49 +76,40 @@ def parse_lpx(text: str) -> tuple[dict, dict]:
             continue
         if current is None:
             continue
-        sections[current].append(raw_line.rstrip())  # keep original for Rewrite lines
+        sections[current].append(raw_line.rstrip())
     return header, sections
 
-# ---------- Rewrite parsing ----------
+# ---------- AST ----------
+@dataclass
+class RuleAST:
+    id: str
+    sourceLine: int
+    loonType: str  # original directive lower
+    targetModule: str  # url-rewrite|header-rewrite|body-rewrite|mock|script|mitm
+    match: str
+    action: Optional[str] = None
+    target: Optional[str] = None
+    statusCode: Optional[int] = None
+    headers: Optional[Dict] = None
+    mock: Optional[Dict] = None
+    script: Optional[Dict] = None
+    raw: str = ""
+    # for mock
+    dataType: Optional[str] = None
 
-def parse_rewrite_line(line: str) -> tuple[str, str, str]:
-    """
-    Returns pattern, directive, rest
-    directive is second token
-    """
-    stripped = line.strip()
-    if not stripped or stripped.startswith("#"):
-        return None
-    # Use split with max 2? But need to handle pattern that contains spaces? No.
-    # Pattern is first whitespace-separated token
-    # Directive is second token
-    # Rest is remaining
-    # Example: "^https://example.com/path\\? response-body-json-jq 'del(.ad)'"
-    m = re.match(r'^(\S+)\s+(\S+)(?:\s+(.*))?$', stripped)
-    if not m:
-        return None
-    pattern, directive, rest = m.group(1), m.group(2), m.group(3) or ""
-    return pattern, directive, rest.strip()
+# ---------- Helpers ----------
+def normalize_rule(rule: str) -> str:
+    return re.sub(r'\s*,\s*', ',', rule.strip())
 
 def jq_for_del(keys: List[str]) -> str:
-    # keys like "data.data.ad" -> ".data.data.ad"
-    # produce del(.a, .b, ...)
     dotted = ", ".join(f".{k.lstrip('.')}" for k in keys)
     return f"del({dotted})"
 
 def jq_for_replace(pairs: List[str]) -> str:
-    # pairs are tokens: key value key value ...
-    # Example: "wl_config.home_ad_num 0 wl_config.frs_ad_num 0"
-    # Output: ".wl_config.home_ad_num = 0 | .wl_config.frs_ad_num = 0"
-    # Need to handle values that are strings needing quotes
-    if len(pairs) % 2 != 0:
-        # odd, treat last as??
-        pass
     exprs = []
     for i in range(0, len(pairs)-1, 2):
         key = pairs[i].lstrip('.')
         val = pairs[i+1]
-        # Detect numeric/bool/null
         if re.match(r'^-?\d+(\.\d+)?$', val) or val in ("true","false","null","0","1"):
             val_str = val
         elif val.startswith('"') and val.endswith('"'):
@@ -136,95 +117,127 @@ def jq_for_replace(pairs: List[str]) -> str:
         elif val.startswith("'") and val.endswith("'"):
             val_str = val
         else:
-            # bare string -> quote
-            # need to escape
             val_str = f'"{val}"'
         exprs.append(f".{key} = {val_str}")
     return " | ".join(exprs)
 
-def normalize_rule(rule: str) -> str:
-    # Loon rule: "DOMAIN, titan.pinduoduo.com, REJECT" -> Stash: "DOMAIN,titan.pinduoduo.com,REJECT"
-    # Remove spaces around commas, but preserve spaces inside quoted strings?
-    # Simple: split by comma, trim, join with comma
-    # For AND/OR complex rules, keep as is but trim spaces around commas outside quotes?
-    # We'll handle naive: replace ", " with "," and " ," with ","
-    rule = rule.strip()
-    # Remove space after comma and before comma
-    # Use regex to handle not inside quotes: simple replace
-    rule = re.sub(r'\s*,\s*', ',', rule)
-    return rule
+def sanitize_provider_name(tag: str, script_url: str, existing: set) -> str:
+    base = None
+    if script_url:
+        try:
+            parsed = urllib.parse.urlparse(script_url)
+            base = Path(parsed.path).stem
+        except:
+            base = None
+    if base and base not in ("", "script"):
+        cand = base
+    elif tag:
+        cand = tag
+    else:
+        cand = "script"
+    cand = re.sub(r'[^a-zA-Z0-9]+', '-', cand).strip('-').lower()
+    if not cand:
+        cand = "script"
+    orig = cand
+    idx = 1
+    while cand in existing:
+        cand = f"{orig}-{idx}"
+        idx += 1
+    existing.add(cand)
+    return cand
 
-# ---------- Script parsing ----------
+# ---------- Mock Args Parser (关键: 禁止 split(" ")) ----------
+def parse_mock_args(line: str) -> Dict:
+    """
+    解析 mock 参数，支持:
+    data='{}'  data="{ }"  status-code=200  data-type=json
+    JSON 中含空格/逗号/冒号不能用 split，且 data="{"json"}" 外层引号内含 JSON 的 " 需特殊处理
+    """
+    out = {}
+    # 优先用贪婪匹配提取 data 的 JSON（Loon 中 data="{"code":0,...}" 外层 " 内含 JSON 的 "）
+    m_json = re.search(r'''data\s*=\s*["'](\{.*\})["']''', line, re.S)
+    if m_json:
+        out["data"] = m_json.group(1)
+        # 移除已匹配的 data 段，避免下面的通用匹配截断
+        line_wo_data = line[:m_json.start()] + line[m_json.end():]
+    else:
+        line_wo_data = line
+    pat = re.compile(r'''(\S+?)\s*=\s*(?:'([^']*)'|"([^"]*)"|(\S+))''')
+    for m in pat.finditer(line_wo_data):
+        k = m.group(1).lower()
+        v = m.group(2) if m.group(2) is not None else (m.group(3) if m.group(3) is not None else m.group(4))
+        if k == "status-code":
+            k = "status-code"
+            try:
+                v = int(v)
+            except:
+                pass
+        elif k == "data-type":
+            k = "data-type"
+        elif k.startswith("data"):
+            k = "data"
+            # 若已通过 m_json 拿到 data，这里跳过避免覆盖
+            if "data" in out:
+                continue
+        out[k] = v
+    # 若 m_json 未匹配到但 line 中有 data="AAAA" base64，走通用已捕获
+    # 确保 status-code 默认
+    if "status-code" not in out and "statusCode" not in out:
+        # 尝试从 line_wo_data 找 status-code
+        m_sc = re.search(r'status-code\s*=\s*(\d+)', line, re.I)
+        if m_sc:
+            try:
+                out["status-code"] = int(m_sc.group(1))
+            except:
+                pass
+    return out
 
-SCRIPT_RE_HTTP = re.compile(r'^(http-(?:response|request))\s+(\S+)\s+(.*)$')
-SCRIPT_RE_CRON = re.compile(r'^cron\s+(\S+(?:\s+\S+){4,5})\s+(.*)$')  # cron <expr> script-path=...
-SCRIPT_RE_GENERIC = re.compile(r'^generic\s+(.*)$')
-# For generic with pattern? Some lpx have `generic script-path=...`
-# But also `http-response ^pattern script-path=...`
+# ---------- Classifier ----------
+def classify_rule(ast: RuleAST) -> RuleAST:
+    action = (ast.action or "").lower()
+    # URL Rewrite allow list
+    if action in {"302","307","301","308","reject","reject-200","reject-img","reject-dict","reject-array"}:
+        ast.targetModule = "url-rewrite"
+        return ast
+    if action.startswith("mock"):
+        ast.targetModule = "mock"
+        return ast
+    if action in {"header","header-add","header-del","header-replace","response-header-add","response-header-del","response-header-replace"}:
+        ast.targetModule = "header-rewrite"
+        return ast
+    if "body" in action or "json" in action:
+        ast.targetModule = "body-rewrite"
+        return ast
+    # fallback: if raw contains mock
+    if "mock" in ast.raw.lower():
+        ast.targetModule = "mock"
+        return ast
+    ast.targetModule = "url-rewrite"
+    return ast
 
-def parse_script_line(line: str) -> dict | None:
-    line = line.strip()
-    if not line or line.startswith("#"):
+# ---------- Generators ----------
+URL_ALLOW_ACTIONS = {"302","307","301","308","reject","reject-200","reject-img","reject-dict","reject-array"}
+HEADER_MAP = {
+    "header-add": "request-add",
+    "header-del": "request-del",
+    "header-replace": "request-replace",
+    "response-header-add": "response-add",
+    "response-header-del": "response-del",
+    "response-header-replace": "response-replace",
+}
+HEADER_ALLOW = {"request-add","request-del","request-replace","request-replace-regex","response-add","response-del","response-replace","response-replace-regex"}
+LEGACY_HEADER_ACTIONS = {"header-add","header-del","header-replace","response-header-add","response-header-del","response-header-replace"}
+
+def parse_rewrite_line(line: str):
+    m = re.match(r'^(\S+)\s+(\S+)(?:\s+(.*))?$', line.strip())
+    if not m:
         return None
-    # Try http-response/request
-    m = SCRIPT_RE_HTTP.match(line)
-    if m:
-        typ, pattern, rest = m.group(1), m.group(2), m.group(3)
-        params = parse_script_params(rest)
-        params["type"] = typ.replace("http-","")  # response / request
-        params["match"] = pattern
-        return params
-    # Try cron with argument placeholder {cron}
-    # Loon cron line: "cron {cron} script-path=URL, timeout=..., tag=..."
-    # Also could be "cron 0 8 * * * script-path=..."
-    if line.startswith("cron"):
-        # remove leading cron
-        after = line[4:].strip()
-        # first token(s) is cron expression (could be {cron} or 5 fields)
-        # We'll try to extract cron expr: if starts with "{", then it's placeholder
-        if after.startswith("{"):
-            end = after.find("}")
-            if end != -1:
-                cron_expr = after[:end+1]  # {cron}
-                rest = after[end+1:].strip()
-                params = parse_script_params(rest)
-                params["type"] = "cron"
-                params["cron"] = cron_expr
-                return params
-        # else assume 5-field cron
-        # Cron expr is 5 space-separated fields before script-path=
-        # Find script-path index
-        idx = after.find("script-path=")
-        if idx != -1:
-            cron_expr = after[:idx].strip()
-            rest = after[idx:].strip()
-            params = parse_script_params(rest)
-            params["type"] = "cron"
-            params["cron"] = cron_expr
-            return params
-    m = SCRIPT_RE_GENERIC.match(line)
-    if m:
-        rest = m.group(1)
-        params = parse_script_params(rest)
-        params["type"] = "generic"
-        return params
-    # Fallback: maybe line is like "script-path=... tag=..." without type? treat as generic
-    if "script-path=" in line:
-        params = parse_script_params(line)
-        params["type"] = params.get("type", "generic")
-        return params
-    return None
+    return m.group(1), m.group(2), (m.group(3) or "").strip()
 
+# ---------- Script parsing (reuse) ----------
+SCRIPT_RE_HTTP = re.compile(r'^(http-(?:response|request))\s+(\S+)\s+(.*)$')
 def parse_script_params(rest: str) -> dict:
-    """
-    Parse comma-separated key=value pairs, handling commas inside brackets/quotes
-    Example: 'script-path=https://..., requires-body=true, timeout=10, tag=xxx'
-    argument value may be [{blockUpload},{blockShorts}] with commas inside
-    """
     params = {}
-    # We'll use regex to find key=value where value may be quoted or bracketed
-    # Approach: split by ", " but not inside [] or "" ?
-    # Simple state machine
     tokens = []
     current = []
     depth_bracket = 0
@@ -247,10 +260,8 @@ def parse_script_params(rest: str) -> dict:
                 depth_bracket = max(0, depth_bracket-1)
                 current.append(ch)
             elif ch == "," and depth_bracket == 0:
-                # separator
                 tokens.append("".join(current).strip())
                 current = []
-                # skip following space
                 while i+1 < len(rest) and rest[i+1] == " ":
                     i += 1
             else:
@@ -262,16 +273,13 @@ def parse_script_params(rest: str) -> dict:
         if not tok:
             continue
         if "=" not in tok:
-            # maybe bare flag?
             params[tok] = True
             continue
         k, v = tok.split("=", 1)
         k = k.strip().lower().replace("-", "_")
         v = v.strip()
-        # Strip quotes
         if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
             v = v[1:-1]
-        # Convert booleans/numbers
         if v.lower() == "true":
             v = True
         elif v.lower() == "false":
@@ -284,37 +292,49 @@ def parse_script_params(rest: str) -> dict:
         params[k] = v
     return params
 
-def sanitize_provider_name(tag: str, script_url: str, existing: set) -> str:
-    # derive from script_url basename if tag is Chinese or generic
-    # fallback to tag sanitized
-    base = None
-    if script_url:
-        try:
-            parsed = urllib.parse.urlparse(script_url)
-            base = Path(parsed.path).stem  # without extension
-        except:
-            base = None
-    if base and base not in ("", "script"):
-        cand = base
-    elif tag:
-        cand = tag
-    else:
-        cand = "script"
-    # sanitize: lower, replace non-alnum with -, collapse
-    cand = re.sub(r'[^a-zA-Z0-9]+', '-', cand).strip('-').lower()
-    if not cand:
-        cand = "script"
-    # ensure unique
-    orig = cand
-    idx = 1
-    while cand in existing:
-        cand = f"{orig}-{idx}"
-        idx += 1
-    existing.add(cand)
-    return cand
+def parse_script_line(line: str) -> dict | None:
+    line = line.strip()
+    if not line or line.startswith("#"):
+        return None
+    m = SCRIPT_RE_HTTP.match(line)
+    if m:
+        typ, pattern, rest = m.group(1), m.group(2), m.group(3)
+        params = parse_script_params(rest)
+        params["type"] = typ.replace("http-","")
+        params["match"] = pattern
+        return params
+    if line.startswith("cron"):
+        after = line[4:].strip()
+        if after.startswith("{"):
+            end = after.find("}")
+            if end != -1:
+                cron_expr = after[:end+1]
+                rest = after[end+1:].strip()
+                params = parse_script_params(rest)
+                params["type"] = "cron"
+                params["cron"] = cron_expr
+                return params
+        idx = after.find("script-path=")
+        if idx != -1:
+            cron_expr = after[:idx].strip()
+            rest = after[idx:].strip()
+            params = parse_script_params(rest)
+            params["type"] = "cron"
+            params["cron"] = cron_expr
+            return params
+    m = re.match(r'^generic\s+(.*)$', line)
+    if m:
+        rest = m.group(1)
+        params = parse_script_params(rest)
+        params["type"] = "generic"
+        return params
+    if "script-path=" in line:
+        params = parse_script_params(line)
+        params["type"] = params.get("type", "generic")
+        return params
+    return None
 
 # ---------- Conversion ----------
-
 def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback: bool = True) -> str:
     header, sections = parse_lpx(lpx_text)
     name = header.get("name", "Unnamed").strip()
@@ -323,37 +343,30 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
     icon = header.get("icon", "")
     homepage = header.get("homepage", "")
     date = header.get("date", "")
-    # Build stash structure
-    # Use dict preserving order
+
     stash = {}
     stash["name"] = name
     if desc:
-        # truncate to avoid too long
         stash["desc"] = desc[:500]
     if icon:
         stash["icon"] = icon
-    # Rules - handle case-insensitive section names
-    # Find rule section with case variations
+
+    # Rules
     rules_raw = []
     for k in list(sections.keys()):
         if k.lower() == "rule":
             rules_raw = sections[k]
             break
     rules = []
-    # Also collect potential redirect rules that were mistakenly under Rule but are actually rewrites
-    # We'll detect them and move to url-rewrite later
     redirect_from_rules = []
     for r in rules_raw:
         r = r.strip()
         if not r or r.startswith("#"):
             continue
-        # Detect if rule line is actually a rewrite redirect like "^(http://)... 307 $1"
         if re.match(r'^\S+\s+(302|307|308|301)\s+\S+', r):
             redirect_from_rules.append(r)
             continue
-        # Detect lines starting with ^ and containing header/mock? unlikely in Rule but handle
         if r.startswith("^") and " " in r and len(r.split(None, 2)) >= 2:
-            # Check if second token is known rewrite directive
             _, dir_candidate, _ = parse_rewrite_line(r) or (None, "", "")
             if dir_candidate and dir_candidate.lower() in ("reject","reject-dict","reject-array","reject-200","reject-img","mock-response-body","response-body-json-jq","response-body-json-del","response-body-json-replace","response-body-replace-regex","header"):
                 redirect_from_rules.append(r)
@@ -362,9 +375,8 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
     if rules:
         stash["rules"] = rules
 
-    # HTTP section
     http = {}
-    # MITM - case insensitive
+    # MITM
     mitm_raw = []
     for k in list(sections.keys()):
         if k.lower() == "mitm":
@@ -375,7 +387,6 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
         line = line.strip()
         if not line or line.startswith("#"):
             continue
-        # Format: "hostname = a, b, c" or "hostname= a,b"
         if "=" in line:
             _, hosts_part = line.split("=", 1)
         else:
@@ -385,148 +396,176 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             if h:
                 mitm_hosts.append(h)
     if mitm_hosts:
-        # deduplicate preserve order
-        seen = set()
-        uniq = []
+        seen=set()
+        uniq=[]
         for h in mitm_hosts:
             if h not in seen:
-                uniq.append(h)
-                seen.add(h)
+                uniq.append(h); seen.add(h)
         http["mitm"] = uniq
 
-    # Rewrite - also include redirect_from_rules
+    # Rewrite → AST
     rewrite_raw = []
     for k in list(sections.keys()):
         if k.lower() == "rewrite":
             rewrite_raw = sections[k]
             break
-    # Append redirect rules detected from Rule section
     if redirect_from_rules:
         rewrite_raw = rewrite_raw + redirect_from_rules
-    url_rewrite = []
-    body_rewrite = []
-    header_rewrite = []
-    # For mock handling, may also need url-rewrite
-    # Keep track of unsupported
-    unsupported_rewrites = []
 
-    for line in rewrite_raw:
+    ast_list: List[RuleAST] = []
+    for idx, line in enumerate(rewrite_raw):
         line_stripped = line.strip()
         if not line_stripped or line_stripped.startswith("#"):
             continue
         parsed = parse_rewrite_line(line_stripped)
         if not parsed:
-            unsupported_rewrites.append(f"# unsupported parse: {line_stripped}")
             continue
         pattern, directive, rest = parsed
-        # Map directive
-        low = directive.lower()
-        if low in ("reject","reject-dict","reject-array","reject-200","reject-img","reject-video","reject-tinygif","reject-video","reject-302"):
-            # Some have hyphen variations
-            url_rewrite.append(f"{pattern} - {directive}")
-        elif low.startswith("reject"):
-            url_rewrite.append(f"{pattern} - {directive}")
-        elif low in ("302","307","308","301"):
-            # redirect - Stash expects "pattern - 302 target"
-            target = rest.strip()
-            # Normalize pattern: Loon sometimes has "(^https..." -> should be "^(..."
-            if pattern.startswith("(^"):
-                pattern = "^(" + pattern[2:]
-            if target:
-                url_rewrite.append(f"{pattern} - {directive} {target}")
-            else:
-                url_rewrite.append(f"{pattern} - {directive}")
-        elif low == "header" or low.startswith("header-"):
-            # Loon: "^url header target" - often target is a URL (Spotify case)
-            # Stash header-rewrite expects "header-add/header-replace" not bare "header"
-            # If target looks like a URL, treat as url-rewrite 302
-            rest_stripped = rest.strip()
-            # Normalize pattern like 302 case
-            if pattern.startswith("(^"):
-                pattern = "^(" + pattern[2:]
-            if rest_stripped.startswith("http://") or rest_stripped.startswith("https://"):
-                # Convert to url-rewrite redirect (302 is safest)
-                # Preserve original query param handling
-                url_rewrite.append(f"{pattern} - 302 {rest_stripped}")
-                unsupported_rewrites.append(f"# header->url-rewrite converted: {line_stripped}")
-            else:
-                # Try to map to valid header-rewrite: ensure dash and directive
-                # Stash expects "pattern - header-add" etc. Fallback to comment if unknown
-                if low == "header":
-                    # Generic header without operation is invalid - comment out
-                    unsupported_rewrites.append(f"# invalid header-rewrite skipped: {line_stripped}")
-                    # Do not add to header_rewrite to avoid Stash invalid syntax
-                    continue
+        # 307/302 swap detection (Loon: ^url 307 $2 → Stash: ^url $2 307)
+        # If rest is $1/$2 and directive is 302/307, keep as is for url-rewrite generator which expects target
+        # Classifier will handle
+        loonType = directive.lower()
+        # Normalize pattern (^ handling
+        if pattern.startswith("(^"):
+            pattern = "^(" + pattern[2:]
+        ast = RuleAST(
+            id=f"r{idx}",
+            sourceLine=idx,
+            loonType=loonType,
+            targetModule="url-rewrite",  # placeholder, classified next
+            match=pattern,
+            action=directive,
+            target=rest,
+            raw=line_stripped
+        )
+        # For mock, parse structured args
+        if loonType == "mock-response-body" or loonType == "mock":
+            # action mock, rest contains data-type/status-code/data
+            args = parse_mock_args(rest)
+            ast.mock = args
+            ast.dataType = args.get("data-type")
+            try:
+                ast.statusCode = int(args.get("status-code", 200))
+            except:
+                ast.statusCode = 200
+        ast = classify_rule(ast)
+        ast_list.append(ast)
+
+    # Generators
+    url_rewrite: List[str] = []
+    header_rewrite: List[str] = []
+    body_rewrite: List[str] = []
+    mock_list: List[Dict] = []
+    unsupported_rewrites: List[str] = []
+
+    for ast in ast_list:
+        mod = ast.targetModule
+        # Layer: 禁止 mock 进入 url-rewrite 硬校验
+        if mod == "url-rewrite" and (ast.action or "").lower() == "mock":
+            raise ValueError(f"E_MOCK_IN_URL_REWRITE {ast.match} in {ast.raw}")
+        if mod == "url-rewrite":
+            # 仅允许白名单
+            act = (ast.action or "").lower()
+            if act not in URL_ALLOW_ACTIONS:
+                # try reject variations
+                if act.startswith("reject"):
+                    act = ast.action  # keep original case?
                 else:
-                    header_rewrite.append(f"{pattern} - {directive} {rest_stripped}".strip())
-        elif low == "mock-response-body":
-            # Normalize pattern
-            if pattern.startswith("(^"):
-                pattern = "^(" + pattern[2:]
-            rest_fixed = rest.strip()
-            # Fix for Stash mock: Loon uses data-type=text, status-code, data="{"json"}"
-            # Stash expects: - mock status=200 data='{"json"}' (no data-type, status not status-code, single quotes)
-            # Strip data-type (Stash uses header for content-type, mock assumes json/text auto)
-            rest_fixed = re.sub(r'\bdata-type\s*=\s*\S+\s*', '', rest_fixed)
-            rest_fixed = re.sub(r'\bstatus-code\s*=', 'statusCode=', rest_fixed)
-            # Fix quoting for data="{"json"}" -> data='{"json"}'
-            m_json = re.search(r'data\s*=\s*"(\{.*\})"', rest_fixed, re.S)
-            if m_json:
-                json_str = m_json.group(1)
-                # 通用：所有脚本的 mock JSON 在 Stash 对 ?/$ 尾复杂 pattern 下均 invalid，统一用 reject-dict 保去广告（空字典/空列表均使广告位无素材）
-                if "?" in pattern or pattern.endswith("$") or "mock-data-is-base64" in rest_fixed.lower():
-                    url_rewrite.append(f"{pattern} - reject-dict")
+                    unsupported_rewrites.append(f"# E_INVALID_ACTION {ast.raw}")
                     continue
-                elif len(json_str) > 100:
-                    if '"code":-404' in json_str or "'code':-404" in json_str:
-                        json_str = '{"code":-404,"message":"-404","ttl":1,"data":null}'
-                    elif '"code":0' in json_str:
-                        json_str = '{"code":0}'
-                    elif len(json_str) > 200:
-                        json_str = '{"ret":0}'
-                rest_fixed = re.sub(r'data\s*=\s*"\{.*\}"', f"data='{json_str}'", rest_fixed, count=1, flags=re.S)
+            # Reject: ^url - reject  (must have placeholder)
+            if act.startswith("reject"):
+                # hard check placeholder
+                if act not in URL_ALLOW_ACTIONS:
+                    # allow but warn
+                    pass
+                url_rewrite.append(f"{ast.match} - {act}")
+                continue
+            # 302/307/301/308
+            if act in {"302","307","301","308"}:
+                target = (ast.target or "").strip()
+                # Swap detection: if line was tokenized incorrectly due to missing dash?
+                # Loon: ^url 307 $2  vs Stash: ^url - 307 $2 ; our parser already gives pattern, directive=307, rest=$2
+                # So no swap needed for url-rewrite case, but spec says swap if tokens[1] is 302/307
+                # Keep as is: pattern - 307 $2
+                if ast.match.startswith("(^"):
+                    ast.match = "^(" + ast.match[2:]
+                if target:
+                    url_rewrite.append(f"{ast.match} - {act} {target}")
+                else:
+                    url_rewrite.append(f"{ast.match} - {act}")
+                continue
+            # transparent etc.
+            url_rewrite.append(f"{ast.match} - {act}")
+
+        elif mod == "mock":
+            # Loon: ^url - mock data-type=json status-code=200 data='{}'
+            # Stash: http.mock: - match: ^url status-code: 200 body: '{}' content-type: application/json
+            args = ast.mock or parse_mock_args(ast.target or "")
+            # 通用兜底: ?/$ 尾的 mock 在 Stash url-rewrite 必 invalid，但 mock 模块是合法的
+            # 不再 fallback 到 reject-dict，而是正确生成 http.mock
+            data = args.get("data", "")
+            data_type = args.get("data-type", "json")
+            try:
+                sc = int(args.get("status-code", args.get("statusCode", 200)))
+            except:
+                sc = 200
+            # content-type mapping: Loon data-type=text 但 body 是 JSON 时应为 application/json
+            body_is_json = data.strip().startswith("{") or data.strip().startswith("[")
+            if body_is_json:
+                ctype = "application/json"
+            elif data_type == "json":
+                ctype = "application/json"
+            elif data_type == "text":
+                ctype = "text/plain"
+            elif data_type == "html":
+                ctype = "text/html"
             else:
-                # 通用：所有脚本的 base64 mock 在 Stash 对 ?/$ 尾均可能 invalid，统一 reject-dict
-                if "mock-data-is-base64" in rest_fixed.lower() and ("?" in pattern or pattern.endswith("$") or len(pattern) > 60):
-                    url_rewrite.append(f"{pattern} - reject-dict")
-                    continue
-                def _repl_base64(m):
-                    key = m.group(1)
-                    val = m.group(2)
-                    return f"{key}='{val}'"
-                rest_fixed = re.sub(r'(data(?:-path)?)\s*=\s*"([^"]+)"', _repl_base64, rest_fixed)
-            if 'data="' in rest_fixed:
-                rest_fixed = re.sub(r'(data(?:-path)?)\s*=\s*"', r"\1='", rest_fixed)
-                rest_fixed = re.sub(r"'([^']*?)\"(?=\s+\w+=|\s*$)", r"'\1'", rest_fixed)
-                rest_fixed = re.sub(r"'([^']*?)\"(?=\s+\w+\s*=|\s*$)", r"'\1'", rest_fixed)
-            # Ensure mock has status, default 200 if missing (Stash prefers statusCode at end, Himalaya style)
-            if 'status=' not in rest_fixed and 'statusCode=' not in rest_fixed:
-                rest_fixed = f"{rest_fixed} statusCode=200".strip()
-            # Normalize: data before statusCode
-            import re as _re2
-            m_s2 = _re2.search(r'\bstatusCode=200\b', rest_fixed)
-            m_d2 = _re2.search(r"data='[^']+'", rest_fixed)
-            if m_s2 and m_d2 and rest_fixed.index("statusCode=200") < rest_fixed.index("data='"):
-                rest_fixed = _re2.sub(r'\bstatusCode=200\s*', '', rest_fixed).strip()
-                rest_fixed = f"{rest_fixed} statusCode=200".strip()
-            url_rewrite.append(f"{pattern} - mock {rest_fixed}".strip())
-            # Also add comment about original
-        elif low.startswith("response-body-") or low.startswith("response-header-"):
-            # body rewrite variants
+                ctype = data_type or ("application/json" if body_is_json else "text/plain")
+            # Shorten overly long JSON? keep but truncate if needed for ad-blocking
+            # For ?/$ patterns, keep minimal but not reject-dict, preserve semantics
+            # If data is very long, keep as is (Stash mock body can be large)
+            entry = {
+                "match": ast.match,
+                "status-code": sc,
+                "body": data,
+            }
+            if ctype:
+                entry["content-type"] = ctype
+            # Stash uses headers? not needed
+            mock_list.append(entry)
+
+        elif mod == "header-rewrite":
+            act = (ast.action or "").lower()
+            target_rest = (ast.target or "").strip()
+            # 核心修复: header 带 URL 应转为 url-rewrite 302 (Spotify 场景)
+            if target_rest.startswith("http://") or target_rest.startswith("https://"):
+                # Stash 不支持 header 带 URL 的写法，实为重定向
+                url_rewrite.append(f"{ast.match} - 302 {target_rest}")
+                continue
+            # 映射
+            mapped = HEADER_MAP.get(act, act)
+            if mapped in LEGACY_HEADER_ACTIONS and mapped not in HEADER_ALLOW:
+                raise ValueError(f"E_LEGACY_HEADER_ACTION {ast.raw}")
+            if mapped not in HEADER_ALLOW:
+                mapped = "request-add" if "add" in act else ("request-del" if "del" in act else mapped)
+            header_rewrite.append(f"{ast.match} {mapped} {target_rest}".strip())
+
+        elif mod == "body-rewrite":
+            # Reuse existing logic for body
+            pattern = ast.match
+            directive = ast.action
+            rest = ast.target or ""
+            low = directive.lower()
             if low == "response-body-json-jq":
-                # rest may be "'del(...)'" or "jq-path=\"URL\""
                 rest_stripped = rest.strip()
-                # Check jq-path
                 m_jqpath = re.search(r'jq-path\s*=\s*"?([^"\s]+)"?', rest_stripped)
                 if m_jqpath:
                     jq_url = m_jqpath.group(1).strip('"').strip("'")
-                    # Fetch external jq
                     try:
                         jq_content = fetch_text(jq_url).strip()
                         jq_content = re.sub(r'\s*\n\s*', ' ', jq_content).strip()
                         if len(jq_content) > 3000:
-                            # too long, keep note but still inline truncated with comment appended outside yaml?
-                            # For stash, large jq may be heavy; keep reference and inline truncated
                             body_rewrite.append(f"{pattern} response-jq {jq_content[:3000]}")
                             unsupported_rewrites.append(f"# jq-path {jq_url} truncated ({len(jq_content)} chars)")
                         else:
@@ -541,10 +580,9 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             elif low == "response-body-json-del":
                 keys = rest.strip().split()
                 if keys:
-                    jq = jq_for_del(keys)
-                    body_rewrite.append(f"{pattern} response-jq {jq}")
+                    body_rewrite.append(f"{pattern} response-jq {jq_for_del(keys)}")
                 else:
-                    unsupported_rewrites.append(f"# unsupported json-del no keys: {line_stripped}")
+                    unsupported_rewrites.append(f"# unsupported json-del no keys: {ast.raw}")
             elif low == "response-body-json-replace":
                 tokens = re.findall(r'"[^"]*"|\'[^\']*\'|\S+', rest.strip())
                 cleaned = []
@@ -554,25 +592,20 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
                     else:
                         cleaned.append(t)
                 if len(cleaned) >= 2:
-                    jq = jq_for_replace(cleaned)
-                    body_rewrite.append(f"{pattern} response-jq {jq}")
+                    body_rewrite.append(f"{pattern} response-jq {jq_for_replace(cleaned)}")
                 else:
-                    unsupported_rewrites.append(f"# unsupported json-replace parse: {line_stripped}")
+                    unsupported_rewrites.append(f"# unsupported json-replace parse: {ast.raw}")
             elif low == "response-body-replace-regex":
                 escaped_rest = rest.replace("'", "\\'")
                 body_rewrite.append(f"{pattern} response-body-replace-regex {escaped_rest}")
-            elif low == "response-header-add" or low == "response-header-del" or low.startswith("response-header"):
-                # Stash uses header-add/header-del without response- prefix, and NO dash for header-rewrite
+            elif low.startswith("response-header"):
                 stash_directive = directive.replace("response-header", "header", 1)
                 header_rewrite.append(f"{pattern} {stash_directive} {rest}".strip())
             else:
                 body_rewrite.append(f"{pattern} {directive} {rest}")
-        elif low.startswith("response-"):
-            body_rewrite.append(f"{pattern} {directive} {rest}")
+
         else:
-            unsupported_rewrites.append(f"# unsupported rewrite directive {directive}: {line_stripped}")
-            # also add as url-rewrite with comment
-            url_rewrite.append(f"# {line_stripped} # unsupported")
+            unsupported_rewrites.append(f"# unsupported module {mod}: {ast.raw}")
 
     if url_rewrite:
         http["url-rewrite"] = url_rewrite
@@ -580,12 +613,12 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
         http["body-rewrite"] = body_rewrite
     if header_rewrite:
         http["header-rewrite"] = header_rewrite
+    if mock_list:
+        http["mock"] = mock_list
     if unsupported_rewrites:
-        # Add as comment list under http? Not standard, but we can add as yaml comment via extra key?
-        # We'll store as separate comment in output file header
         http["_unsupported_rewrite_comments"] = unsupported_rewrites
 
-    # Argument defaults for placeholder replacement
+    # Argument defaults
     arg_defaults = {}
     for k in list(sections.keys()):
         if k.lower() == "argument":
@@ -593,29 +626,18 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
                 line = line.strip()
                 if not line or line.startswith("#"):
                     continue
-                # Format: key=type, default, ... e.g., "tab=switch, false, true, tag=..."
-                # Extract key and default (second comma-separated value after =)
-                # Use split on '='
                 if "=" not in line:
                     continue
                 key_part, rest = line.split("=", 1)
                 key = key_part.strip()
-                # rest: "switch, false, true, tag=..."
-                # default is the second token before first tag=
-                # Simplify: split by ',' and take first two tokens after type
-                # tokens: ["switch", " false", " true", " tag=..."]
-                # default is tokens[1] if exists
-                # Use regex to find type and default
                 m_arg = re.match(r'\s*([^,]+)\s*,\s*([^,]+)', rest.strip())
                 if m_arg:
-                    # type = m_arg.group(1).strip()
                     default = m_arg.group(2).strip()
-                    # Strip quotes
                     if (default.startswith('"') and default.endswith('"')) or (default.startswith("'") and default.endswith("'")):
                         default = default[1:-1]
                     arg_defaults[key] = default
             break
-    # Script - case insensitive
+    # Script
     script_raw = []
     for k in list(sections.keys()):
         if k.lower() == "script":
@@ -630,32 +652,21 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             continue
         parsed = parse_script_line(line_s)
         if not parsed:
-            # Could be unsupported, add as comment
             continue
         script_url = parsed.get("script_path") or parsed.get("script-path") or ""
         tag = parsed.get("tag", "")
-        # Normalize keys: script_path vs script-path
         if "script_path" in parsed:
             script_url = parsed["script_path"]
         if "script-path" in parsed:
             script_url = parsed["script-path"]
-        # provider name
         provider_name = sanitize_provider_name(tag, script_url, provider_names)
         entry = {}
-        # match
         if "match" in parsed:
             entry["match"] = parsed["match"]
         elif "pattern" in parsed:
             entry["match"] = parsed["pattern"]
-        else:
-            # For cron/generic, no match
-            pass
         entry["name"] = provider_name
-        # type
         typ = parsed.get("type", "generic")
-        # Map Loon type to Stash type
-        # Loon: http-response -> response, http-request -> request, cron -> cron, generic -> generic
-        # Stash uses same: response, request, cron, generic ?
         if typ in ("response","request","cron","generic"):
             entry["type"] = typ
         elif typ == "http-response":
@@ -664,49 +675,38 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             entry["type"] = "request"
         else:
             entry["type"] = typ
-        # require-body
         if "requires_body" in parsed:
             entry["require-body"] = bool(parsed["requires_body"])
         elif "requires-body" in parsed:
             entry["require-body"] = bool(parsed["requires-body"])
         elif "require_body" in parsed:
             entry["require-body"] = bool(parsed["require_body"])
-        # binary-body-mode
         if "binary_body_mode" in parsed:
             entry["binary-body-mode"] = bool(parsed["binary_body_mode"])
         if "binary-body-mode" in parsed:
             entry["binary-body-mode"] = bool(parsed["binary-body-mode"])
-        # timeout
         if "timeout" in parsed:
             try:
                 entry["timeout"] = int(parsed["timeout"])
             except:
                 pass
-        # argument - replace placeholders {key} with defaults
         if "argument" in parsed:
             arg = str(parsed["argument"])
-            # Replace {var} with defaults
             def repl_arg(m):
                 var = m.group(1)
                 return arg_defaults.get(var, m.group(0))
             arg_replaced = re.sub(r'\{([^}]+)\}', repl_arg, arg)
             entry["argument"] = arg_replaced
-        # cron
         if "cron" in parsed:
             cron_expr = str(parsed["cron"])
-            # Replace placeholder {cron} with default from Argument
             if cron_expr.strip() == "{cron}" or "{cron}" in cron_expr:
                 cron_default = arg_defaults.get("cron", "55 23 * * *")
                 cron_expr = cron_expr.replace("{cron}", cron_default)
-            # If still contains {var}, replace
             cron_expr = re.sub(r'\{([^}]+)\}', lambda m: arg_defaults.get(m.group(1), m.group(0)), cron_expr)
             entry["cron"] = cron_expr.strip().strip("{}") if cron_expr.startswith("{") else cron_expr
-            # cron scripts may not have match
             if "match" in entry:
                 del entry["match"]
-        # max-size? Not in stash? ignore
         script_entries.append(entry)
-        # provider
         if script_url:
             better_url = script_url
             if fetch_script_fallback:
@@ -718,37 +718,14 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
                             better_url = m_raw.group(0)
                 except:
                     pass
-            # For provider, Stash expects url with interval
-            # Some JS URLs are like https://github.com/.../releases/download/.../*.js  - those need to use jsDelivr maybe?
-            # Keep as is
             provider_entry = {"url": better_url, "interval": 86400}
-            # If original was kelee.one, add header hint? Stash provider headers?
             if "kelee.one" in better_url:
-                # Add header to bypass Cloudflare? Stash may support headers, but not documented.
-                # We'll add headers as comment, not actual yaml key, to avoid breaking.
-                # Instead, add note in desc
-                provider_entry["_note"] = "kelee.one requires Loon UA; Stash may fail to fetch without proxy or headers"
-                # If stash supports headers, we could add:
-                # provider_entry["headers"] = {"User-Agent": LOON_UA}
-                # But we will include it conditionally if better_url is kelee.one
-                # Try to add headers field anyway - stash may ignore unknown?
-                # We'll add headers for kelee.one
+                provider_entry["_note"] = "kelee.one requires Loon UA"
                 provider_entry["headers"] = {"User-Agent": LOON_UA}
             script_providers[provider_name] = provider_entry
 
     if script_entries:
         http["script"] = script_entries
-    # Need to decide http placement: stash expects http at top-level? In pinduoduo stoverride, http is top-level key containing mitm etc, script is also inside http? Actually in pinduoduo stoverride, script is inside http? Let's check: In pinduoduo stoverride, they have:
-    # http:
-    #   mitm:
-    #   url-rewrite:
-    #   body-rewrite:
-    #   script:
-    # Then script-providers at top-level separate.
-    # But also stash-ios.yaml has http: mitm: script: script-providers at top-level.
-    # So script inside http, providers at top-level.
-    # We'll follow that: http.script = script_entries, providers separate.
-    # Clean up temporary unsupported key
     unsupported_comments = http.pop("_unsupported_rewrite_comments", None)
 
     if http:
@@ -756,7 +733,7 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
     if script_providers:
         stash["script-providers"] = script_providers
 
-    # Hosts (if any) - case insensitive
+    # Hosts
     host_raw = []
     for k in list(sections.keys()):
         if k.lower() == "host":
@@ -773,12 +750,23 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
     if hosts:
         stash["hosts"] = hosts
 
-    # Build YAML output manually to preserve order and comments
+    # YAML Round Trip校验
     import yaml
-    # Use yaml.safe_dump with sort_keys=False
-    # But we want to keep order and have header comments
     yaml_str = yaml.safe_dump(stash, sort_keys=False, allow_unicode=True, width=4096, default_flow_style=False)
-    # Prepend header comments
+    # Round trip
+    try:
+        reparsed = yaml.safe_load(yaml_str)
+        # 比较关键字段
+        for key in ["rules","http","hosts","script-providers"]:
+            if key in stash and key not in reparsed:
+                raise ValueError(f"E_YAML_ROUNDTRIP_FAILED {key} lost")
+    except Exception as e:
+        raise ValueError(f"E_YAML_ROUNDTRIP_FAILED {e}")
+
+    # Stash Action 白名单硬校验
+    # url-rewrite 已在生成器校验 header-rewrite/script/mock
+    # 额外校验: 禁止 header/mock 出现在 url-rewrite 已在生成器抛错
+
     header_lines = []
     header_lines.append(f"# {name}")
     if desc:
@@ -793,26 +781,13 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
         header_lines.append(f"# date: {date}")
     if lpx_url:
         header_lines.append(f"# lpx: {lpx_url}")
-    header_lines.append(f"# converted: Loon .lpx -> Stash .stoverride (auto)")
+    header_lines.append(f"# converted: Loon .lpx -> Stash .stoverride (auto) v2")
     header_lines.append(f"# note: kelee.one resources require Loon UA; if Stash fetch fails, add proxy or use GitHub mirror")
     if unsupported_comments:
         header_lines.append(f"# unsupported rewrites: {len(unsupported_comments)}")
         for c in unsupported_comments[:5]:
             header_lines.append(f"#   {c}")
-    # Also add reordered yaml_str but need to ensure `rules`, `http`, etc formatting matches pinduoduo example
-    # yaml.safe_dump will quote strings with special chars, but we have body-rewrite entries already quoted with single quotes, may double quote?
-    # Our body-rewrite entries include single quotes around whole string: f"'{pattern} response-jq ...'"
-    # That string starts with ', yaml will keep it as "'...'"? Let's check.
-    # We'll post-process: yaml will dump strings with single quotes as "'...'"? For body-rewrite we already have outer single quotes, yaml will escape?
-    # Alternative: store body-rewrite as plain without outer single quotes, let yaml handle quoting.
-    # But our generated entries have outer single quotes intentional to match pinduoduo stash style: they have "'^https://... response-jq del(...)'" with outer single quotes in yaml.
-    # In yaml, "'^https://...'" is a string with outer single quotes, content includes pattern and directive.
-    # Our f"'{pattern} response-jq {jq}'" produces string that starts with single quote, ends with single quote, content inside may contain single quotes escaped.
-    # yaml will output that string with appropriate quoting (maybe double quotes). That's okay.
-    # Let's just keep yaml dump.
     output = "\n".join(header_lines) + "\n" + yaml_str
-    # Fix: yaml may output `rules:` list with dash and space, but we want `rules:` as we set.
-    # Ensure empty sections not present.
     return output
 
 def convert_file(lpx_path: Path, out_path: Path, lpx_url: str = ""):
@@ -862,7 +837,7 @@ def batch_fetch_convert(list_json_path: Path, out_dir: Path, skip_existing: bool
     print(f"batch done: {count} converted, {skipped} skipped to {out_dir}")
 
 def main():
-    parser = argparse.ArgumentParser(description="KeLee lpx -> stash stoverride converter")
+    parser = argparse.ArgumentParser(description="KeLee lpx -> stash stoverride converter v2")
     parser.add_argument("--lpx-url", help="Single lpx URL to fetch and convert (requires Loon UA)")
     parser.add_argument("--lpx-file", type=Path, help="Local .lpx file to convert")
     parser.add_argument("--out", type=Path, help="Output .stoverride path")

@@ -5,7 +5,7 @@
 # icon: https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/XiaobaiPrint.png
 # date: 2026-07-03 10:43:28
 # lpx: https://kelee.one/Tool/Loon/Lpx/XiaobaiPrint_remove_ads.lpx
-# converted: Loon .lpx -> Stash .stoverride (auto)
+# converted: Loon .lpx -> Stash .stoverride (auto) v2
 # note: kelee.one resources require Loon UA; if Stash fetch fails, add proxy or use GitHub mirror
 name: 小白智慧打印去广告
 desc: 移除开屏广告、首页推广金刚位、热门内容推荐、横幅广告、搜索填充词、搜索发现，精简我的页面。账户页面错误是已知问题，无需反馈。
