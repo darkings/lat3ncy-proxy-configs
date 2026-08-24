@@ -19,7 +19,7 @@ rules:
 - DOMAIN,ut.taobao.com,REJECT
 script-providers:
   taobao-remove-ads:
-    url: https://cdn.jsdelivr.net/gh/RuCu6/QuanX@main/Scripts/myBlockAds.js
+    url: https://ghproxy.net/https://raw.githubusercontent.com/RuCu6/QuanX/main/Scripts/myBlockAds.js
     interval: 86400
 http:
   mitm:

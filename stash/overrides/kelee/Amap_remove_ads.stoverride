@@ -16,7 +16,7 @@ rules:
 - DOMAIN-SUFFIX,v.smtcdns.com,REJECT
 script-providers:
   amap-remove-ads:
-    url: https://cdn.jsdelivr.net/gh/RuCu6/Loon@main/Scripts/amap.js
+    url: https://ghproxy.net/https://raw.githubusercontent.com/RuCu6/Loon/main/Scripts/amap.js
     interval: 86400
 http:
   mitm:

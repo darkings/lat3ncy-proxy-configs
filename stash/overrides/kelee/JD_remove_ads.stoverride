@@ -14,7 +14,7 @@ rules:
 - URL-REGEX,"^http:\/\/\w{32}\.jddebug\.com\/diagnose\?",REJECT
 script-providers:
   jd-remove-ads:
-    url: https://cdn.jsdelivr.net/gh/RuCu6/QuanX@main/Scripts/jingdong.js
+    url: https://ghproxy.net/https://raw.githubusercontent.com/RuCu6/QuanX/main/Scripts/jingdong.js
     interval: 86400
 http:
   mitm:

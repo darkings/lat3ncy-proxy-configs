@@ -12,16 +12,16 @@ desc: 将Spotify的外语歌词翻译为简体中文，并提供双语翻译支�
 icon: https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/Spotify.png
 script-providers:
   spotify-response:
-    url: https://cdn.jsdelivr.net/gh/DualSubs/Spotify@main/js/Spotify.response.js
+    url: https://ghproxy.net/https://raw.githubusercontent.com/DualSubs/Spotify/main/js/Spotify.response.js
     interval: 86400
   spotify-request:
-    url: https://cdn.jsdelivr.net/gh/DualSubs/Spotify@main/js/Spotify.request.js
+    url: https://ghproxy.net/https://raw.githubusercontent.com/DualSubs/Spotify/main/js/Spotify.request.js
     interval: 86400
   translate-response:
-    url: https://cdn.jsdelivr.net/gh/DualSubs/Universal@main/js/Translate.response.js
+    url: https://ghproxy.net/https://raw.githubusercontent.com/DualSubs/Universal/main/js/Translate.response.js
     interval: 86400
   external-lyrics-response:
-    url: https://cdn.jsdelivr.net/gh/DualSubs/Universal@main/js/External.Lyrics.response.js
+    url: https://ghproxy.net/https://raw.githubusercontent.com/DualSubs/Universal/main/js/External.Lyrics.response.js
     interval: 86400
 http:
   mitm:
