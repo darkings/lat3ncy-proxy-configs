@@ -181,8 +181,8 @@ http:
   - ^https:\/\/acs\.m\.taobao\.com\/gw\/mtop\.film\.life\.popup\.get\/ - reject-dict
   - ^https:\/\/d\.socdm\.com\/adsv\/ - reject-dict
   body-rewrite:
-  - ^https?:\/\/cmds\.omesoft\.com\/HypnotistWS\.asmx response-body-replace-regex <GetADResult>\.\*\?<\/GetADResult> <GetADResult>{"ret":0,"msg":"正常","err_code":0,"data":{"ad":[]}}</GetADResult>
-  - ^https?:\/\/api\.fenxianglife\.com\/njia\/index\/popup\/v2 response-jq .data.list=[]
+  - ^https?:\/\/cmds\.omesoft\.com\/HypnotistWS\.asmx response-replace-regex "<GetADResult>\.\*\?<\/GetADResult>" "<GetADResult>{\"ret\":0,\"msg\":\"正常\",\"err_code\":0,\"data\":{\"ad\":[]}}</GetADResult>"
+  - ^https?:\/\/api\.fenxianglife\.com\/njia\/index\/popup\/v2 response-jq ".data.list=[]"
   mock:
   - match: ^https?:\/\/m\.client\.10010\.com\/mobileService\/customer\/accountListData\.htm
     status-code: 200

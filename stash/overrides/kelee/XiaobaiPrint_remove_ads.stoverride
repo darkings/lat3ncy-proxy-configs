@@ -20,6 +20,6 @@ http:
   - ^https:\/\/epbox\.gongfudou\.com\/big_data\/v\d\/banners\? - reject-dict
   - ^https:\/\/epbox\.gongfudou\.com\/big_data\/v\d\/canvas\/query_actions\? - reject-dict
   body-rewrite:
-  - ^https:\/\/epbox\.gongfudou\.com\/graphql$ response-jq del(.data.mallConsumables, .data.currentUser.goodsCoupons)
-  - ^https:\/\/epbox\.gongfudou\.com\/graphql$ response-jq if .data.systemConfig.searchHotTags? then del(.data.systemConfig) else . end
-  - ^https:\/\/epbox\.gongfudou\.com\/graphql$ response-jq if (.data.page.__typename=="Page" and .data.page.name=="场景化改版 2024") then .data.page.firstTabDetail.floors|=map(select(.numType=="row")) else . end
+  - ^https:\/\/epbox\.gongfudou\.com\/graphql$ response-jq "del(.data.mallConsumables, .data.currentUser.goodsCoupons)"
+  - ^https:\/\/epbox\.gongfudou\.com\/graphql$ response-jq "if .data.systemConfig.searchHotTags? then del(.data.systemConfig) else . end"
+  - ^https:\/\/epbox\.gongfudou\.com\/graphql$ response-jq "if (.data.page.__typename==\"Page\" and .data.page.name==\"场景化改版 2024\") then .data.page.firstTabDetail.floors|=map(select(.numType==\"row\")) else . end"

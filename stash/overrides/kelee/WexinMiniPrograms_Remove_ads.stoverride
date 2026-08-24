@@ -226,12 +226,12 @@ http:
   - ^https:\/\/wx\.online-cmcc\.cn\/contactpoint\/customer\/api\/list\? - reject-dict
   - ^https:\/\/wx\.10086\.cn\/qwhdhub\/activity\/info - reject-dict
   body-rewrite:
-  - ^https:\/\/mcsp\.cloudpnr\.com\/api\/miniapp\/popular\/T_MINIAPP$ response-jq del(.data)
-  - ^https:\/\/saas-ad\.cloudpnr\.com\/huifuad-base-api\/api\/tactics\/ad$ response-jq del(.data[0], .data[1], .data[2])
-  - ^https:\/\/rms\.meituan\.com\/api\/v1\/rmsmina\/c\/queryShopPortalInfo\? response-jq del(.data.popUpWindows)
-  - ^https:\/\/chong\.qq\.com\/tws\/wxmobile\/GetProduct4App\? response-jq del(.respInfo.reserveProductList) | .respInfo.shortcut |= map(select(.name != "充流量" and .name != "领话费券"))
-  - ^https:\/\/chong\.qq\.com\/tws\/wxmobile4app\/GetSecondProduct\? response-jq del(.respInfo.productList) | .respInfo.shortcut |= map(select(.name != "充流量" and .name != "领话费券"))
-  - ^https:\/\/chong\.qq\.com\/tws\/usernumberinfo\/GetUserInfo\? response-jq del(.data.request.number.markSeat.servicehallOperList, .data.request.number.servicehallOperList, .data.request.number.markSeat.servicehallFuncList, .data.request.number.servicehallFuncList)
+  - ^https:\/\/mcsp\.cloudpnr\.com\/api\/miniapp\/popular\/T_MINIAPP$ response-jq "del(.data)"
+  - ^https:\/\/saas-ad\.cloudpnr\.com\/huifuad-base-api\/api\/tactics\/ad$ response-jq "del(.data[0], .data[1], .data[2])"
+  - ^https:\/\/rms\.meituan\.com\/api\/v1\/rmsmina\/c\/queryShopPortalInfo\? response-jq "del(.data.popUpWindows)"
+  - ^https:\/\/chong\.qq\.com\/tws\/wxmobile\/GetProduct4App\? response-jq "del(.respInfo.reserveProductList) | .respInfo.shortcut |= map(select(.name != \"充流量\" and .name != \"领话费券\"))"
+  - ^https:\/\/chong\.qq\.com\/tws\/wxmobile4app\/GetSecondProduct\? response-jq "del(.respInfo.productList) | .respInfo.shortcut |= map(select(.name != \"充流量\" and .name != \"领话费券\"))"
+  - ^https:\/\/chong\.qq\.com\/tws\/usernumberinfo\/GetUserInfo\? response-jq "del(.data.request.number.markSeat.servicehallOperList, .data.request.number.servicehallOperList, .data.request.number.markSeat.servicehallFuncList, .data.request.number.servicehallFuncList)"
   script:
   - match: ^https:\/\/webapi\.qmai\.cn\/web\/catering\/design\/homePage-Config
     name: kff

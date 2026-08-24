@@ -97,6 +97,55 @@ class RuleAST:
     # for mock
     dataType: Optional[str] = None
 
+@dataclass
+class BodyRewriteRule:
+    match: str
+    action: str  # request-jq/response-jq etc.
+    expression: str  # 完整 jq/json/regex 表达式，保留 | = ( ) 等
+
+def tokenize_rule(line: str) -> List[str]:
+    """安全 tokenizer，保留引号内空格，不以 split(' ') 破坏 jq"""
+    result: List[str] = []
+    current = ""
+    in_single = False
+    in_double = False
+    escape = False
+    for c in line:
+        if escape:
+            current += c
+            escape = False
+            continue
+        if c == "\\":
+            escape = True
+            current += c
+            continue
+        if c == "'" and not in_double:
+            in_single = not in_single
+            current += c
+            continue
+        if c == '"' and not in_single:
+            in_double = not in_double
+            current += c
+            continue
+        if c == " " and not in_single and not in_double:
+            if current:
+                result.append(current)
+                current = ""
+            continue
+        current += c
+    if current:
+        result.append(current)
+    return result
+
+def quote_expression(value: str) -> str:
+    """保留 jq 原文，外层双引号包裹，内层 " 转义"""
+    v = value.strip()
+    # 去除已有的外层引号
+    if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
+        v = v[1:-1]
+    v = v.replace('"', '\\"')
+    return f'"{v}"'
+
 # ---------- Helpers ----------
 def normalize_rule(rule: str) -> str:
     return re.sub(r'\s*,\s*', ',', rule.strip())
@@ -552,57 +601,172 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             header_rewrite.append(f"{ast.match} {mapped} {target_rest}".strip())
 
         elif mod == "body-rewrite":
-            # Reuse existing logic for body
-            pattern = ast.match
-            directive = ast.action
-            rest = ast.target or ""
+            # v3: 使用 tokenizer 保留 jq 原文，整体作为单参数
+            # 先用 tokenize_rule 对原始行重新解析，避免 split 丢失 | = ( )
+            tokens = tokenize_rule(ast.raw)
+            # tokens[0]=match, tokens[1]=action, tokens[2:]=expression parts
+            if len(tokens) < 2:
+                unsupported_rewrites.append(f"# E_JQ_EMPTY {ast.raw}")
+                continue
+            pattern = tokens[0]
+            directive = tokens[1]
             low = directive.lower()
+            # 重新拼接 expression 保留原始空格/符号
+            # 对于 jq-path 等特殊，先用 ast.target
+            rest = ast.target or ""
+            # 映射 Loon -> Stash 的 body action
+            # response-body-json-jq -> response-jq
+            # response-body-json-del -> response-jq (del)
+            # response-body-json-replace -> response-jq
+            # response-body-replace-regex -> response-replace-regex
+            stash_action = None
+            expression = ""
             if low == "response-body-json-jq":
-                rest_stripped = rest.strip()
-                m_jqpath = re.search(r'jq-path\s*=\s*"?([^"\s]+)"?', rest_stripped)
+                # 优先 jq-path
+                m_jqpath = re.search(r'jq-path\s*=\s*"?([^"\s]+)"?', rest.strip())
                 if m_jqpath:
                     jq_url = m_jqpath.group(1).strip('"').strip("'")
                     try:
                         jq_content = fetch_text(jq_url).strip()
                         jq_content = re.sub(r'\s*\n\s*', ' ', jq_content).strip()
                         if len(jq_content) > 3000:
-                            body_rewrite.append(f"{pattern} response-jq {jq_content[:3000]}")
+                            expression = jq_content[:3000]
                             unsupported_rewrites.append(f"# jq-path {jq_url} truncated ({len(jq_content)} chars)")
                         else:
-                            body_rewrite.append(f"{pattern} response-jq {jq_content}")
+                            expression = jq_content
                     except Exception as e:
-                        body_rewrite.append(f"{pattern} response-jq # failed to fetch jq-path {jq_url}: {e}")
+                        expression = f"# failed to fetch jq-path {jq_url}: {e}"
                 else:
-                    jq = rest_stripped
-                    if (jq.startswith("'") and jq.endswith("'")) or (jq.startswith('"') and jq.endswith('"')):
-                        jq = jq[1:-1]
-                    body_rewrite.append(f"{pattern} response-jq {jq}")
+                    # 剩余部分即 jq 表达式，保留原始（含 | =）
+                    # tokens[2:] 可能是 jq 表达式被单引号包裹
+                    if len(tokens) >= 3:
+                        expression = " ".join(tokens[2:])
+                        # 去除最外层单/双引号（Loon 中常为 'del(...)'）
+                        if (expression.startswith("'") and expression.endswith("'")) or (expression.startswith('"') and expression.endswith('"')):
+                            expression = expression[1:-1]
+                    else:
+                        expression = rest.strip()
+                        if (expression.startswith("'") and expression.endswith("'")) or (expression.startswith('"') and expression.endswith('"')):
+                            expression = expression[1:-1]
+                stash_action = "response-jq"
+            elif low == "request-body-json-jq":
+                if len(tokens) >= 3:
+                    expression = " ".join(tokens[2:])
+                    if (expression.startswith("'") and expression.endswith("'")) or (expression.startswith('"') and expression.endswith('"')):
+                        expression = expression[1:-1]
+                else:
+                    expression = rest.strip()
+                stash_action = "request-jq"
             elif low == "response-body-json-del":
                 keys = rest.strip().split()
                 if keys:
-                    body_rewrite.append(f"{pattern} response-jq {jq_for_del(keys)}")
+                    expression = jq_for_del(keys)
+                    stash_action = "response-jq"
                 else:
-                    unsupported_rewrites.append(f"# unsupported json-del no keys: {ast.raw}")
+                    unsupported_rewrites.append(f"# E_JQ_EMPTY {ast.raw}")
+                    continue
+            elif low == "request-body-json-del":
+                keys = rest.strip().split()
+                if keys:
+                    expression = jq_for_del(keys)
+                    stash_action = "request-jq"
+                else:
+                    unsupported_rewrites.append(f"# E_JQ_EMPTY {ast.raw}")
+                    continue
             elif low == "response-body-json-replace":
-                tokens = re.findall(r'"[^"]*"|\'[^\']*\'|\S+', rest.strip())
+                toks = tokenize_rule(rest)
+                # 清理引号
                 cleaned = []
-                for t in tokens:
+                for t in toks:
                     if (t.startswith('"') and t.endswith('"')) or (t.startswith("'") and t.endswith("'")):
                         cleaned.append(t[1:-1])
                     else:
                         cleaned.append(t)
                 if len(cleaned) >= 2:
-                    body_rewrite.append(f"{pattern} response-jq {jq_for_replace(cleaned)}")
+                    expression = jq_for_replace(cleaned)
+                    stash_action = "response-jq"
                 else:
-                    unsupported_rewrites.append(f"# unsupported json-replace parse: {ast.raw}")
+                    unsupported_rewrites.append(f"# E_JQ_EMPTY {ast.raw}")
+                    continue
+            elif low == "request-body-json-replace":
+                toks = tokenize_rule(rest)
+                cleaned = []
+                for t in toks:
+                    if (t.startswith('"') and t.endswith('"')) or (t.startswith("'") and t.endswith("'")):
+                        cleaned.append(t[1:-1])
+                    else:
+                        cleaned.append(t)
+                if len(cleaned) >= 2:
+                    expression = jq_for_replace(cleaned)
+                    stash_action = "request-jq"
+                else:
+                    unsupported_rewrites.append(f"# E_JQ_EMPTY {ast.raw}")
+                    continue
             elif low == "response-body-replace-regex":
-                escaped_rest = rest.replace("'", "\\'")
-                body_rewrite.append(f"{pattern} response-body-replace-regex {escaped_rest}")
+                # Loon: pattern response-body-replace-regex old new
+                # tokens: [pattern, action, old, new]
+                if len(tokens) >= 4:
+                    old = tokens[2]
+                    new = " ".join(tokens[3:])
+                    # 去除外层引号
+                    if (old.startswith("'") and old.endswith("'")) or (old.startswith('"') and old.endswith('"')):
+                        old = old[1:-1]
+                    if (new.startswith("'") and new.endswith("'")) or (new.startswith('"') and new.endswith('"')):
+                        new = new[1:-1]
+                    expression = f"{quote_expression(old)} {quote_expression(new)}"
+                    stash_action = "response-replace-regex"
+                else:
+                    # 回退：用 rest 分割
+                    parts = rest.strip().split(None, 1)
+                    if len(parts) == 2:
+                        expression = f"{quote_expression(parts[0])} {quote_expression(parts[1])}"
+                        stash_action = "response-replace-regex"
+                    else:
+                        unsupported_rewrites.append(f"# E_JQ_INVALID {ast.raw}")
+                        continue
+            elif low == "request-body-replace-regex":
+                if len(tokens) >= 4:
+                    old = tokens[2]
+                    new = " ".join(tokens[3:])
+                    if (old.startswith("'") and old.endswith("'")) or (old.startswith('"') and old.endswith('"')):
+                        old = old[1:-1]
+                    if (new.startswith("'") and new.endswith("'")) or (new.startswith('"') and new.endswith('"')):
+                        new = new[1:-1]
+                    expression = f"{quote_expression(old)} {quote_expression(new)}"
+                    stash_action = "request-replace-regex"
+                else:
+                    parts = rest.strip().split(None, 1)
+                    if len(parts) == 2:
+                        expression = f"{quote_expression(parts[0])} {quote_expression(parts[1])}"
+                        stash_action = "request-replace-regex"
+                    else:
+                        unsupported_rewrites.append(f"# E_JQ_INVALID {ast.raw}")
+                        continue
             elif low.startswith("response-header"):
                 stash_directive = directive.replace("response-header", "header", 1)
                 header_rewrite.append(f"{pattern} {stash_directive} {rest}".strip())
+                continue
             else:
-                body_rewrite.append(f"{pattern} {directive} {rest}")
+                # 通用 body: 保留 directive 转小写后映射
+                stash_action = low.replace("response-body-", "response-").replace("request-body-", "request-")
+                expression = rest
+
+            # 校验 Body Action 白名单
+            BODY_ACTIONS = {"request-jq","response-jq","request-json-add","response-json-add","request-json-del","response-json-del","request-json-replace","response-json-replace","request-replace-regex","response-replace-regex","request-replace","response-replace"}
+            if stash_action not in BODY_ACTIONS and "replace-regex" not in stash_action and "jq" not in stash_action:
+                # 允许的 body 动作外，视为支持但需检查
+                pass
+            if "jq" in stash_action and not expression:
+                unsupported_rewrites.append(f"# E_JQ_EMPTY {ast.raw}")
+                continue
+            # 生成 Stash body-rewrite：表达式用双引号包裹，整体由 yaml 自动单引号包裹（保留 | = ( ) 等）
+            # 避免手动外层单引号导致 yaml 三引号 '''...'''
+            if stash_action in {"response-jq","request-jq"}:
+                body_rewrite.append(f"{pattern} {stash_action} {quote_expression(expression)}")
+            elif stash_action in {"response-replace-regex","request-replace-regex"}:
+                body_rewrite.append(f"{pattern} {stash_action} {expression}")
+            else:
+                body_rewrite.append(f"{pattern} {stash_action} {quote_expression(expression)}")
 
         else:
             unsupported_rewrites.append(f"# unsupported module {mod}: {ast.raw}")
