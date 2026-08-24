@@ -84,7 +84,7 @@ Stash 版要求 iOS 客户端 3.4 或更高版本，使用名为 `Tailscale` 的
 
 `sub.store` 被固定映射到 `127.0.0.1`，下载请求只由本机 Sub-Store 脚本处理，避免脚本关闭时把本地订阅数据发往公网同名域名。Sub-Store 脚本从其官方 `release` 分支的 jsDelivr 镜像加载，首次没有代理节点也能下载。若首页仍没有流量或过期时间，请在 Sub-Store 的 `ios` 订阅中关闭“不查询订阅流量信息”，并在机场提供独立流量查询地址时填写 `subInfoUrl`/`subInfoUserAgent`；如果源站本身不返回 `Subscription-Userinfo`，Stash 无法凭空显示这些数据。若 `https://sub.store` 无法打开，应先确认 Stash 已启动，并生成、安装和信任 Stash MITM 证书。
 
-去广告分为两层：Cats-Team AdRules 默认在规则层拦截广告域名，不需要 MITM；应用响应净化必须使用 Stash 覆写、HTTP Engine 和受信任的 MITM 证书。`stash-ios.yaml` 已集中声明 26 个脚本 provider，使用该主配置时只需从上面的自托管列表添加并启用所需应用覆写；若使用其他主配置，再额外启用 `kelee-scripts.stoverride`。Stash 的“仅使用 Tunnel 代理”必须关闭，否则拼多多、喜马拉雅等 App 请求不会进入 HTTP Engine。Loon 的 `.lpx` 不能直接写进 Stash YAML；当前维护 19 个精选 KeLee Loon 插件的 Stash 转换版，转换器保留 URL/JSON body rewrite/脚本/MITM 语义，并把受 UA 限制的脚本及拼多多动态 vendor chunk 改为无需代理的自托管地址。
+去广告分为两层：Cats-Team AdRules 默认在规则层拦截广告域名，不需要 MITM；应用响应净化必须使用 Stash 覆写、HTTP Engine 和受信任的 MITM 证书。`stash-ios.yaml` 已集中声明 26 个脚本 provider，使用该主配置时只需从上面的自托管列表添加并启用所需应用覆写；若使用其他主配置，再额外启用 `kelee-scripts.stoverride`。Stash 的“仅使用 Tunnel 代理”必须关闭，否则多数应用请求不会进入 HTTP Engine；拼多多还会绕过系统 HTTP Proxy，因此其覆写对两个 MITM 域名定向启用了 `force-http-engine`，并同时阻断 UDP/443 与已识别的 QUIC，强制回退到可解密重写的 TCP。Loon 的 `.lpx` 不能直接写进 Stash YAML；当前维护 19 个精选 KeLee Loon 插件的 Stash 转换版，转换器保留 URL/JSON body rewrite/脚本/MITM 语义，并把受 UA 限制的脚本及拼多多动态 vendor chunk 改为无需代理的自托管地址。
 
 `*.ts.net` 没有加入 `fake-ip-filter` 是有意设计：Stash 需要保留域名映射，才能把 MagicDNS 名称交给内置 Tailscale 节点。只有 Tailscale 登录与控制域名返回真实 IP 并直连。Cats-Team 广告规则每 6 小时更新，其余 MetaCubeX MRS 规则每天更新，以降低 iOS Network Extension 的规则内存占用。
 
