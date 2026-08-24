@@ -1,82 +1,82 @@
 name: kelee-scripts
-desc: KeLee 19精选脚本提供方聚合
+desc: KeLee Scripts Hub (26 providers)
 script-providers:
   amap-remove-ads:
-    url: https://stash.ponyo.fun/scripts/amap-remove-ads.js
+    url: https://stash.ponyo.fun/scripts/amap-remove-ads.js?v=20260824-031308
     interval: 86400
   response-bundle:
     url: https://github.com/NSRingo/WeatherKit/releases/download/v3.1.0/response.bundle.js
     interval: 86400
   bilibili-proto-request-kokoryh:
-    url: https://stash.ponyo.fun/scripts/bilibili-proto-request-kokoryh.js
+    url: https://stash.ponyo.fun/scripts/bilibili-proto-request-kokoryh.js?v=20260824-031308
     interval: 86400
   bilibili-proto-response-kokoryh:
-    url: https://stash.ponyo.fun/scripts/bilibili-proto-response-kokoryh.js
+    url: https://stash.ponyo.fun/scripts/bilibili-proto-response-kokoryh.js?v=20260824-031308
     interval: 86400
   bilibili-json-kokoryh:
-    url: https://stash.ponyo.fun/scripts/bilibili-json-kokoryh.js
+    url: https://stash.ponyo.fun/scripts/bilibili-json-kokoryh.js?v=20260824-031308
     interval: 86400
   jd-remove-ads:
-    url: https://stash.ponyo.fun/scripts/jd-remove-ads.js
+    url: https://stash.ponyo.fun/scripts/jd-remove-ads.js?v=20260824-031308
     interval: 86400
   pinduoduo-remove-ads:
-    url: https://stash.ponyo.fun/scripts/pinduoduo-remove-ads.js
+    url: https://stash.ponyo.fun/scripts/pinduoduo-remove-ads.js?v=20260824-031308
     interval: 86400
   spotify-response:
-    url: https://stash.ponyo.fun/scripts/spotify-response.js
+    url: https://stash.ponyo.fun/scripts/spotify-response.js?v=20260824-031308
     interval: 86400
   spotify-request:
-    url: https://stash.ponyo.fun/scripts/spotify-request.js
+    url: https://stash.ponyo.fun/scripts/spotify-request.js?v=20260824-031308
     interval: 86400
   translate-response:
-    url: https://stash.ponyo.fun/scripts/translate-response.js
+    url: https://stash.ponyo.fun/scripts/translate-response.js?v=20260824-031308
     interval: 86400
   external-lyrics-response:
-    url: https://stash.ponyo.fun/scripts/external-lyrics-response.js
+    url: https://stash.ponyo.fun/scripts/external-lyrics-response.js?v=20260824-031308
     interval: 86400
   spotify-remove-ads:
-    url: https://stash.ponyo.fun/scripts/spotify-remove-ads.js
+    url: https://stash.ponyo.fun/scripts/spotify-remove-ads.js?v=20260824-031308
     interval: 86400
   taobao-remove-ads:
-    url: https://stash.ponyo.fun/scripts/taobao-remove-ads.js
+    url: https://stash.ponyo.fun/scripts/taobao-remove-ads.js?v=20260824-031308
     interval: 86400
   weixin-external-links-unlock:
-    url: https://stash.ponyo.fun/scripts/weixin-external-links-unlock.js
+    url: https://stash.ponyo.fun/scripts/weixin-external-links-unlock.js?v=20260824-031308
     interval: 86400
   kff:
-    url: https://stash.ponyo.fun/scripts/kff.js
+    url: https://stash.ponyo.fun/scripts/kff.js?v=20260824-031308
     interval: 86400
   ems:
-    url: https://stash.ponyo.fun/scripts/ems.js
+    url: https://stash.ponyo.fun/scripts/ems.js?v=20260824-031308
     interval: 86400
   xiaotucc:
-    url: https://stash.ponyo.fun/scripts/xiaotucc.js
+    url: https://stash.ponyo.fun/scripts/xiaotucc.js?v=20260824-031308
     interval: 86400
   familymart:
-    url: https://stash.ponyo.fun/scripts/familymart.js
+    url: https://stash.ponyo.fun/scripts/familymart.js?v=20260824-031308
     interval: 86400
   lawson:
-    url: https://stash.ponyo.fun/scripts/lawson.js
+    url: https://stash.ponyo.fun/scripts/lawson.js?v=20260824-031308
     interval: 86400
   chayanyuese-remove-ads:
-    url: https://stash.ponyo.fun/scripts/chayanyuese-remove-ads.js
+    url: https://stash.ponyo.fun/scripts/chayanyuese-remove-ads.js?v=20260824-031308
     interval: 86400
   coco:
-    url: https://stash.ponyo.fun/scripts/coco.js
+    url: https://stash.ponyo.fun/scripts/coco.js?v=20260824-031308
     interval: 86400
   qingju:
-    url: https://stash.ponyo.fun/scripts/qingju.js
+    url: https://stash.ponyo.fun/scripts/qingju.js?v=20260824-031308
     interval: 86400
   alittle-tea:
-    url: https://stash.ponyo.fun/scripts/alittle-tea.js
+    url: https://stash.ponyo.fun/scripts/alittle-tea.js?v=20260824-031308
     interval: 86400
   m-stand:
-    url: https://stash.ponyo.fun/scripts/m-stand.js
+    url: https://stash.ponyo.fun/scripts/m-stand.js?v=20260824-031308
     interval: 86400
   t3:
-    url: https://stash.ponyo.fun/scripts/t3.js
+    url: https://stash.ponyo.fun/scripts/t3.js?v=20260824-031308
     interval: 86400
   ming:
-    url: https://stash.ponyo.fun/scripts/ming.js
+    url: https://stash.ponyo.fun/scripts/ming.js?v=20260824-031308
     interval: 86400
 icon: https://raw.githubusercontent.com/KOP-XIAO/QuantumultX/master/Icons/Kelee.png
