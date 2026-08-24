@@ -32,9 +32,9 @@ http:
   - ^https:\/\/m5-zb\.amap\.com\/ws\/boss\/(?:order\/car\/(?:feedback\/get_card_questions|feedback\/viptips|king_toolbox_car_bubble|remark\/satisfactionConf|rights_information)|tips\/onscene_visual_optimization) - reject-dict
   - ^https:\/\/m5-zb\.amap\.com\/ws\/boss\/(?:pay\/web\/paySuccess\/info\/request|transportation\/diversion\/resource\/driving) - reject-dict
   body-rewrite:
-  - ^https:\/\/m5\.amap\.com\/ws\/shield\/search_business\/process\/marketingOperationStructured\? response-json-del data.commonMaterial data.tipsOperationLocation data.resourcePlacement
-  - ^https:\/\/m5\.amap\.com\/ws\/shield\/search_poi\/homepage\? response-json-del history_tags
-  - ^https:\/\/m5-zb\.amap\.com\/ws\/sharedtrip\/taxi\/order_detail_car_tips\? response-json-del data.carTips.data.popupInfo
+  - '^https:\/\/m5\.amap\.com\/ws\/shield\/search_business\/process\/marketingOperationStructured\? response-json-del data.commonMaterial data.tipsOperationLocation data.resourcePlacement'
+  - '^https:\/\/m5\.amap\.com\/ws\/shield\/search_poi\/homepage\? response-json-del history_tags'
+  - '^https:\/\/m5-zb\.amap\.com\/ws\/sharedtrip\/taxi\/order_detail_car_tips\? response-json-del data.carTips.data.popupInfo'
   script:
   - match: ^https:\/\/m5\.amap\.com\/ws\/aos\/perception\/publicTravel\/beforeNavi\?
     name: amap-remove-ads

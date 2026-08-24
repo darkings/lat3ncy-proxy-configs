@@ -42,13 +42,13 @@ http:
   - ^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/subscribe\/v\d\/subscribe\/recommend\? - reject-dict
   - ^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/mobile-user\/v\d\/purchased\/recommend\/ - reject-dict
   body-rewrite:
-  - ^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/discovery-feed\/v\d\/mix\/ response-jq .heData |= map(select(.item.list[].bizType != "SceneListenCard"))
-  - ^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/discovery-category\/customCategories\/ response-jq .categoryList |= map(.itemList |= map(select(.title | test("直播|123狂欢节|SVIP"; "i") | not))) | .customCategoryList |= map(select(.title | test("直播|123狂欢节|SVIP"; "i") | not))
-  - ^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/football-portal\/diff2\/batch\? response-json-del json.ad json.toc
-  - ^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/nexus-web\/v\d\/tabs\/customTabs\? response-jq .data.feedTabs |= map(select(.name != "大赛"))
-  - ^https:\/\/mobwsa\.ximalaya\.com\/mobile-playpage\/playpage\/tabs\/v2\/ response-json-del data.playpage.resourceMap.defaultResource data.playpage.resourceMap.playPageTip
-  - ^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/mobile-user\/v\d\/homePage\/ response-json-del data.freeListenV2
-  - ^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/mobile-user\/v\d\/homePage\/ response-jq .data.serviceModule.entrances |= map(select(.name == "全部服务"))
+  - '^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/discovery-feed\/v\d\/mix\/ response-jq .heData |= map(select(.item.list[].bizType != "SceneListenCard"))'
+  - '^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/discovery-category\/customCategories\/ response-jq .categoryList |= map(.itemList |= map(select(.title | test("直播|123狂欢节|SVIP"; "i") | not))) | .customCategoryList |= map(select(.title | test("直播|123狂欢节|SVIP"; "i") | not))'
+  - '^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/football-portal\/diff2\/batch\? response-json-del json.ad json.toc'
+  - '^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/nexus-web\/v\d\/tabs\/customTabs\? response-jq .data.feedTabs |= map(select(.name != "大赛"))'
+  - '^https:\/\/mobwsa\.ximalaya\.com\/mobile-playpage\/playpage\/tabs\/v2\/ response-json-del data.playpage.resourceMap.defaultResource data.playpage.resourceMap.playPageTip'
+  - '^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/mobile-user\/v\d\/homePage\/ response-json-del data.freeListenV2'
+  - '^https:\/\/(mobile|mobilehera|mobwsa)\.ximalaya\.com\/mobile-user\/v\d\/homePage\/ response-jq .data.serviceModule.entrances |= map(select(.name == "全部服务"))'
   mock:
   - match: ^https:\/\/(m|mwsa)\.ximalaya\.com\/community\/square\/v\d\/stream\?
     status-code: 200
