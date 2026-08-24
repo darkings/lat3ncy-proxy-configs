@@ -19,9 +19,6 @@ script-providers:
   response-bundle:
     url: https://github.com/NSRingo/WeatherKit/releases/download/v3.1.0/response.bundle.js
     interval: 86400
-  response-bundle-1:
-    url: https://github.com/NSRingo/WeatherKit/releases/download/v3.1.0/response.bundle.js
-    interval: 86400
 http:
   mitm:
   - weatherkit.apple.com
@@ -32,7 +29,7 @@ http:
     require-body: true
     argument: '[ColorfulClouds,ColorfulClouds,EU_EAQI,,devapi.qweather.com,,,Argument,WARN]'
   - match: ^https?:\/\/weatherkit\.apple\.com\/api\/v2\/weather\/
-    name: response-bundle-1
+    name: response-bundle
     type: response
     require-body: true
     binary-body-mode: true

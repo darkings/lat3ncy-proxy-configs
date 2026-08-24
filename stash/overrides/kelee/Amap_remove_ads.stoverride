@@ -16,46 +16,7 @@ rules:
 - DOMAIN-SUFFIX,v.smtcdns.com,REJECT
 script-providers:
   amap-remove-ads:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-1:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-2:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-3:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-4:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-5:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-6:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-7:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-8:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-9:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-10:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-11:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-12:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-13:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
+    url: https://cdn.jsdelivr.net/gh/RuCu6/Loon@main/Scripts/amap.js
     interval: 86400
 http:
   mitm:
@@ -84,54 +45,54 @@ http:
     type: response
     require-body: true
   - match: ^https:\/\/m5\.amap\.com\/ws\/bus\/plan\/integrate\?
-    name: amap-remove-ads-1
+    name: amap-remove-ads
     type: response
     require-body: true
   - match: ^https:\/\/m5\.amap\.com\/ws\/c3frontend\/(?:af-(?:hotel|launch)\/page\/main|af-nearby\/nearby)
-    name: amap-remove-ads-2
+    name: amap-remove-ads
     type: response
     require-body: true
   - match: ^https:\/\/m5\.amap\.com\/ws\/perception\/drive\/(?:routeInfo|routePlan)
-    name: amap-remove-ads-3
+    name: amap-remove-ads
     type: response
     require-body: true
   - match: ^https:\/\/m5\.amap\.com\/ws\/shield\/search_bff\/hotword\?
-    name: amap-remove-ads-4
+    name: amap-remove-ads
     type: response
     require-body: true
   - match: ^https:\/\/m5\.amap\.com\/ws\/shield\/search_poi\/(?:mps|search\/sp|sug|tips_operation_location)
-    name: amap-remove-ads-5
+    name: amap-remove-ads
     type: response
     require-body: true
   - match: ^https:\/\/m5\.amap\.com\/ws\/faas\/amap-navigation\/(?:card-service-plan-home|main-page)
-    name: amap-remove-ads-6
+    name: amap-remove-ads
     type: response
     require-body: true
   - match: ^https:\/\/m5\.amap\.com\/ws\/shield\/frogserver\/aocs\/updatable\/1\?
-    name: amap-remove-ads-7
+    name: amap-remove-ads
     type: response
     require-body: true
   - match: ^https:\/\/m5\.amap\.com\/ws\/shield\/dsp\/profile\/index\/nodefaasv3\?
-    name: amap-remove-ads-8
+    name: amap-remove-ads
     type: response
     require-body: true
   - match: ^https:\/\/m5\.amap\.com\/ws\/shield\/search\/nearbyrec_smart\?
-    name: amap-remove-ads-9
+    name: amap-remove-ads
     type: response
     require-body: true
   - match: ^https:\/\/m5\.amap\.com\/ws\/valueadded\/alimama\/splash_screen\?
-    name: amap-remove-ads-10
+    name: amap-remove-ads
     type: response
     require-body: true
   - match: ^https:\/\/m5-zb\.amap\.com\/ws\/boss\/(?:car\/order\/content_info|order_web\/friendly_information)
-    name: amap-remove-ads-11
+    name: amap-remove-ads
     type: response
     require-body: true
   - match: ^https:\/\/m5-zb\.amap\.com\/ws\/promotion-web\/resource(\/home)?\?
-    name: amap-remove-ads-12
+    name: amap-remove-ads
     type: response
     require-body: true
   - match: ^https:\/\/(?:info|m5)\.amap\.com\/ws\/shield\/search\/(?:common\/coupon\/info|poi\/detail)
-    name: amap-remove-ads-13
+    name: amap-remove-ads
     type: response
     require-body: true

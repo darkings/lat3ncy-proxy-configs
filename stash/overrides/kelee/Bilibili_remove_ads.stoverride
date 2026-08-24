@@ -21,16 +21,13 @@ rules:
 - AND,((DOMAIN-SUFFIX,chat.bilibili.com),(OR,((DOMAIN-KEYWORD,stun),(DOMAIN-KEYWORD,tracker),(DOMAIN-KEYWORD,p2p)))),REJECT
 script-providers:
   bilibili-proto-request-kokoryh:
-    url: https://raw.githubusercontent.com/kokoryh/Sparkle/master/dist/bilibili.protobuf.request.js
-    interval: 86400
-  bilibili-proto-request-kokoryh-1:
-    url: https://raw.githubusercontent.com/kokoryh/Sparkle/master/dist/bilibili.protobuf.request.js
+    url: https://cdn.jsdelivr.net/gh/kokoryh/Sparkle@master/dist/bilibili.protobuf.request.js
     interval: 86400
   bilibili-proto-response-kokoryh:
-    url: https://raw.githubusercontent.com/kokoryh/Sparkle/master/dist/bilibili.protobuf.response.js
+    url: https://cdn.jsdelivr.net/gh/kokoryh/Sparkle@master/dist/bilibili.protobuf.response.js
     interval: 86400
   bilibili-json-kokoryh:
-    url: https://raw.githubusercontent.com/kokoryh/Sparkle/refs/heads/master/dist/bilibili.json.js
+    url: https://cdn.jsdelivr.net/gh/kokoryh/Sparkle@master/dist/bilibili.json.js
     interval: 86400
 http:
   mitm:
@@ -90,7 +87,7 @@ http:
     timeout: 10
     argument: '[off]'
   - match: ^https:\/\/(?:grpc\.biliapi\.net|app\.bilibili\.com)\/bilibili\.(?:app\.viewunite\.v1\.View\/View|main\.community\.reply\.v1\.Reply\/MainList)$
-    name: bilibili-proto-request-kokoryh-1
+    name: bilibili-proto-request-kokoryh
     type: request
     require-body: true
     binary-body-mode: true
