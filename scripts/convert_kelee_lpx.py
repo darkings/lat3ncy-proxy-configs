@@ -146,24 +146,37 @@ def quote_expression(value: str) -> str:
     v = v.replace('"', '\\"')
     return f'"{v}"'
 
+def to_cdn_url(url: str) -> str:
+    """raw.githubusercontent -> cdn.jsdelivr，供国内 Stash 可直连"""
+    m = re.match(r'https://raw\.githubusercontent\.com/([^/]+)/([^/]+)/(?:refs/heads/)?([^/]+)/(.+)', url)
+    if m:
+        user, repo, branch, path = m.groups()
+        return f'https://cdn.jsdelivr.net/gh/{user}/{repo}@{branch}/{path}'
+    return url
+
 class ScriptRegistry:
-    """统一管理 script-providers，防止同名覆盖，自动补 interval"""
+    """统一管理 script-providers，相同 URL 只建一个 provider，自动补 interval"""
     def __init__(self):
         self.providers: Dict[str, Dict] = {}
+        self.url_to_name: Dict[str, str] = {}
     def add(self, name: str, url: str):
         if not name or not url:
-            return
-        # 合并同名：amap-remove-ads -> amap-remove-ads-1/-2
+            return name
+        url = to_cdn_url(url)
+        # 1. 相同 URL 复用已有 name，避免 amap 14个同URL产14 provider
+        if url in self.url_to_name:
+            return self.url_to_name[url]
+        # 2. 同名不同URL -> 加后缀 -1/-2
         orig = name
         idx = 1
         while name in self.providers:
-            # 若已存在且 URL 相同则不新增
             if self.providers[name].get("url") == url:
+                self.url_to_name[url] = name
                 return name
             name = f"{orig}-{idx}"
             idx += 1
         self.providers[name] = {"url": url, "interval": 86400}
-        # kelee.one 需 headers UA
+        self.url_to_name[url] = name
         if "kelee.one" in url:
             self.providers[name]["headers"] = {"User-Agent": LOON_UA}
         return name
@@ -849,8 +862,22 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             script_url = parsed["script_path"]
         if "script-path" in parsed:
             script_url = parsed["script-path"]
-        # registry.add 需要先确定 provider_name
-        provider_name = sanitize_provider_name(tag, script_url, provider_names)
+        # 先算 better_url（kelee -> raw -> cdn），再按 URL 去重复用 provider
+        better_url_pre = script_url
+        if fetch_script_fallback and script_url and "kelee.one" in script_url and script_url.endswith(".js"):
+            try:
+                js_content = fetch_text(script_url)[:5000]
+                m_raw = re.search(r'https://raw\.githubusercontent\.com/[^\s"\']+', js_content)
+                if m_raw:
+                    better_url_pre = m_raw.group(0)
+            except:
+                pass
+        cdn_pre = to_cdn_url(better_url_pre) if better_url_pre else ""
+        # 若 URL 已存在，直接复用已有 provider 名，多 match 共用一个
+        if cdn_pre and cdn_pre in registry.url_to_name:
+            provider_name = registry.url_to_name[cdn_pre]
+        else:
+            provider_name = sanitize_provider_name(tag, script_url, provider_names)
         entry = {}
         if "match" in parsed:
             entry["match"] = parsed["match"]
@@ -898,19 +925,12 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             if "match" in entry:
                 del entry["match"]
         script_entries.append(entry)
-        if script_url:
-            better_url = script_url
-            if fetch_script_fallback:
-                try:
-                    if "kelee.one" in script_url and script_url.endswith(".js"):
-                        js_content = fetch_text(script_url)[:5000]
-                        m_raw = re.search(r'https://raw\.githubusercontent\.com/[^\s"\']+', js_content)
-                        if m_raw:
-                            better_url = m_raw.group(0)
-                except:
-                    pass
-            # 通过 Registry 统一管理，自动合并同名 amap-remove-ads → amap-remove-ads-1
-            registry.add(provider_name, better_url)
+        # 注册 provider（已算好 better_url_pre），多 match 共用同一 URL 时复用
+        if better_url_pre:
+            actual = registry.add(provider_name, better_url_pre)
+            if actual and actual != provider_name:
+                entry["name"] = actual
+                provider_name = actual
 
     script_providers = registry.getAll()
     if script_entries:
