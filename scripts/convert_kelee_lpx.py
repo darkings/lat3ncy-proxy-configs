@@ -146,6 +146,32 @@ def quote_expression(value: str) -> str:
     v = v.replace('"', '\\"')
     return f'"{v}"'
 
+class ScriptRegistry:
+    """统一管理 script-providers，防止同名覆盖，自动补 interval"""
+    def __init__(self):
+        self.providers: Dict[str, Dict] = {}
+    def add(self, name: str, url: str):
+        if not name or not url:
+            return
+        # 合并同名：amap-remove-ads -> amap-remove-ads-1/-2
+        orig = name
+        idx = 1
+        while name in self.providers:
+            # 若已存在且 URL 相同则不新增
+            if self.providers[name].get("url") == url:
+                return name
+            name = f"{orig}-{idx}"
+            idx += 1
+        self.providers[name] = {"url": url, "interval": 86400}
+        # kelee.one 需 headers UA
+        if "kelee.one" in url:
+            self.providers[name]["headers"] = {"User-Agent": LOON_UA}
+        return name
+    def getAll(self):
+        return dict(self.providers)
+    def has(self, name: str) -> bool:
+        return name in self.providers
+
 # ---------- Helpers ----------
 def normalize_rule(rule: str) -> str:
     return re.sub(r'\s*,\s*', ',', rule.strip())
@@ -807,8 +833,8 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
         if k.lower() == "script":
             script_raw = sections[k]
             break
+    registry = ScriptRegistry()
     script_entries = []
-    script_providers = {}
     provider_names = set()
     for line in script_raw:
         line_s = line.strip()
@@ -823,6 +849,7 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             script_url = parsed["script_path"]
         if "script-path" in parsed:
             script_url = parsed["script-path"]
+        # registry.add 需要先确定 provider_name
         provider_name = sanitize_provider_name(tag, script_url, provider_names)
         entry = {}
         if "match" in parsed:
@@ -882,20 +909,19 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
                             better_url = m_raw.group(0)
                 except:
                     pass
-            provider_entry = {"url": better_url, "interval": 86400}
-            if "kelee.one" in better_url:
-                provider_entry["_note"] = "kelee.one requires Loon UA"
-                provider_entry["headers"] = {"User-Agent": LOON_UA}
-            script_providers[provider_name] = provider_entry
+            # 通过 Registry 统一管理，自动合并同名 amap-remove-ads → amap-remove-ads-1
+            registry.add(provider_name, better_url)
 
+    script_providers = registry.getAll()
     if script_entries:
         http["script"] = script_entries
     unsupported_comments = http.pop("_unsupported_rewrite_comments", None)
 
-    if http:
-        stash["http"] = http
+    # 最终 YAML 顺序必须：script-providers 在 http 之前
     if script_providers:
         stash["script-providers"] = script_providers
+    if http:
+        stash["http"] = http
 
     # Hosts
     host_raw = []
