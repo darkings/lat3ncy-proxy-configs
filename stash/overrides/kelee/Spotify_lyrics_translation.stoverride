@@ -10,6 +10,28 @@
 name: Spotify歌词增强
 desc: 将Spotify的外语歌词翻译为简体中文，并提供双语翻译支持。
 icon: https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/Spotify.png
+script-providers:
+  spotify-response:
+    url: https://raw.githubusercontent.com/DualSubs/Spotify/main/js/Spotify.response.js
+    interval: 86400
+  spotify-request:
+    url: https://raw.githubusercontent.com/DualSubs/Spotify/main/js/Spotify.request.js
+    interval: 86400
+  spotify-request-1:
+    url: https://raw.githubusercontent.com/DualSubs/Spotify/main/js/Spotify.request.js
+    interval: 86400
+  translate-response:
+    url: https://raw.githubusercontent.com/DualSubs/Universal/main/js/Translate.response.js
+    interval: 86400
+  translate-response-1:
+    url: https://raw.githubusercontent.com/DualSubs/Universal/main/js/Translate.response.js
+    interval: 86400
+  external-lyrics-response:
+    url: https://raw.githubusercontent.com/DualSubs/Universal/main/js/External.Lyrics.response.js
+    interval: 86400
+  external-lyrics-response-1:
+    url: https://raw.githubusercontent.com/DualSubs/Universal/main/js/External.Lyrics.response.js
+    interval: 86400
 http:
   mitm:
   - api.spotify.com
@@ -46,25 +68,3 @@ http:
     type: response
     require-body: true
     binary-body-mode: true
-script-providers:
-  spotify-response:
-    url: https://raw.githubusercontent.com/DualSubs/Spotify/main/js/Spotify.response.js
-    interval: 86400
-  spotify-request:
-    url: https://raw.githubusercontent.com/DualSubs/Spotify/main/js/Spotify.request.js
-    interval: 86400
-  spotify-request-1:
-    url: https://raw.githubusercontent.com/DualSubs/Spotify/main/js/Spotify.request.js
-    interval: 86400
-  translate-response:
-    url: https://raw.githubusercontent.com/DualSubs/Universal/main/js/Translate.response.js
-    interval: 86400
-  translate-response-1:
-    url: https://raw.githubusercontent.com/DualSubs/Universal/main/js/Translate.response.js
-    interval: 86400
-  external-lyrics-response:
-    url: https://raw.githubusercontent.com/DualSubs/Universal/main/js/External.Lyrics.response.js
-    interval: 86400
-  external-lyrics-response-1:
-    url: https://raw.githubusercontent.com/DualSubs/Universal/main/js/External.Lyrics.response.js
-    interval: 86400

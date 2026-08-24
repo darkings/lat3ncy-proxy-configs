@@ -28,6 +28,12 @@ rules:
 - DOMAIN,ta-a.pinduoduo.com,REJECT
 - DOMAIN,meta.pinduoduo.com,REJECT
 - DOMAIN,apm-a.pinduoduo.com,REJECT
+script-providers:
+  pinduoduo-remove-ads:
+    url: https://kelee.one/Resource/JavaScript/PinDuoDuo/PinDuoDuo_remove_ads.js
+    interval: 86400
+    headers:
+      User-Agent: Loon/764 CFNetwork/1498.700.1 Darwin/23.6.0 iPhone/17.6.1
 http:
   mitm:
   - api.pinduoduo.com
@@ -67,10 +73,3 @@ http:
     name: pinduoduo-remove-ads
     type: response
     require-body: true
-script-providers:
-  pinduoduo-remove-ads:
-    url: https://kelee.one/Resource/JavaScript/PinDuoDuo/PinDuoDuo_remove_ads.js
-    interval: 86400
-    _note: kelee.one requires Loon UA
-    headers:
-      User-Agent: Loon/764 CFNetwork/1498.700.1 Darwin/23.6.0 iPhone/17.6.1

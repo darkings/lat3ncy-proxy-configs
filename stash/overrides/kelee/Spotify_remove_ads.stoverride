@@ -12,6 +12,12 @@ desc: 移除播放广告，恢复歌手和专辑列表的正常展示。修改�
 icon: https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/Spotify.png
 rules:
 - AND,((DOMAIN-SUFFIX,spotify.com),(PROTOCOL,QUIC)),REJECT
+script-providers:
+  spotify-remove-ads:
+    url: https://kelee.one/Resource/JavaScript/Spotify/Spotify_remove_ads.js
+    interval: 86400
+    headers:
+      User-Agent: Loon/764 CFNetwork/1498.700.1 Darwin/23.6.0 iPhone/17.6.1
 http:
   mitm:
   - '*-spclient.spotify.com'
@@ -27,10 +33,3 @@ http:
     binary-body-mode: true
     timeout: 5
     argument: '[false,true]'
-script-providers:
-  spotify-remove-ads:
-    url: https://kelee.one/Resource/JavaScript/Spotify/Spotify_remove_ads.js
-    interval: 86400
-    _note: kelee.one requires Loon UA
-    headers:
-      User-Agent: Loon/764 CFNetwork/1498.700.1 Darwin/23.6.0 iPhone/17.6.1

@@ -15,6 +15,13 @@ rules:
 - DOMAIN,tether.edge.apple,REJECT-DROP
 - DOMAIN-SUFFIX,tthr.apple.com,REJECT-DROP
 - AND,((OR,((IP-ASN,714,no-resolve),(IP-ASN,6185,no-resolve))),(PROTOCOL,QUIC)),REJECT-DROP
+script-providers:
+  response-bundle:
+    url: https://github.com/NSRingo/WeatherKit/releases/download/v3.1.0/response.bundle.js
+    interval: 86400
+  response-bundle-1:
+    url: https://github.com/NSRingo/WeatherKit/releases/download/v3.1.0/response.bundle.js
+    interval: 86400
 http:
   mitm:
   - weatherkit.apple.com
@@ -30,10 +37,3 @@ http:
     require-body: true
     binary-body-mode: true
     argument: '[ColorfulClouds,ColorfulClouds,EU_EAQI,,devapi.qweather.com,,,Argument,WARN]'
-script-providers:
-  response-bundle:
-    url: https://github.com/NSRingo/WeatherKit/releases/download/v3.1.0/response.bundle.js
-    interval: 86400
-  response-bundle-1:
-    url: https://github.com/NSRingo/WeatherKit/releases/download/v3.1.0/response.bundle.js
-    interval: 86400

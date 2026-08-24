@@ -17,6 +17,13 @@ rules:
 - DOMAIN,hudong.alicdn.com,REJECT
 - DOMAIN,h-adashx.ut.taobao.com,REJECT
 - DOMAIN,ut.taobao.com,REJECT
+script-providers:
+  taobao-remove-ads:
+    url: https://raw.githubusercontent.com/RuCu6/QuanX/main/Scripts/myBlockAds.js
+    interval: 86400
+  taobao-remove-ads-1:
+    url: https://raw.githubusercontent.com/RuCu6/QuanX/main/Scripts/myBlockAds.js
+    interval: 86400
 http:
   mitm:
   - acs.m.taobao.com
@@ -44,10 +51,3 @@ http:
     name: taobao-remove-ads-1
     type: response
     require-body: true
-script-providers:
-  taobao-remove-ads:
-    url: https://raw.githubusercontent.com/RuCu6/QuanX/main/Scripts/myBlockAds.js
-    interval: 86400
-  taobao-remove-ads-1:
-    url: https://raw.githubusercontent.com/RuCu6/QuanX/main/Scripts/myBlockAds.js
-    interval: 86400

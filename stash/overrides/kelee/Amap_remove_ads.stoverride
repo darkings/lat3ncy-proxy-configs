@@ -14,6 +14,49 @@ rules:
 - DOMAIN,amap-aos-info-nogw.amap.com,REJECT
 - DOMAIN,free-aos-cdn-image.amap.com,REJECT
 - DOMAIN-SUFFIX,v.smtcdns.com,REJECT
+script-providers:
+  amap-remove-ads:
+    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
+    interval: 86400
+  amap-remove-ads-1:
+    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
+    interval: 86400
+  amap-remove-ads-2:
+    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
+    interval: 86400
+  amap-remove-ads-3:
+    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
+    interval: 86400
+  amap-remove-ads-4:
+    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
+    interval: 86400
+  amap-remove-ads-5:
+    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
+    interval: 86400
+  amap-remove-ads-6:
+    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
+    interval: 86400
+  amap-remove-ads-7:
+    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
+    interval: 86400
+  amap-remove-ads-8:
+    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
+    interval: 86400
+  amap-remove-ads-9:
+    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
+    interval: 86400
+  amap-remove-ads-10:
+    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
+    interval: 86400
+  amap-remove-ads-11:
+    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
+    interval: 86400
+  amap-remove-ads-12:
+    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
+    interval: 86400
+  amap-remove-ads-13:
+    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
+    interval: 86400
 http:
   mitm:
   - '*.amap.com'
@@ -92,46 +135,3 @@ http:
     name: amap-remove-ads-13
     type: response
     require-body: true
-script-providers:
-  amap-remove-ads:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-1:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-2:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-3:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-4:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-5:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-6:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-7:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-8:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-9:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-10:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-11:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-12:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
-  amap-remove-ads-13:
-    url: https://raw.githubusercontent.com/RuCu6/Loon/refs/heads/main/Scripts/amap.js
-    interval: 86400
