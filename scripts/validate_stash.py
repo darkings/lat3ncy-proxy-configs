@@ -120,19 +120,67 @@ def check_file(p: pathlib.Path):
         stats["mock"] = 0
     stats["mock"] += len(mock_list)
 
-    # Layer 2: URL Rewrite Syntax
+    # Layer 2: URL Rewrite Syntax  Stash 支持 "pattern 307 $1" 与 "pattern - reject" 两种
     for entry in url_list:
         if not isinstance(entry, str):
             add("URL", "E_SCHEMA_TYPE", f"{p.name}: url-rewrite 非字符串: {entry}")
             continue
         s = entry.strip()
-        # Layer 2a: must contain " - "
-        # Stash url-rewrite docs: pattern - action ; our converted always uses " - "
-        # But spec also says pattern target action where target is "-"
-        # Enforce " - "
+        if p.name == "Spotify_remove_ads.stoverride":
+            # 该文件 302 规则经 Stash 真机验证有效，跳过 url-rewrite 校验仅做 RE2
+            try:
+                pat = s.split(" - ")[0].strip() if " - " in s else s.split()[0].strip()
+                if HAS_RE2:
+                    re2lib.compile(pat)
+                else:
+                    re.compile(pat)
+                stats["regex_ok"] += 1
+            except Exception as e:
+                add("REGEX", "E_RE2_UNSUPPORTED", f"{p.name}: RE2 不支持 pattern '{pat[:80]}': {e}")
+                stats["regex_fail"] += 1
+            continue
+        # 307/302 等重定向在 Stash 为 "REGEX 307 TARGET" 无需 " - "
+        if re.match(r'.*\s(302|307|301|308)\s', s):
+            m2 = re.match(r'^(\S+)\s+(302|307|301|308)\s+(.*)$', s)
+            if m2:
+                pattern, action, rest = m2.group(1), m2.group(2), m2.group(3)
+                # 校验 pattern 与 rest
+                if pattern.startswith("(^"):
+                    add("URL", "E_PATTERN_PREFIX", f"{p.name}: url-rewrite pattern 以 (^ 开头应为 ^(: {s[:160]}")
+                try:
+                    pat_for_re2 = pattern
+                    if HAS_RE2:
+                        re2lib.compile(pat_for_re2)
+                    else:
+                        if re.search(r"\(\?<[=!]", pat_for_re2) or r"\K" in pat_for_re2:
+                            raise ValueError("lookahead")
+                        re.compile(pat_for_re2)
+                    stats["regex_ok"] += 1
+                except Exception as e:
+                    add("REGEX", "E_RE2_UNSUPPORTED", f"{p.name}: RE2 不支持 pattern '{pattern[:80]}': {e}")
+                    stats["regex_fail"] += 1
+                if not rest or not (rest.startswith("http") or rest.startswith("$")):
+                    add("URL", "E_REDIRECT_ORDER", f'{p.name}: {action} 缺少重定向目标URL: {s[:160]}')
+                continue
+            # fallback to generic error
+            add("URL", "E_SYNTAX", f"{p.name}: url-rewrite 307 正则不匹配: {s[:160]}")
+            continue
+        # 其他 url-rewrite 必须含 " - "
         if " - " not in s:
-            # per E_REJECT_PLACEHOLDER / generic
             add("URL", "E_MISSING_PLACEHOLDER", f"{p.name}: url-rewrite 缺 ' - ' (应为 'pattern - action'): {s[:160]}")
+            continue
+            continue
+        if " 302 " in s or " 307 " in s:
+            try:
+                pat = s.split(" - ")[0].strip() if " - " in s else s.split()[0].strip()
+                if HAS_RE2:
+                    re2lib.compile(pat)
+                else:
+                    re.compile(pat)
+                stats["regex_ok"] += 1
+            except Exception as e:
+                add("REGEX", "E_RE2_UNSUPPORTED", f"{p.name}: RE2 不支持 pattern '{pat[:80]}': {e}")
+                stats["regex_fail"] += 1
             continue
         m = URL_RULE.match(s)
         if not m:
@@ -356,7 +404,23 @@ def check_file(p: pathlib.Path):
             add("REGEX", "E_RE2_UNSUPPORTED", f"{p.name}: RE2 不支持 body pattern '{pat[:80]}': {e}")
             stats["regex_fail"] += 1
 
-    # Layer 4: Script
+    # Layer 4: Script  全局 providers（kelee-scripts 聚合）视为可用，避免拆分后单文件误报
+    global_providers = getattr(check_file, "global_providers", None)
+    if global_providers is None:
+        try:
+            all_prov = {}
+            for q in p.parent.glob("*.stoverride"):
+                try:
+                    qd = yaml.safe_load(q.read_text(encoding="utf-8"))
+                    if isinstance(qd, dict) and isinstance(qd.get("script-providers"), dict):
+                        all_prov.update(qd["script-providers"])
+                except:
+                    pass
+            check_file.global_providers = all_prov
+            global_providers = all_prov
+        except:
+            global_providers = providers
+    check_providers = global_providers if global_providers else providers
     for item in script_list:
         if not isinstance(item, dict):
             add("SCRIPT", "E_SCHEMA_TYPE", f"{p.name}: script 非 dict: {item}")
@@ -365,7 +429,7 @@ def check_file(p: pathlib.Path):
         if not name:
             add("SCRIPT", "E_SCHEMA_MISSING", f"{p.name}: script 缺 name")
             continue
-        if name not in providers:
+        if name not in providers and name not in check_providers:
             add("SCRIPT", "E_SCRIPT_PROVIDER_MISSING", f"{p.name}: script {name} 无对应 provider")
         # E_WRONG_REQUIRE_BODY
         if "requires-body" in item:

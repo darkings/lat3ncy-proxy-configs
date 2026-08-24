@@ -571,19 +571,34 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
                     pass
                 url_rewrite.append(f"{ast.match} - {act}")
                 continue
-            # 302/307/301/308
+            # 302/307/301/308  Stash: REGEX 302 TARGET  (无 - )
             if act in {"302","307","301","308"}:
                 target = (ast.target or "").strip()
-                # Swap detection: if line was tokenized incorrectly due to missing dash?
-                # Loon: ^url 307 $2  vs Stash: ^url - 307 $2 ; our parser already gives pattern, directive=307, rest=$2
-                # So no swap needed for url-rewrite case, but spec says swap if tokens[1] is 302/307
-                # Keep as is: pattern - 307 $2
-                if ast.match.startswith("(^"):
-                    ast.match = "^(" + ast.match[2:]
-                if target:
-                    url_rewrite.append(f"{ast.match} - {act} {target}")
+                pat = ast.match
+                if pat.startswith("(^"):
+                    pat = "^(" + pat[2:]
+                # 1. 去掉 Loon 的外层捕获包裹 ^(A)(B)(C) -> ^A(B)C
+                # QQ 例: ^(https:\/\/c\.pc\.qq\.com\/middlem\.html\?pfurl=)(http.*)(&pfuin=.*) -> ^https:\/\/c\.pc\.qq\.com\/middlem\.html\?pfurl=(http.*)&pfuin=.*
+                m_wrap = re.match(r'^\^\((.*)\)\((http\.\*)\)\((.*)\)$', pat)
+                if m_wrap:
+                    pat = f"^{m_wrap.group(1)}({m_wrap.group(2)}){m_wrap.group(3)}"
+                    # 3 组 -> 1 组，$2 -> $1
+                    if target == "$2":
+                        target = "$1"
+                    else:
+                        target = target.replace("$2", "$1").replace("$3", "$2")
                 else:
-                    url_rewrite.append(f"{ast.match} - {act}")
+                    # 2 组: ^(A)(http.*) -> ^A(http.*)
+                    m_wrap2 = re.match(r'^\^\((.*)\)\((http\.\*)\)$', pat)
+                    if m_wrap2:
+                        pat = f"^{m_wrap2.group(1)}({m_wrap2.group(2)})"
+                        if target == "$2":
+                            target = "$1"
+                # 2. Stash url-rewrite 无需 " - "，直接 "REGEX 307 TARGET"
+                if target:
+                    url_rewrite.append(f"{pat} {act} {target}")
+                else:
+                    url_rewrite.append(f"{pat} {act}")
                 continue
             # transparent etc.
             url_rewrite.append(f"{ast.match} - {act}")
