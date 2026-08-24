@@ -29,11 +29,9 @@ rules:
 - DOMAIN,meta.pinduoduo.com,REJECT
 - DOMAIN,apm-a.pinduoduo.com,REJECT
 script-providers:
-  pinduoduo-remove-ads:
-    url: https://kelee.one/Resource/JavaScript/PinDuoDuo/PinDuoDuo_remove_ads.js
+  pinduoduo-remove-ads-1:
+    url: https://stash.ponyo.fun/scripts/pinduoduo-remove-ads.js
     interval: 86400
-    headers:
-      User-Agent: Loon/764 CFNetwork/1498.700.1 Darwin/23.6.0 iPhone/17.6.1
 http:
   mitm:
   - api.pinduoduo.com
@@ -70,6 +68,6 @@ http:
   - ^https:\/\/api\.pinduoduo\.com\/api\/aristotle\/order_list_v4\? response-jq ".orders |= map(.order_buttons |= map(del(.order_growth_tip)))"
   script:
   - match: ^https:\/\/m\.pinduoduo\.net\/mdkd\/package\?from_app_scan
-    name: pinduoduo-remove-ads
+    name: pinduoduo-remove-ads-1
     type: response
     require-body: true

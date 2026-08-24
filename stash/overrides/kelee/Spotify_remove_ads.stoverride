@@ -13,11 +13,9 @@ icon: https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/
 rules:
 - AND,((DOMAIN-SUFFIX,spotify.com),(PROTOCOL,QUIC)),REJECT
 script-providers:
-  spotify-remove-ads:
-    url: https://kelee.one/Resource/JavaScript/Spotify/Spotify_remove_ads.js
+  spotify-remove-ads-1:
+    url: https://stash.ponyo.fun/scripts/spotify-remove-ads.js
     interval: 86400
-    headers:
-      User-Agent: Loon/764 CFNetwork/1498.700.1 Darwin/23.6.0 iPhone/17.6.1
 http:
   mitm:
   - '*-spclient.spotify.com'
@@ -27,7 +25,7 @@ http:
   - ^https:\/\/(?:\w+-spclient|spclient\.wg)\.spotify\.com(?::443)?\/artistview\/v1\/artist\/(.*)&platform=iphone - 302 https://spclient.wg.spotify.com/artistview/v1/artist/$1&platform=ipad
   script:
   - match: ^https:\/\/(?:\w+-spclient|spclient\.wg)\.spotify\.com(?::443)?\/(?:bootstrap|user-customization-service)
-    name: spotify-remove-ads
+    name: spotify-remove-ads-1
     type: response
     require-body: true
     binary-body-mode: true

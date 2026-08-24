@@ -864,17 +864,31 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             script_url = parsed["script_path"]
         if "script-path" in parsed:
             script_url = parsed["script-path"]
-        # 先算 better_url（kelee -> raw -> cdn），再按 URL 去重复用 provider
+        # 先算 better_url（kelee -> 自托管到 stash/scripts/<basename>.js，同 URL 复用）
         better_url_pre = script_url
+        # 统一用 script_url 的 basename 作文件名，保证同 URL 的 14 条 Amap 共用同一文件
+        base_for_file = sanitize_provider_name("", script_url, set()) if script_url else "script"
         if fetch_script_fallback and script_url and "kelee.one" in script_url and script_url.endswith(".js"):
             try:
-                js_content = fetch_text(script_url)[:5000]
-                m_raw = re.search(r'https://raw\.githubusercontent\.com/[^\s"\']+', js_content)
-                if m_raw:
-                    better_url_pre = m_raw.group(0)
+                full_js = fetch_text(script_url)
+                js_name = f"{base_for_file}.js"
+                local_js = REPO_ROOT / "stash" / "overrides" / "kelee" / "scripts" / js_name
+                local_js.parent.mkdir(parents=True, exist_ok=True)
+                local_js.write_text(full_js, encoding="utf-8")
+                better_url_pre = f"https://stash.ponyo.fun/scripts/{js_name}"
             except:
-                pass
+                try:
+                    js_head = fetch_text(script_url)[:2000]
+                    m_raw = re.search(r'https://raw\.githubusercontent\.com/[^\s"\']+', js_head)
+                    if m_raw:
+                        better_url_pre = m_raw.group(0)
+                except:
+                    pass
         cdn_pre = to_cdn_url(better_url_pre) if better_url_pre else ""
+        if cdn_pre and cdn_pre in registry.url_to_name:
+            provider_name = registry.url_to_name[cdn_pre]
+        else:
+            provider_name = sanitize_provider_name(tag, script_url, provider_names)
         # 若 URL 已存在，直接复用已有 provider 名，多 match 共用一个
         if cdn_pre and cdn_pre in registry.url_to_name:
             provider_name = registry.url_to_name[cdn_pre]

@@ -18,66 +18,42 @@ rules:
 - DOMAIN,ad.maoyan.com,REJECT
 - DOMAIN,e.jparking.cn,REJECT
 script-providers:
-  kff:
-    url: https://kelee.one/Resource/JavaScript/WexinMiniPrograms/kff/kff.js
+  kff-1:
+    url: https://stash.ponyo.fun/scripts/kff.js
     interval: 86400
-    headers:
-      User-Agent: Loon/764 CFNetwork/1498.700.1 Darwin/23.6.0 iPhone/17.6.1
-  ems:
-    url: https://kelee.one/Resource/JavaScript/WexinMiniPrograms/ems/ems.js
+  ems-1:
+    url: https://stash.ponyo.fun/scripts/ems.js
     interval: 86400
-    headers:
-      User-Agent: Loon/764 CFNetwork/1498.700.1 Darwin/23.6.0 iPhone/17.6.1
-  xiaotucc:
-    url: https://kelee.one/Resource/JavaScript/WexinMiniPrograms/xiaotucc/xiaotucc.js
+  xiaotucc-1:
+    url: https://stash.ponyo.fun/scripts/xiaotucc.js
     interval: 86400
-    headers:
-      User-Agent: Loon/764 CFNetwork/1498.700.1 Darwin/23.6.0 iPhone/17.6.1
-  familymart:
-    url: https://kelee.one/Resource/JavaScript/WexinMiniPrograms/FamilyMart/FamilyMart.js
+  familymart-1:
+    url: https://stash.ponyo.fun/scripts/familymart.js
     interval: 86400
-    headers:
-      User-Agent: Loon/764 CFNetwork/1498.700.1 Darwin/23.6.0 iPhone/17.6.1
-  lawson:
-    url: https://kelee.one/Resource/JavaScript/WexinMiniPrograms/lawson/lawson.js
+  lawson-1:
+    url: https://stash.ponyo.fun/scripts/lawson.js
     interval: 86400
-    headers:
-      User-Agent: Loon/764 CFNetwork/1498.700.1 Darwin/23.6.0 iPhone/17.6.1
-  chayanyuese-remove-ads:
-    url: https://kelee.one/Resource/JavaScript/WexinMiniPrograms/chayanyuese/chayanyuese_remove_ads.js
+  chayanyuese-remove-ads-1:
+    url: https://stash.ponyo.fun/scripts/chayanyuese-remove-ads.js
     interval: 86400
-    headers:
-      User-Agent: Loon/764 CFNetwork/1498.700.1 Darwin/23.6.0 iPhone/17.6.1
-  coco:
-    url: https://kelee.one/Resource/JavaScript/WexinMiniPrograms/coco/coco.js
+  coco-1:
+    url: https://stash.ponyo.fun/scripts/coco.js
     interval: 86400
-    headers:
-      User-Agent: Loon/764 CFNetwork/1498.700.1 Darwin/23.6.0 iPhone/17.6.1
-  qingju:
-    url: https://kelee.one/Resource/JavaScript/WexinMiniPrograms/qingju/qingju.js
+  qingju-1:
+    url: https://stash.ponyo.fun/scripts/qingju.js
     interval: 86400
-    headers:
-      User-Agent: Loon/764 CFNetwork/1498.700.1 Darwin/23.6.0 iPhone/17.6.1
-  alittle-tea:
-    url: https://kelee.one/Resource/JavaScript/WexinMiniPrograms/alittle-tea/alittle-tea.js
+  alittle-tea-1:
+    url: https://stash.ponyo.fun/scripts/alittle-tea.js
     interval: 86400
-    headers:
-      User-Agent: Loon/764 CFNetwork/1498.700.1 Darwin/23.6.0 iPhone/17.6.1
-  m-stand:
-    url: https://kelee.one/Resource/JavaScript/WexinMiniPrograms/M_Stand/M_Stand.js
+  m-stand-1:
+    url: https://stash.ponyo.fun/scripts/m-stand.js
     interval: 86400
-    headers:
-      User-Agent: Loon/764 CFNetwork/1498.700.1 Darwin/23.6.0 iPhone/17.6.1
-  t3:
-    url: https://kelee.one/Resource/JavaScript/WexinMiniPrograms/T3/T3.js
+  t3-1:
+    url: https://stash.ponyo.fun/scripts/t3.js
     interval: 86400
-    headers:
-      User-Agent: Loon/764 CFNetwork/1498.700.1 Darwin/23.6.0 iPhone/17.6.1
-  ming:
-    url: https://kelee.one/Resource/JavaScript/WexinMiniPrograms/ming/ming.js
+  ming-1:
+    url: https://stash.ponyo.fun/scripts/ming.js
     interval: 86400
-    headers:
-      User-Agent: Loon/764 CFNetwork/1498.700.1 Darwin/23.6.0 iPhone/17.6.1
 http:
   mitm:
   - 3pp.starbucks.com.cn
@@ -295,50 +271,50 @@ http:
   - ^https:\/\/chong\.qq\.com\/tws\/usernumberinfo\/GetUserInfo\? response-jq "del(.data.request.number.markSeat.servicehallOperList, .data.request.number.servicehallOperList, .data.request.number.markSeat.servicehallFuncList, .data.request.number.servicehallFuncList)"
   script:
   - match: ^https:\/\/webapi\.qmai\.cn\/web\/catering\/design\/homePage-Config
-    name: kff
+    name: kff-1
     type: response
     require-body: true
   - match: ^https:\/\/ump\.ems\.com\.cn\/new-generation-extend\/redis\/pageInfoByChannel
-    name: ems
+    name: ems-1
     type: response
     require-body: true
   - match: ^https:\/\/mapi\.xiaotucc\.com\/(mall\/main|main_page\/index\/getActivity)
-    name: xiaotucc
+    name: xiaotucc-1
     type: response
     require-body: true
   - match: ^https:\/\/minifm\.maxxipoint\.com\/banner\/list
-    name: familymart
+    name: familymart-1
     type: response
     require-body: true
   - match: ^https:\/\/lawsonapi\.yorentown\.com\/area\/sh-lawson\/app\/v1\/home
-    name: lawson
+    name: lawson-1
     type: response
     require-body: true
   - match: ^https:\/\/miniapp\.sexytea2013\.com\/cms\/slot\/queryByCodes\?codes=INDEX_TOP_BANNER
-    name: chayanyuese-remove-ads
+    name: chayanyuese-remove-ads-1
     type: response
     require-body: true
   - match: ^https:\/\/coco-com\.e\.verystar\.net\/v1\/home\/info
-    name: coco
+    name: coco-1
     type: response
     require-body: true
   - match: ^https:\/\/htwkop\.xiaojukeji\.com\/gateway\?api=hm\.fa\.homeConfig
-    name: qingju
+    name: qingju-1
     type: response
     require-body: true
   - match: ^https:\/\/cappapi\.alittle-tea\.com\/open\?method=catering\.set\.ad
-    name: alittle-tea
+    name: alittle-tea-1
     type: response
     require-body: true
   - match: ^https:\/\/api\.prod\.dj\.mstand\.cn\/scrm\/mini\/app\/index\/info
-    name: m-stand
+    name: m-stand-1
     type: response
     require-body: true
   - match: ^https:\/\/passenger\.t3go\.cn\/(solution\-|common\-)?(passenger\-)?(activity\-|app\-)?api\/notoken\/(trip\/)?api\/(home\/|common\/)?(v[1-3]\/)?(ad\/getNegativescreen|solution\/passenger\/open\/getHomeMenu|leftmenu|getHomeInfoGlobal)
-    name: t3
+    name: t3-1
     type: response
     require-body: true
   - match: ^https:\/\/newton\.gumingnc\.com\/newton-buyer\/newton\/buyer\/(ump|touch|external\/front)
-    name: ming
+    name: ming-1
     type: response
     require-body: true

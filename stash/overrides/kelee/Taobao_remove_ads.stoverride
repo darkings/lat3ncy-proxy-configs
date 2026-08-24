@@ -18,8 +18,8 @@ rules:
 - DOMAIN,h-adashx.ut.taobao.com,REJECT
 - DOMAIN,ut.taobao.com,REJECT
 script-providers:
-  taobao-remove-ads:
-    url: https://ghproxy.net/https://raw.githubusercontent.com/RuCu6/QuanX/main/Scripts/myBlockAds.js
+  taobao-remove-ads-1:
+    url: https://stash.ponyo.fun/scripts/taobao-remove-ads.js
     interval: 86400
 http:
   mitm:
@@ -41,10 +41,10 @@ http:
   - ^https:\/\/guide-acs\.m\.taobao\.com\/gw\/mtop\.taobao\.(volvo\.secondfloor\.getconfig|wireless\.home\.newface\.awesome\.get) - reject-dict
   script:
   - match: ^https:\/\/guide-acs\.m\.taobao\.com\/gw\/mtop\.taobao\.(cloudvideo\.video\.query|wireless\.home\.splash\.awesome\.get)
-    name: taobao-remove-ads
+    name: taobao-remove-ads-1
     type: response
     require-body: true
   - match: ^https:\/\/poplayer\.template\.alibaba\.com\/\w+\.json
-    name: taobao-remove-ads
+    name: taobao-remove-ads-1
     type: response
     require-body: true

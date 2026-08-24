@@ -16,7 +16,7 @@ rules:
 - DOMAIN-SUFFIX,tthr.apple.com,REJECT-DROP
 - AND,((OR,((IP-ASN,714,no-resolve),(IP-ASN,6185,no-resolve))),(PROTOCOL,QUIC)),REJECT-DROP
 script-providers:
-  response-bundle:
+  response-bundle-1:
     url: https://github.com/NSRingo/WeatherKit/releases/download/v3.1.0/response.bundle.js
     interval: 86400
 http:
@@ -24,12 +24,12 @@ http:
   - weatherkit.apple.com
   script:
   - match: ^https?:\/\/weatherkit\.apple\.com\/api\/v1\/availability\/
-    name: response-bundle
+    name: response-bundle-1
     type: response
     require-body: true
     argument: '[ColorfulClouds,ColorfulClouds,EU_EAQI,,devapi.qweather.com,,,Argument,WARN]'
   - match: ^https?:\/\/weatherkit\.apple\.com\/api\/v2\/weather\/
-    name: response-bundle
+    name: response-bundle-1
     type: response
     require-body: true
     binary-body-mode: true
