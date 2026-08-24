@@ -120,6 +120,34 @@ def check_file(p: pathlib.Path):
         stats["mock"] = 0
     stats["mock"] += len(mock_list)
 
+    # Stash's rewrite parser expects the full "match action expression" value
+    # to be a quoted YAML scalar. YAML decoding preserves the value but loses
+    # its style, so inspect the composed nodes as well as safe-loaded content.
+    try:
+        root_node = yaml.compose(text)
+        http_node = None
+        body_node = None
+        if isinstance(root_node, yaml.MappingNode):
+            for key_node, value_node in root_node.value:
+                if key_node.value == "http":
+                    http_node = value_node
+                    break
+        if isinstance(http_node, yaml.MappingNode):
+            for key_node, value_node in http_node.value:
+                if key_node.value == "body-rewrite":
+                    body_node = value_node
+                    break
+        if isinstance(body_node, yaml.SequenceNode):
+            for item_node in body_node.value:
+                if isinstance(item_node, yaml.ScalarNode) and item_node.style not in {"'", '"'}:
+                    add(
+                        "BODY",
+                        "E_BODY_YAML_UNQUOTED",
+                        f"{p.name}: body-rewrite 必须在 YAML 中整体引用: {item_node.value[:160]}",
+                    )
+    except Exception as e:
+        add("BODY", "E_BODY_STYLE_PARSE", f"{p.name}: 无法检查 body-rewrite YAML 引用样式: {e}")
+
     # Layer 2: URL Rewrite Syntax  Stash 统一: 302/307/transparent = PATTERN TARGET ACTION ; reject = PATTERN - reject*
     # 硬校验: 禁止 PATTERN - 302/307/transparent  与  PATTERN 302/307/transparent TARGET
     # 兼容 301/308 归一到 302/307
@@ -368,8 +396,8 @@ def check_file(p: pathlib.Path):
         s = entry.strip()
         if s.startswith("(^"):
             add("BODY", "E_PATTERN_PREFIX", f"{p.name}: body-rewrite pattern 以 (^ 开头: {s[:160]}")
-        if len(s) > 4096:
-            add("BODY", "E_TOO_LONG", f"{p.name}: body-rewrite 行长 {len(s)} >4096")
+        if len(s) > 65535:
+            add("BODY", "E_TOO_LONG", f"{p.name}: body-rewrite 行长 {len(s)} >65535")
         if "jq-path" in s:
             add("BODY", "E_JQ_PATH", f"{p.name}: body-rewrite 含未内联 jq-path: {s[:160]}")
         # YAML 解析后规则应由 match、action、完整 expression 三段组成；

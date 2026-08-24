@@ -4,6 +4,7 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import yaml
 
@@ -26,6 +27,37 @@ class KeLeeBodyRewriteConversionTests(unittest.TestCase):
         output = convert_lpx_to_stash(source, fetch_script_fallback=False)
         parsed = yaml.safe_load(output)
         return parsed["http"]["body-rewrite"]
+
+    def test_body_rewrite_is_one_quoted_yaml_scalar(self) -> None:
+        source = "\n".join([
+            "#!name=Quoted Body Contract",
+            "[Rewrite]",
+            r'''^https:\/\/api\.example\.com\/feed response-body-json-jq '.data |= (del(.ad) | .name = "Stash User")' ''',
+            "[MitM]",
+            "hostname=api.example.com",
+        ])
+        output = convert_lpx_to_stash(source, fetch_script_fallback=False)
+        body_line = next(line for line in output.splitlines() if "response-jq" in line)
+        self.assertTrue(body_line.lstrip().startswith("- '"), body_line)
+        self.assertTrue(body_line.endswith("'"), body_line)
+        self.assertNotIn('response-jq "', body_line)
+
+    def test_remote_jq_is_not_truncated_or_wrapped(self) -> None:
+        expression = "." + " | ." * 1500
+        source = "\n".join([
+            "#!name=Long JQ Contract",
+            "[Rewrite]",
+            r'^https:\/\/api\.example\.com\/feed response-body-json-jq jq-path="https://example.com/long.jq"',
+            "[MitM]",
+            "hostname=api.example.com",
+        ])
+        with patch("convert_kelee_lpx.fetch_text", return_value=expression):
+            output = convert_lpx_to_stash(source, fetch_script_fallback=False)
+        body_line = next(line for line in output.splitlines() if "response-jq" in line)
+        self.assertIn(expression, body_line)
+        self.assertTrue(body_line.endswith("'"), body_line[-100:])
+        parsed = yaml.safe_load(output)
+        self.assertTrue(parsed["http"]["body-rewrite"][0].endswith(expression))
 
     def test_json_del_uses_native_stash_action(self) -> None:
         rules = self.convert([

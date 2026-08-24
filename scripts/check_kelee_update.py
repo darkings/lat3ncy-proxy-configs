@@ -17,14 +17,14 @@ FETCH_HEADERS = {"User-Agent": LOON_UA, "Accept": "*/*"}
 
 # Import converter
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from convert_kelee_lpx import convert_lpx_to_stash, fetch_text
+from convert_kelee_lpx import convert_lpx_to_stash, dump_stash_yaml, fetch_text
 
 TARGETS_JSON = REPO_ROOT / "stash/overrides/kelee/targets.json"
 HASHES_JSON = REPO_ROOT / "stash/overrides/kelee/.hashes.json"
 OUT_DIR = REPO_ROOT / "stash/overrides/kelee"
 PROVIDER_BUNDLE = OUT_DIR / "kelee-scripts.stoverride"
 MAIN_CONFIG = REPO_ROOT / "stash-ios.yaml"
-CONVERTER_VERSION = 5
+CONVERTER_VERSION = 6
 
 def fetch_lpx(url: str) -> str:
     req = urllib.request.Request(url, headers=FETCH_HEADERS)
@@ -51,7 +51,7 @@ def split_script_providers(converted_text: str):
     if not isinstance(data, dict):
         raise ValueError("converted override root is not a mapping")
     providers = data.pop("script-providers", {}) or {}
-    body = yaml.safe_dump(data, sort_keys=False, allow_unicode=True, width=4096, default_flow_style=False)
+    body = dump_stash_yaml(data)
     return ((header + "\n" if header else "") + body), providers
 
 

@@ -21,6 +21,7 @@ import time
 import urllib.parse
 import urllib.request
 import urllib.error
+import yaml
 from pathlib import Path
 from typing import List, Dict, Optional
 from dataclasses import dataclass, field
@@ -44,6 +45,37 @@ FORCE_HTTP_ENGINE_OVERRIDES = {
         "m.pinduoduo.net:443",
     ],
 }
+
+
+class StashBodyRewrite(str):
+    """A body-rewrite scalar that must remain quoted in emitted YAML."""
+
+
+class StashYamlDumper(yaml.SafeDumper):
+    pass
+
+
+StashYamlDumper.add_representer(
+    StashBodyRewrite,
+    lambda dumper, value: dumper.represent_scalar(
+        "tag:yaml.org,2002:str", value, style="'"
+    ),
+)
+
+
+def dump_stash_yaml(data: dict) -> str:
+    """Dump Stash YAML with each body-rewrite kept as one quoted scalar."""
+    http = data.get("http")
+    if isinstance(http, dict) and isinstance(http.get("body-rewrite"), list):
+        http["body-rewrite"] = [StashBodyRewrite(str(rule)) for rule in http["body-rewrite"]]
+    return yaml.dump(
+        data,
+        Dumper=StashYamlDumper,
+        sort_keys=False,
+        allow_unicode=True,
+        width=1_000_000,
+        default_flow_style=False,
+    )
 
 REDIRECT_ACTIONS = {"302", "307", "transparent"}
 REJECT_ACTIONS = {"reject", "reject-200", "reject-img", "reject-dict", "reject-array"}
@@ -763,13 +795,10 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
                     try:
                         jq_content = fetch_text(jq_url).strip()
                         jq_content = re.sub(r'\s*\n\s*', ' ', jq_content).strip()
-                        if len(jq_content) > 3000:
-                            expression = jq_content[:3000]
-                            unsupported_rewrites.append(f"# jq-path {jq_url} truncated ({len(jq_content)} chars)")
-                        else:
-                            expression = jq_content
+                        expression = jq_content
                     except Exception as e:
-                        expression = f"# failed to fetch jq-path {jq_url}: {e}"
+                        unsupported_rewrites.append(f"# failed to fetch jq-path {jq_url}: {e}")
+                        continue
                 else:
                     # 剩余部分即 jq 表达式，保留原始（含 | =）
                     # tokens[2:] 可能是 jq 表达式被单引号包裹
@@ -1053,8 +1082,7 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
         stash["hosts"] = hosts
 
     # YAML Round Trip校验
-    import yaml
-    yaml_str = yaml.safe_dump(stash, sort_keys=False, allow_unicode=True, width=4096, default_flow_style=False)
+    yaml_str = dump_stash_yaml(stash)
     # Round trip
     try:
         reparsed = yaml.safe_load(yaml_str)
