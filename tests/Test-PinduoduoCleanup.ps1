@@ -105,31 +105,31 @@ const { cleanHomepage } = require(process.argv[1]);
 const payload = {
   result: {
     icon_set: { icons: [1] },
-    search_bar_hot_query: { text: "ad" },
+    search_bar_hot_query: { text: 'ad' },
     dy_module: { irregular_banner_dy: { id: 1 } },
     bottom_tabs: [
-      { link: "index.html" },
-      { link: "chat_list.html" },
-      { link: "personal.html" },
-      { link: "pdd_live_tab_list.html" },
-      { link: "classification.html" }
+      { link: 'index.html' },
+      { link: 'chat_list.html' },
+      { link: 'personal.html' },
+      { link: 'pdd_live_tab_list.html' },
+      { link: 'classification.html' }
     ],
     buffer_bottom_tabs: [
-      { link: "index.html" },
-      { link: "chat_list.html" },
-      { link: "personal.html" },
-      { link: "pdd_live_tab_list.html" }
+      { link: 'index.html' },
+      { link: 'chat_list.html' },
+      { link: 'personal.html' },
+      { link: 'pdd_live_tab_list.html' }
     ]
   }
 };
 const result = cleanHomepage(payload).result;
-if ("icon_set" in result || "search_bar_hot_query" in result) process.exit(11);
-if ("irregular_banner_dy" in result.dy_module) process.exit(12);
-for (const key of ["bottom_tabs", "buffer_bottom_tabs"]) {
+if ('icon_set' in result || 'search_bar_hot_query' in result) process.exit(11);
+if ('irregular_banner_dy' in result.dy_module) process.exit(12);
+for (const key of ['bottom_tabs', 'buffer_bottom_tabs']) {
   const links = result[key].map(item => item.link);
-  if (links.join(",") !== "index.html,chat_list.html,personal.html") process.exit(13);
+  if (links.join(',') !== 'index.html,chat_list.html,personal.html') process.exit(13);
 }
-console.log("PASS: Loon homepage script removes restored tabs");
+console.log('PASS: Loon homepage script removes restored tabs');
 '@
 $nodeOutput = & node -e $nodeContract $homepageScriptPath
 if ($LASTEXITCODE -ne 0 -or $nodeOutput -notcontains 'PASS: Loon homepage script removes restored tabs') {
