@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Daily check for KeLee 19 selected plugins.
+Daily check for selected KeLee plugins.
 Fetches each .lpx with Loon UA, compares SHA256 / date with stored hashes,
 re-converts to .stoverride if changed, updates .hashes.json and regenerates index.html.
 """

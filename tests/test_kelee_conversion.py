@@ -138,7 +138,7 @@ class KeLeeBodyRewriteConversionTests(unittest.TestCase):
             for script in (parsed.get("http") or {}).get("script") or []:
                 self.assertNotIn("binary-body-mode", script, path.name)
 
-        self.assertEqual(len(body_rules), 61)
+        self.assertEqual(len(body_rules), 76)
         for rule in body_rules:
             parts = rule.split(None, 2)
             self.assertEqual(len(parts), 3, rule)

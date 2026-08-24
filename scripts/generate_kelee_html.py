@@ -124,7 +124,7 @@ def main():
             <button class="btn primary" onclick="install('{raw}')">一键安装到 Stash</button>
           </div>
         </div>
-        """)
+        """.rstrip())
 
     html_content = f"""<!doctype html>
 <html lang="zh-CN">
@@ -191,7 +191,7 @@ a{{color:var(--accent);text-decoration:none}}
 </div>
 <div class="toolbar">
   <input id="q" class="search" placeholder="搜索 名称 / 作者 / 描述，例如 哔哩哔哩 / 拼多多 / Spotify">
-  <span class="pill active" data-filter="all">全部 19</span>
+  <span class="pill active" data-filter="all">全部 {len(entries)}</span>
   <span class="pill" data-filter="dep">依赖 2</span>
   <span class="pill" data-filter="ad">去广告</span>
 </div>
