@@ -3,6 +3,8 @@
 Daily check for selected KeLee plugins.
 Fetches each .lpx with Loon UA, compares SHA256 / date with stored hashes,
 re-converts to .stoverride if changed, updates .hashes.json and regenerates index.html.
+Generated overrides and mirrored scripts are deployment artifacts; they are intentionally
+kept in the ignored output directory and are not committed to the public repository.
 """
 from __future__ import annotations
 import argparse, json, hashlib, re, time, sys
