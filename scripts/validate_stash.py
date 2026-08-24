@@ -60,6 +60,7 @@ stats = {
     "url": 0,
     "header": 0,
     "body": 0,
+    "mock": 0,
     "script": 0,
     "providers": 0,
     "mitm": 0,
@@ -108,12 +109,16 @@ def check_file(p: pathlib.Path):
     script_list = http.get("script", []) if isinstance(http.get("script", []), list) else []
     providers = data.get("script-providers", {}) if isinstance(data.get("script-providers", {}), dict) else {}
     mitm_list = http.get("mitm", []) if isinstance(http.get("mitm", []), list) else []
+    mock_list = http.get("mock", []) if isinstance(http.get("mock", []), list) else []
     stats["url"] += len(url_list)
     stats["header"] += len(header_list)
     stats["body"] += len(body_list)
     stats["script"] += len([s for s in script_list if isinstance(s, dict)])
     stats["providers"] += len(providers)
     stats["mitm"] += len(mitm_list)
+    if "mock" not in stats:
+        stats["mock"] = 0
+    stats["mock"] += len(mock_list)
 
     # Layer 2: URL Rewrite Syntax
     for entry in url_list:
@@ -206,6 +211,41 @@ def check_file(p: pathlib.Path):
         except Exception as e:
             add("REGEX", "E_RE2_UNSUPPORTED", f"{p.name}: RE2 不支持 pattern '{pattern[:80]}': {e}")
             stats["regex_fail"] += 1
+
+    # Layer 6: Mock (http.mock) — Stash 新规范，非 url-rewrite
+    for entry in mock_list:
+        if not isinstance(entry, dict):
+            add("MOCK", "E_MOCK_INVALID", f"{p.name}: mock 非 dict: {entry}")
+            continue
+        m_match = entry.get("match")
+        if not m_match or not isinstance(m_match, str):
+            add("MOCK", "E_MOCK_INVALID", f"{p.name}: mock 缺 match")
+        else:
+            try:
+                if HAS_RE2:
+                    re2lib.compile(m_match)
+                else:
+                    if re.search(r"\(\?<[=!]", m_match) or r"\K" in m_match:
+                        raise ValueError("lookahead/behind or \\K")
+                    re.compile(m_match)
+                stats["regex_ok"] += 1
+            except Exception as e:
+                add("REGEX", "E_RE2_UNSUPPORTED", f"{p.name}: RE2 不支持 mock match '{m_match[:80]}': {e}")
+                stats["regex_fail"] += 1
+        if "status-code" not in entry:
+            add("MOCK", "E_MOCK_INVALID", f"{p.name}: mock 缺 status-code: {entry}")
+        if "body" not in entry:
+            add("MOCK", "E_MOCK_INVALID", f"{p.name}: mock 缺 body: {entry}")
+        # data 字段在新 http.mock 中为 body，已结构化，不应出现 data-type/status-code 残留
+        if "data-type" in entry or "status-code" in str(entry.get("body","")):
+            pass
+        if isinstance(entry.get("body"), str) and len(entry["body"]) > 5000:
+            add("MOCK", "E_MOCK_TOO_LONG", f"{p.name}: mock body 过长 {len(entry['body'])}")
+
+    # 硬校验: 禁止 url-rewrite 含 mock
+    for entry in url_list:
+        if isinstance(entry, str) and " - mock" in entry:
+            add("MOCK", "E_MOCK_IN_URL_REWRITE", f"{p.name}: url-rewrite 禁止 mock，应移至 http.mock: {entry[:160]}")
 
     # Layer 3: Header Rewrite
     for entry in header_list:
@@ -374,6 +414,7 @@ def main():
     print("")
     print("Mock:")
     print(f" {layer_status('MOCK')}")
+    print(f"  {stats.get('mock',0)} mocks")
     if errors["MOCK"]:
         for e in errors["MOCK"]:
             print(f"  - {e}")
