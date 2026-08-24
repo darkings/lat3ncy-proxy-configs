@@ -28,10 +28,10 @@ http:
   - ^https:\/\/guide-acs\.m\.taobao\.com\/gw\/mtop\.taobao\.(volvo\.secondfloor\.getconfig|wireless\.home\.newface\.awesome\.get) - reject-dict
   script:
   - match: ^https:\/\/guide-acs\.m\.taobao\.com\/gw\/mtop\.taobao\.(cloudvideo\.video\.query|wireless\.home\.splash\.awesome\.get)
-    name: taobao-remove-ads
+    name: taobao-remove-ads-1
     type: response
     require-body: true
   - match: ^https:\/\/poplayer\.template\.alibaba\.com\/\w+\.json
-    name: taobao-remove-ads
+    name: taobao-remove-ads-1
     type: response
     require-body: true

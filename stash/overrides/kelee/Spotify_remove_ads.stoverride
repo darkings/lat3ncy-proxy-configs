@@ -9,10 +9,10 @@ http:
   - spclient.wg.spotify.com
   url-rewrite:
   - ^https:\/\/(?:\w+-spclient|spclient\.wg)\.spotify\.com(?::443)?\/pendragon\/ - reject-dict
-  - ^https:\/\/.*\.spotify\.com.* - 302 https://spclient.wg.spotify.com
+  - ^https:\/\/(?:\w+-spclient|spclient\.wg)\.spotify\.com(?::443)?\/artistview\/v1\/artist\/(.*)&platform=iphone https://spclient.wg.spotify.com/artistview/v1/artist/$1&platform=ipad 302
   script:
   - match: ^https:\/\/(?:\w+-spclient|spclient\.wg)\.spotify\.com(?::443)?\/(?:bootstrap|user-customization-service)
-    name: spotify-remove-ads
+    name: spotify-remove-ads-1
     type: response
     require-body: true
     binary-body-mode: true

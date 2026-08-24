@@ -7,33 +7,33 @@ http:
   - spclient.wg.spotify.com
   script:
   - match: ^https?:\/\/api\.spotify\.com\/v1\/tracks\?
-    name: spotify-response
+    name: spotify-response-1
     type: response
     require-body: true
   - match: ^https?:\/\/spclient\.wg\.spotify\.com\/color-lyrics\/v2\/track\/(.+)\?(.*)format=json
-    name: spotify-request
+    name: spotify-request-1
     type: request
     require-body: true
   - match: ^https?:\/\/spclient\.wg\.spotify\.com\/color-lyrics\/v2\/track\/\w+\?(.*)
-    name: spotify-request
+    name: spotify-request-1
     type: request
     require-body: true
     binary-body-mode: true
   - match: ^https?:\/\/spclient\.wg\.spotify\.com\/color-lyrics\/v2\/track\/(.+)\?(.*)format=json(.*)subtype=Translate
-    name: translate-response
+    name: translate-response-1
     type: response
     require-body: true
   - match: ^https?:\/\/spclient\.wg\.spotify\.com\/color-lyrics\/v2\/track\/\w+\?(.*)subtype=Translate
-    name: translate-response
+    name: translate-response-1
     type: response
     require-body: true
     binary-body-mode: true
   - match: ^https?:\/\/spclient\.wg\.spotify\.com\/color-lyrics\/v2\/track\/(.+)\?(.*)format=json(.*)subtype=External
-    name: external-lyrics-response
+    name: external-lyrics-response-1
     type: response
     require-body: true
   - match: ^https?:\/\/spclient\.wg\.spotify\.com\/color-lyrics\/v2\/track\/\w+\?(.*)subtype=External
-    name: external-lyrics-response
+    name: external-lyrics-response-1
     type: response
     require-body: true
     binary-body-mode: true

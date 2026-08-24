@@ -28,58 +28,58 @@ http:
   - ^https:\/\/m5-zb\.amap\.com\/ws\/sharedtrip\/taxi\/order_detail_car_tips\? response-jq "del(.data.carTips.data.popupInfo)"
   script:
   - match: ^https:\/\/m5\.amap\.com\/ws\/aos\/perception\/publicTravel\/beforeNavi\?
-    name: amap-remove-ads
+    name: amap-remove-ads-1
     type: response
     require-body: true
   - match: ^https:\/\/m5\.amap\.com\/ws\/bus\/plan\/integrate\?
-    name: amap-remove-ads
+    name: amap-remove-ads-1
     type: response
     require-body: true
   - match: ^https:\/\/m5\.amap\.com\/ws\/c3frontend\/(?:af-(?:hotel|launch)\/page\/main|af-nearby\/nearby)
-    name: amap-remove-ads
+    name: amap-remove-ads-1
     type: response
     require-body: true
   - match: ^https:\/\/m5\.amap\.com\/ws\/perception\/drive\/(?:routeInfo|routePlan)
-    name: amap-remove-ads
+    name: amap-remove-ads-1
     type: response
     require-body: true
   - match: ^https:\/\/m5\.amap\.com\/ws\/shield\/search_bff\/hotword\?
-    name: amap-remove-ads
+    name: amap-remove-ads-1
     type: response
     require-body: true
   - match: ^https:\/\/m5\.amap\.com\/ws\/shield\/search_poi\/(?:mps|search\/sp|sug|tips_operation_location)
-    name: amap-remove-ads
+    name: amap-remove-ads-1
     type: response
     require-body: true
   - match: ^https:\/\/m5\.amap\.com\/ws\/faas\/amap-navigation\/(?:card-service-plan-home|main-page)
-    name: amap-remove-ads
+    name: amap-remove-ads-1
     type: response
     require-body: true
   - match: ^https:\/\/m5\.amap\.com\/ws\/shield\/frogserver\/aocs\/updatable\/1\?
-    name: amap-remove-ads
+    name: amap-remove-ads-1
     type: response
     require-body: true
   - match: ^https:\/\/m5\.amap\.com\/ws\/shield\/dsp\/profile\/index\/nodefaasv3\?
-    name: amap-remove-ads
+    name: amap-remove-ads-1
     type: response
     require-body: true
   - match: ^https:\/\/m5\.amap\.com\/ws\/shield\/search\/nearbyrec_smart\?
-    name: amap-remove-ads
+    name: amap-remove-ads-1
     type: response
     require-body: true
   - match: ^https:\/\/m5\.amap\.com\/ws\/valueadded\/alimama\/splash_screen\?
-    name: amap-remove-ads
+    name: amap-remove-ads-1
     type: response
     require-body: true
   - match: ^https:\/\/m5-zb\.amap\.com\/ws\/boss\/(?:car\/order\/content_info|order_web\/friendly_information)
-    name: amap-remove-ads
+    name: amap-remove-ads-1
     type: response
     require-body: true
   - match: ^https:\/\/m5-zb\.amap\.com\/ws\/promotion-web\/resource(\/home)?\?
-    name: amap-remove-ads
+    name: amap-remove-ads-1
     type: response
     require-body: true
   - match: ^https:\/\/(?:info|m5)\.amap\.com\/ws\/shield\/search\/(?:common\/coupon\/info|poi\/detail)
-    name: amap-remove-ads
+    name: amap-remove-ads-1
     type: response
     require-body: true
