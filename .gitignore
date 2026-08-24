@@ -16,3 +16,9 @@
 # Local Python caches.
 __pycache__/
 *.py[cod]
+
+# KeLee/Stash 生成物只在本地和云端发布，不回写公有仓库。
+# targets.json 是公开的转换目标清单，保留在仓库中。
+/stash/overrides/kelee/*
+!/stash/overrides/kelee/
+!/stash/overrides/kelee/targets.json

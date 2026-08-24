@@ -3,9 +3,9 @@
 <#[
 零凭据部署脚本
 
-本脚本只负责部署：打包本地已有产物、上传、切换版本、安装/更新云端定时任务，
-以及重建并验证 Stash 静态站点。它不会检查 KeLee 上游，也不会执行 Loon→Stash
-转换；检查和转换由云端的 systemd timer 定时完成。
+本脚本会先调用本地 KeLee 转换器生成待发布产物，再打包上传、切换版本、安装/更新
+云端定时任务，并重建和验证 Stash 静态站点。生成的产物不提交到公有 Git 仓库；
+云端 systemd timer 后续会继续检查上游并执行 Loon→Stash 转换。
 
 本脚本不保存密码、私钥、Token 或其他认证材料。SSH 认证完全交给本机的
 ~/.ssh/config、ssh-agent 或系统 SSH 凭据管理器；默认只使用已配置的 Host
@@ -174,6 +174,19 @@ try {
     $script:SshTool = Get-NativeTool -Names @("ssh.exe", "ssh")
     $script:ScpTool = Get-NativeTool -Names @("scp.exe", "scp")
     $script:TarTool = Get-NativeTool -Names @("tar.exe", "tar")
+    $script:PythonTool = Get-NativeTool -Names @("python.exe", "python3", "python")
+
+    # 公有仓库只保留转换器和目标清单；部署前在本地生成完整产物。
+    $checkerPath = Join-Path $scriptsRoot "check_kelee_update.py"
+    Write-Host "[本地] 运行 KeLee 转换器（--force）" -ForegroundColor DarkCyan
+    $checkerOutput = @(& $script:PythonTool $checkerPath --force 2>&1)
+    $checkerExitCode = $LASTEXITCODE
+    foreach ($line in $checkerOutput) {
+        Write-Host ([string]$line)
+    }
+    if ($checkerExitCode -notin @(0, 2)) {
+        throw "KeLee 转换失败（退出码 $checkerExitCode）"
+    }
 
     $releaseId = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss-fff")
     $remoteRelease = "$remoteRoot/releases/$releaseId"
