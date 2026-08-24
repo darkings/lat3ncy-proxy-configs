@@ -1,5 +1,6 @@
 name: kelee-scripts
 desc: KeLee Scripts Hub (26 providers)
+icon: https://raw.githubusercontent.com/KOP-XIAO/QuantumultX/master/Icons/Kelee.png
 script-providers:
   amap-remove-ads:
     url: https://stash.ponyo.fun/scripts/amap-remove-ads.js
@@ -79,4 +80,3 @@ script-providers:
   ming:
     url: https://stash.ponyo.fun/scripts/ming.js
     interval: 86400
-icon: https://raw.githubusercontent.com/KOP-XIAO/QuantumultX/master/Icons/Kelee.png
