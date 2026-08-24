@@ -72,6 +72,31 @@ class KeLeeBodyRewriteConversionTests(unittest.TestCase):
         self.assertNotIn("requires-body", script)
         self.assertNotIn("binary-body-mode", script)
 
+    def test_pinduoduo_forces_tunnel_tcp_into_http_engine(self) -> None:
+        source = "\n".join([
+            "#!name=Pinduoduo Contract",
+            "[Rule]",
+            "AND,((DOMAIN,api.pinduoduo.com),(PROTOCOL,QUIC)),REJECT",
+            "[Rewrite]",
+            r"^https:\/\/api\.pinduoduo\.com\/feed response-body-json-del data.ad",
+            "[MitM]",
+            "hostname=api.pinduoduo.com, m.pinduoduo.net",
+        ])
+        output = convert_lpx_to_stash(
+            source,
+            "https://kelee.one/Tool/Loon/Lpx/PinDuoDuo_remove_ads.lpx",
+            fetch_script_fallback=False,
+        )
+        parsed = yaml.safe_load(output)
+        self.assertEqual(
+            parsed["http"]["force-http-engine"],
+            ["api.pinduoduo.com:443", "m.pinduoduo.net:443"],
+        )
+        self.assertEqual(
+            parsed["rules"][0],
+            "AND,((DOMAIN,api.pinduoduo.com),(NETWORK,UDP),(DST-PORT,443)),REJECT",
+        )
+
     def test_generated_bundle_uses_runtime_stash_expressions(self) -> None:
         override_root = REPO_ROOT / "stash" / "overrides" / "kelee"
         body_rules: list[str] = []
@@ -98,6 +123,10 @@ class KeLeeBodyRewriteConversionTests(unittest.TestCase):
             (override_root / "PinDuoDuo_remove_ads.stoverride").read_text(encoding="utf-8")
         )
         pdd_body = pdd["http"]["body-rewrite"]
+        self.assertEqual(
+            pdd["http"]["force-http-engine"],
+            ["api.pinduoduo.com:443", "m.pinduoduo.net:443"],
+        )
         self.assertTrue(
             any(" response-json-del " in f" {rule} " and "result.icon_set" in rule for rule in pdd_body)
         )

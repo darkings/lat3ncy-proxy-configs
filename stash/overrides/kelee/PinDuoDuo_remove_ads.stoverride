@@ -11,6 +11,7 @@ name: 拼多多去广告
 desc: 移除开屏广告、底栏多多视频、会场入口、聊天页面精选推荐及推广，精简首页和个人中心。
 icon: https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/PinDuoDuo.png
 rules:
+- AND,((DOMAIN,api.pinduoduo.com),(NETWORK,UDP),(DST-PORT,443)),REJECT
 - AND,((URL-REGEX,"^http:\/\/((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\/d(\d)?"),(USER-AGENT,"*com.xunmeng.pinduoduo*")),REJECT
 - AND,((URL-REGEX,"^http:\/\/\[[0-9a-fA-F:]+\]\/d(\d)?\?"),(USER-AGENT,"*com.xunmeng.pinduoduo*")),REJECT
 - AND,((DOMAIN,api.pinduoduo.com),(PROTOCOL,QUIC)),REJECT
@@ -29,6 +30,9 @@ rules:
 - DOMAIN,meta.pinduoduo.com,REJECT
 - DOMAIN,apm-a.pinduoduo.com,REJECT
 http:
+  force-http-engine:
+  - api.pinduoduo.com:443
+  - m.pinduoduo.net:443
   mitm:
   - api.pinduoduo.com
   - m.pinduoduo.net

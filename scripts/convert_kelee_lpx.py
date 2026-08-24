@@ -35,6 +35,16 @@ RUNTIME_ASSET_MIRRORS = {
         "9410-b8806e870a26db7d.js",
 }
 
+# Some iOS apps bypass the system HTTP proxy and open TCP connections directly
+# through the tunnel. Keep force-http-engine narrowly scoped to the hosts whose
+# Loon plugin explicitly expects MitM/rewrite processing.
+FORCE_HTTP_ENGINE_OVERRIDES = {
+    "PinDuoDuo_remove_ads.lpx": [
+        "api.pinduoduo.com:443",
+        "m.pinduoduo.net:443",
+    ],
+}
+
 REDIRECT_ACTIONS = {"302", "307", "transparent"}
 REJECT_ACTIONS = {"reject", "reject-200", "reject-img", "reject-dict", "reject-array"}
 
@@ -535,10 +545,21 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
                 redirect_from_rules.append(r)
                 continue
         rules.append(normalize_rule(r))
+    source_filename = lpx_url.rsplit("/", 1)[-1]
+    if source_filename == "PinDuoDuo_remove_ads.lpx":
+        # PROTOCOL,QUIC depends on protocol sniffing. This equivalent UDP/443
+        # fallback forces the app to retry over TCP even when QUIC is not yet
+        # identified, so the response can enter MitM/body rewrite processing.
+        pdd_quic_fallback = "AND,((DOMAIN,api.pinduoduo.com),(NETWORK,UDP),(DST-PORT,443)),REJECT"
+        if pdd_quic_fallback not in rules:
+            rules.insert(0, pdd_quic_fallback)
     if rules:
         stash["rules"] = rules
 
     http = {}
+    force_http_engine = FORCE_HTTP_ENGINE_OVERRIDES.get(source_filename, [])
+    if force_http_engine:
+        http["force-http-engine"] = force_http_engine
     # MITM
     mitm_raw = []
     for k in list(sections.keys()):
