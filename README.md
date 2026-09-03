@@ -1,6 +1,6 @@
 # 自用代理配置
 
-这个仓库保存我当前自用的 Loon iOS、Loon macOS、Stash iOS 和 Sparkle Windows 配置。配置按自己的设备、常用应用和 Tailscale 网络维护，不作为适合所有环境的通用模板。公开内容不包含私人节点订阅、MITM 证书、密码或 Token。
+这个仓库保存我当前自用的 Loon iOS、Loon macOS、Stash iOS 和 Stelliberty Windows 配置。配置按自己的设备、常用应用和 Tailscale 网络维护，不作为适合所有环境的通用模板。公开内容不包含私人节点订阅、MITM 证书、密码或 Token。
 
 ## 配置下载
 
@@ -60,13 +60,13 @@ https://stash.ponyo.fun/kelee-scripts.stoverride
 
 KeLee 的 Loon→Stash 转换器和目标清单提交在本仓库；`.stoverride`、转换后的 JavaScript、索引页和哈希文件属于生成物，不回写公有 Git 历史，由云端同步任务按需生成并发布。
 
-Sparkle Windows：
+Stelliberty Windows：
 
 ```text
-https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/sparkle-windows-override.yaml
+https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/stelliberty-override.yaml
 ```
 
-Loon 配置使用对应 Raw 链接导入，导入后需在本地添加节点订阅并生成、安装 MITM 证书。Stash 配置不会保存私人机场 URL，而是从设备本机名为 `ios` 的 Sub-Store 订阅读取节点；Tailscale 使用配置内的原生节点单独完成交互认证，不需要把 `auth-key` 写入文件。Windows YAML 不包含节点，不能作为普通订阅单独激活，需要在 Sparkle 中作为远程 YAML 覆写绑定到节点订阅或内置 Sub-Store 的 ClashMeta 输出。
+Loon 配置使用对应 Raw 链接导入，导入后需在本地添加节点订阅并生成、安装 MITM 证书。Stash 配置不会保存私人机场 URL，而是从设备本机名为 `ios` 的 Sub-Store 订阅读取节点；Tailscale 使用配置内的原生节点单独完成交互认证，不需要把 `auth-key` 写入文件。Windows YAML 不包含节点，不能作为普通订阅单独激活，需要在 Stelliberty 中作为远程 YAML 覆写绑定到节点订阅或内置 Sub-Store 的 ClashMeta 输出。
 
 ## Loon iOS 与 macOS
 
@@ -102,18 +102,18 @@ Stash 版要求 iOS 客户端 3.4 或更高版本，使用名为 `Tailscale` 的
 
 `*.ts.net` 没有加入 `fake-ip-filter` 是有意设计：Stash 需要保留域名映射，才能把 MagicDNS 名称交给内置 Tailscale 节点。只有 Tailscale 登录与控制域名返回真实 IP 并直连。Cats-Team 广告规则每 6 小时更新，其余 MetaCubeX MRS 规则每天更新，以降低 iOS Network Extension 的规则内存占用。
 
-## Sparkle Windows
+## Stelliberty Windows
 
-Windows 版用于 Sparkle 的 Mihomo 内核，以单个远程 YAML 覆写叠加在节点订阅或内置 Sub-Store 的 ClashMeta 输出上。覆写负责 DNS、嗅探、策略组和分流规则；端口、系统代理、TUN、局域网访问等客户端托管设置由 Sparkle 界面管理。
+Windows 版用于 Stelliberty 的 Mihomo 内核，以单个远程 YAML 覆写叠加在节点订阅或内置 Sub-Store 的 ClashMeta 输出上。覆写负责 DNS、嗅探、策略组和分流规则；端口、系统代理、TUN、局域网访问等客户端托管设置由 Stelliberty 界面管理。
 
 ### 配置方法
 
-1. 在 Sparkle 设置中启用内置 Sub-Store，并保持“允许局域网连接”关闭；如果不用 Sub-Store，也可以直接导入私人节点订阅。
-2. 在 Sub-Store 中添加机场订阅并生成 ClashMeta 输出，然后将该输出添加为 Sparkle 配置。只有在上游订阅无法直连下载时，才启用“为 Sub-Store 内所有请求使用代理”。
-3. 打开 Sparkle 的“覆写”页面，粘贴上方 Windows Raw 地址并导入，文件类型选择 YAML。
+1. 在 Stelliberty 设置中启用内置 Sub-Store，并保持“允许局域网连接”关闭；如果不用 Sub-Store，也可以直接导入私人节点订阅。
+2. 在 Sub-Store 中添加机场订阅并生成 ClashMeta 输出，然后将该输出添加为 Stelliberty 配置。只有在上游订阅无法直连下载时，才启用“为 Sub-Store 内所有请求使用代理”。
+3. 打开 Stelliberty 的“覆写”页面，粘贴上方 Windows Raw 地址并导入，文件类型选择 YAML。
 4. 不要启用“全局覆写”；在目标订阅的设置中只为该订阅绑定此远程覆写。
-5. 使用规则模式，开启系统代理，关闭 TUN 和局域网访问；混合端口可设为 `7897`，也可保留 Sparkle 默认值。
-6. 关闭 Sparkle 的 DNS 和嗅探接管，让远程覆写中的 Fake-IP、解析服务器、协议嗅探和 Tailscale 排除完整生效。
+5. 使用规则模式，开启系统代理，关闭 TUN 和局域网访问；混合端口可设为 `7897`，也可保留 Stelliberty 默认值。
+6. 关闭 Stelliberty 的 DNS 和嗅探接管，让远程覆写中的 Fake-IP、解析服务器、协议嗅探和 Tailscale 排除完整生效。
 
 不要把 Windows Raw 地址添加成普通节点订阅，也不需要导入 JavaScript。内置 Sub-Store 默认只在本机使用；不要开启其局域网访问，也不要把订阅 URL、Token 或 Sub-Store 数据提交到仓库。
 
@@ -123,7 +123,7 @@ Windows 版提供全节点自动测速，以及香港、台湾、日本、新加
 
 OneDrive 保留独立规则集，但流量并入 Microsoft 策略。Microsoft、Steam 的中国区下载/CDN 子集优先直连，商店、社区和国际服务进入对应策略组；Apple 全部服务（含 iCloud 同步与 APNs 推送）直连。Windows 配置不加入 TikTok、抖音、拼多多等移动 App 专项规则，也不包含 HTTPS 响应重写。
 
-Sparkle 的系统代理绕过属于应用设置，不在远程覆写中。建议保留 `100.*`、`*.ts.net` 和 `*.tailscale.com`。如需开启 TUN，应使用 `mixed` 栈、关闭严格路由，并把 `100.64.0.0/10` 和 `fd7a:115c:a1e0::/48` 加入路由排除；确认 WSL 和 Tailnet 均正常后再继续调整。
+Stelliberty 的系统代理绕过属于应用设置，不在远程覆写中。建议保留 `100.*`、`*.ts.net` 和 `*.tailscale.com`。如需开启 TUN，应使用 `mixed` 栈、关闭严格路由，并把 `100.64.0.0/10` 和 `fd7a:115c:a1e0::/48` 加入路由排除；确认 WSL 和 Tailnet 均正常后再继续调整。
 
 ## 规则维护与校验
 
@@ -143,7 +143,7 @@ python scripts/generate_microsoft_cn.py
 
 生成器会递归处理 `v2fly/domain-list-community` 的 include，只保留继承或显式标记为 `@cn` 的域名，并输出确定性排序的 `loon/rules/microsoft-cn.list`。更新后应审阅差异，再运行测试；不要直接把整个 Microsoft 列表设为直连。
 
-GitHub Actions 会检查 Loon/Stash/Sparkle 配置结构、策略与规则顺序、Microsoft-CN 生成结果、拼多多本地回退行为、README、YAML 解析、远程资源和敏感信息。远程审计严格检查 GitHub Raw；KeLee 与 geodata 对通用 HTTP 客户端返回的 403/503 只记录警告。也可以在本地运行 `python scripts/check_remote_resources.py` 进行相同审计。
+GitHub Actions 会检查 Loon/Stash/Stelliberty 配置结构、策略与规则顺序、Microsoft-CN 生成结果、拼多多本地回退行为、README、YAML 解析、远程资源和敏感信息。远程审计严格检查 GitHub Raw；KeLee 与 geodata 对通用 HTTP 客户端返回的 403/503 只记录警告。也可以在本地运行 `python scripts/check_remote_resources.py` 进行相同审计。
 
 ## 更新说明
 
@@ -151,6 +151,6 @@ Loon 主配置不会实时自动更新。仓库发布新版后，需要使用对
 
 Stash 主配置更新时需要刷新 Raw 配置；设备本地添加的 provider 和 Tailscale 登录状态不应写回公开文件，更新前应确认本地编辑不会被覆盖。MRS 规则由 Stash 按各自的 `interval` 在后台刷新。
 
-Sparkle 更新时，在“覆写”页面点击远程覆写的刷新按钮，再重新加载目标订阅；不需要删除或重新导入节点订阅。Sub-Store 输出按 Sparkle 中设置的订阅更新周期刷新，Cats-Team 与 MetaCubeX 规则由 Mihomo 按 `interval` 自动更新。
+Stelliberty 更新时，在“覆写”页面点击远程覆写的刷新按钮，再重新加载目标订阅；不需要删除或重新导入节点订阅。Sub-Store 输出按 Stelliberty 中设置的订阅更新周期刷新，Cats-Team 与 MetaCubeX 规则由 Mihomo 按 `interval` 自动更新。
 
 节点订阅和 MITM 证书由设备本地独立维护，不会写入公开仓库。更新这里的配置不会自动上传、替换或公开这些私人内容。

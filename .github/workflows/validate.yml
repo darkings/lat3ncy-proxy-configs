@@ -36,7 +36,7 @@ jobs:
           ./tests/Test-StashIosConfig.ps1
           ./tests/Test-MicrosoftCnRule.ps1
           ./tests/Test-Readme.ps1
-          ./tests/Test-SparkleWindowsConfig.ps1
+          ./tests/Test-StellibertyConfig.ps1
           ./tests/Test-PinduoduoCleanup.ps1
           ./tests/Test-DocumentPolicy.ps1
 
@@ -55,10 +55,10 @@ jobs:
           from pathlib import Path
           import yaml
 
-          sparkle = yaml.safe_load(Path('sparkle-windows-override.yaml').read_text(encoding='utf-8'))
-          assert isinstance(sparkle, dict)
-          assert sparkle['rule-providers']['Google']['format'] == 'mrs'
-          assert sparkle['rules'].index('RULE-SET,YouTube,YouTube') < sparkle['rules'].index('RULE-SET,Google,Google')
+          stelliberty = yaml.safe_load(Path('stelliberty-override.yaml').read_text(encoding='utf-8'))
+          assert isinstance(stelliberty, dict)
+          assert stelliberty['rule-providers']['Google']['format'] == 'mrs'
+          assert stelliberty['rules'].index('RULE-SET,YouTube,YouTube') < stelliberty['rules'].index('RULE-SET,Google,Google')
 
           stash = yaml.safe_load(Path('stash-ios.yaml').read_text(encoding='utf-8'))
           assert isinstance(stash, dict)
@@ -75,7 +75,7 @@ jobs:
           assert isinstance(pinduoduo, dict)
           assert 'api.pinduoduo.com' in pinduoduo['http']['mitm']
           assert pinduoduo['script-providers']['pinduoduo-homepage-cleanup']['url'].startswith('https://cdn.jsdelivr.net/')
-          print('PASS: Stash, Stash override, and Sparkle YAML parse and rule ordering')
+          print('PASS: Stash, Stash override, and Stelliberty YAML parse and rule ordering')
           PY
 
       - name: Audit remote resources
