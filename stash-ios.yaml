@@ -414,6 +414,21 @@ rules:
   - RULE-SET,Private-Domain,DIRECT
   - RULE-SET,Private-IP,DIRECT,no-resolve
   - RULE-SET,Cats-Team-AdRules,REJECT
+  # Ximalaya ad-block gap fills (anti-AD + Cats-Team cross-check): three ad
+  # hosts absent from both the plugin and Cats-Team, plus QUIC fallback
+  # protection for all Ximalaya ad hosts (UDP/443 blocked so the app retries
+  # over TCP and the request re-enters rule/MitM processing).
+  - DOMAIN-SUFFIX,adbs.ximalaya.com,REJECT
+  - DOMAIN-SUFFIX,adwbs.ximalaya.com,REJECT
+  - DOMAIN-SUFFIX,dns.ximalaya.com,REJECT
+  - AND,((DOMAIN,adse.ximalaya.com),(NETWORK,UDP),(DST-PORT,443)),REJECT
+  - AND,((DOMAIN,adsehera.ximalaya.com),(NETWORK,UDP),(DST-PORT,443)),REJECT
+  - AND,((DOMAIN,adse.wsa.ximalaya.com),(NETWORK,UDP),(DST-PORT,443)),REJECT
+  - AND,((DOMAIN,adbehavior.ximalaya.com),(NETWORK,UDP),(DST-PORT,443)),REJECT
+  - AND,((DOMAIN,adbehavior.wsa.ximalaya.com),(NETWORK,UDP),(DST-PORT,443)),REJECT
+  - AND,((DOMAIN,ad.ximalaya.com),(NETWORK,UDP),(DST-PORT,443)),REJECT
+  - AND,((DOMAIN,adbs.ximalaya.com),(NETWORK,UDP),(DST-PORT,443)),REJECT
+  - AND,((DOMAIN,adwbs.ximalaya.com),(NETWORK,UDP),(DST-PORT,443)),REJECT
   - RULE-SET,Microsoft-CN,DIRECT
   - RULE-SET,Apple,DIRECT
   - RULE-SET,OpenAI,OpenAI

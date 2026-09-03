@@ -26,7 +26,7 @@ HASHES_JSON = REPO_ROOT / "stash/overrides/kelee/.hashes.json"
 OUT_DIR = REPO_ROOT / "stash/overrides/kelee"
 PROVIDER_BUNDLE = OUT_DIR / "kelee-scripts.stoverride"
 MAIN_CONFIG = REPO_ROOT / "stash-ios.yaml"
-CONVERTER_VERSION = 6
+CONVERTER_VERSION = 8
 
 def fetch_lpx(url: str) -> str:
     req = urllib.request.Request(url, headers=FETCH_HEADERS)

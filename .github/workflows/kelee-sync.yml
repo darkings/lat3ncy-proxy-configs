@@ -1,0 +1,75 @@
+name: KeLee 19精选 · 每日同步与转换
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # 每天 02:00 UTC
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'stash/overrides/kelee/targets.json'
+      - 'scripts/convert_kelee_lpx.py'
+      - 'scripts/check_kelee_update.py'
+      - 'scripts/generate_kelee_html.py'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kelee-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check --no-cache-dir PyYAML==6.0.2
+
+      - name: Check KeLee updates & reconvert
+        id: check
+        run: |
+          set +e
+          python scripts/check_kelee_update.py
+          code=$?
+          echo "exit_code=$code" >> $GITHUB_OUTPUT
+          if [ $code -eq 2 ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          elif [ $code -eq 0 ]; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            exit $code
+          fi
+        shell: bash
+
+      - name: Verify generated artifacts
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          ls -lh stash/overrides/kelee/*.stoverride | head -n 30
+          ls -lh stash/overrides/kelee/index.html stash/overrides/kelee/.hashes.json
+          python -c "import yaml, pathlib; print('yaml ok', len(list(pathlib.Path('stash/overrides/kelee').glob('*.stoverride'))))"
+
+      - name: Commit & push if changed
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # 生成物（.stoverride / index.html / .hashes.json / scripts/）不回写公有仓库，由云端任务按需发布
+          # 仅提交 targets.json / list.json（若被脚本更新）
+          git add stash/overrides/kelee/targets.json stash/overrides/kelee/list.json 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "no diff to commit"
+            exit 0
+          fi
+          git commit -m "chore(kelee): sync targets/list $(date -u +%Y-%m-%d)"
+          git push

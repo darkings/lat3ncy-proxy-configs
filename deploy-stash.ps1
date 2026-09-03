@@ -160,10 +160,13 @@ try {
         }
     }
     $scriptsRoot = Join-Path $repoRoot "scripts"
+    # run-updater.sh 与 check_kelee_update.py 在云端都会导入 validate_stash，
+    # 必须随更新器一起上传，否则云端校验抛 ModuleNotFoundError 并阻断发布。
     $requiredScripts = @(
         "convert_kelee_lpx.py",
         "check_kelee_update.py",
-        "generate_kelee_html.py"
+        "generate_kelee_html.py",
+        "validate_stash.py"
     )
     foreach ($file in $requiredScripts) {
         if (-not (Test-Path -LiteralPath (Join-Path $scriptsRoot $file) -PathType Leaf)) {
@@ -250,8 +253,11 @@ try {
     $envCommand = "printf '%s\n' 'STASH_REMOTE_ROOT=$remoteRoot' 'STASH_UPDATER_ROOT=$remoteUpdaterRoot' 'STASH_PUBLIC_HOST=$PublicHost' > '$remoteUpdaterRoot/env'"
     Invoke-Remote -Command $envCommand
 
-    # 仅在首次部署时用当前发布内容初始化云端更新状态；后续由云端自己维护。
-    $seedCommand = "if test ! -f '$remoteUpdaterData/targets.json'; then rsync -a --delete '$remoteRelease/' '$remoteUpdaterData/'; fi"
+    # 云端更新状态以本仓库目标清单为准：首次部署，或目标清单/转换器状态与
+    # 本次发布不一致时，用当前发布内容整体同步更新数据；其余时间由云端
+    # 更新器自行维护，避免旧 targets.json 让定时任务重建并发布过时站点，
+    # 也保证转换器版本变化后云端会带着新产物全量重建。
+    $seedCommand = "if ! test -f '$remoteUpdaterData/targets.json' || ! diff -q '$remoteRelease/targets.json' '$remoteUpdaterData/targets.json' >/dev/null 2>&1 || ! diff -q '$remoteRelease/.hashes.json' '$remoteUpdaterData/.hashes.json' >/dev/null 2>&1; then rsync -a --delete '$remoteRelease/' '$remoteUpdaterData/'; fi"
     Invoke-Remote -Command $seedCommand
     Invoke-Remote -Command "test ! -e '$remoteUpdaterCurrent' || test -L '$remoteUpdaterCurrent'"
     Invoke-Remote -Command "ln -sfn '$remoteUpdaterApp' '$remoteUpdaterCurrent'"
