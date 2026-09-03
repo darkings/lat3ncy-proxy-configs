@@ -10,7 +10,7 @@ $headings = @(
     '### iOS 配置',
     '### macOS 配置',
     '## Stash iOS 与 Tailscale',
-    '## Sparkle Windows',
+    '## Stelliberty Windows',
     '### 配置方法',
     '## 规则维护与校验',
     '## 更新说明'
@@ -25,7 +25,7 @@ for ($i = 1; $i -lt $positions.Count; $i++) {
 }
 
 $base = 'https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/'
-foreach ($file in @('loon-ios.lcf', 'loon-macos.lcf', 'stash-ios.yaml', 'sparkle-windows-override.yaml')) {
+foreach ($file in @('loon-ios.lcf', 'loon-macos.lcf', 'stash-ios.yaml', 'stelliberty-override.yaml')) {
     $url = "$base$file"
     if ($readme -notmatch [regex]::Escape($url)) { throw "Missing download URL: $file" }
     $codeBlock = '(?m)^```text\r?\n{0}\r?\n```\s*$' -f [regex]::Escape($url)
@@ -69,7 +69,7 @@ foreach ($guidance in @(
     '`*.ts.net` 没有加入 `fake-ip-filter` 是有意设计',
     '不能作为普通订阅单独激活',
     '不要启用“全局覆写”',
-    '关闭 Sparkle 的 DNS 和嗅探接管',
+    '关闭 Stelliberty 的 DNS 和嗅探接管',
     '嗅探采用保守模式，不改写目标地址',
     '不要把 Windows Raw 地址添加成普通节点订阅',
     '不需要删除或重新导入节点订阅',
@@ -84,4 +84,4 @@ if ($readme -notmatch 'scripts/generate_loon_configs\.py') { throw 'README must 
 if ($readme -notmatch 'Zed 与 Apple（含 iCloud）') { throw 'README must document the direct-connect scope' }
 if ($readme -notmatch 'KeLee.+403/503') { throw 'README must document KeLee remote-audit warning policy' }
 
-Write-Output 'PASS: Loon, Stash, and Sparkle README validation'
+Write-Output 'PASS: Loon, Stash, and Stelliberty README validation'

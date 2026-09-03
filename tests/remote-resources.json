@@ -5,7 +5,7 @@
     "stash-ios.yaml",
     "stash/overrides/pinduoduo-cleanup.stoverride",
     "stash/overrides/kelee/scripts/pinduoduo-remove-ads.js",
-    "sparkle-windows-override.yaml",
+    "stelliberty-override.yaml",
     "README.md"
   ],
   "required_hosts": [
