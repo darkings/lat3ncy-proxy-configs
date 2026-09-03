@@ -437,7 +437,7 @@ rules:
   - RULE-SET,Apple,DIRECT
   - RULE-SET,OpenAI,OpenAI
   - RULE-SET,GitHub,GitHub
-  - DOMAIN-SUFFIX,zed.dev,DIRECT
+  - DOMAIN-SUFFIX,zed.dev,Proxy
   - RULE-SET,OneDrive,Microsoft
   - RULE-SET,Microsoft,Microsoft
   - RULE-SET,Steam,Steam
