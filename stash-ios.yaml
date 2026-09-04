@@ -33,6 +33,7 @@ dns:
     - "time.*.com"
     - "ntp.*.com"
     - "sub.store"
+    - "+.ts.net"
     - "+.tailscale.com"
     - "+.apple.com"
     - "+.apple.com.cn"
