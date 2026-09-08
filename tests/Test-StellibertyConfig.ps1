@@ -132,7 +132,7 @@ Assert-Match '(?m)^\s+- RULE-SET,Steam-CN,DIRECT\s*$' 'Steam China download dire
 Assert-Match '(?m)^\s+- RULE-SET,Apple,DIRECT\s*$' 'Apple direct rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,OpenAI,OpenAI\s*$' 'OpenAI policy rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,GitHub,GitHub\s*$' 'GitHub policy rule is missing'
-Assert-Match '(?m)^\s+- DOMAIN-SUFFIX,zed\.dev,DIRECT\s*$' 'Zed direct rule is missing'
+Assert-Match '(?m)^\s+- DOMAIN-SUFFIX,zed\.dev,Proxy\s*$' 'Zed proxy rule is missing'
 Assert-Match '(?m)^\s+- DOMAIN-SUFFIX,msftncsi\.com,DIRECT\s*$' 'Windows NCSI suffix rule is missing'
 Assert-Match '(?m)^\s+- DOMAIN-SUFFIX,msftconnecttest\.com,DIRECT\s*$' 'Windows connect-test suffix rule is missing'
 Assert-Match '(?m)^\s+- RULE-SET,OneDrive,Microsoft\s*$' 'OneDrive must route through Microsoft policy'
