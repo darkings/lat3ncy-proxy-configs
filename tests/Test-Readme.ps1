@@ -81,7 +81,9 @@ if ($readme -match '(?m)^\s*\|.+\|\s*$') { throw 'README must not contain a comp
 
 if ($readme -notmatch 'scripts/generate_microsoft_cn\.py') { throw 'README must document Microsoft-CN generation' }
 if ($readme -notmatch 'scripts/generate_loon_configs\.py') { throw 'README must document shared Loon generation' }
-if ($readme -notmatch 'Zed 与 Apple（含 iCloud）') { throw 'README must document the direct-connect scope' }
+if ($readme -notmatch 'Zed 流量进入 Proxy' -or $readme -notmatch 'Apple（含 iCloud）流量完全直连') {
+    throw 'README must document the Zed proxy and Apple direct-connect scopes'
+}
 if ($readme -notmatch 'KeLee.+403/503') { throw 'README must document KeLee remote-audit warning policy' }
 
 Write-Output 'PASS: Loon, Stash, and Stelliberty README validation'
