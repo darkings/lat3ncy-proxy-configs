@@ -429,6 +429,11 @@ rules:
   - IP-CIDR6,fd7a:115c:a1e0::/48,DIRECT,no-resolve
   - DOMAIN-SUFFIX,msftncsi.com,DIRECT
   - DOMAIN-SUFFIX,msftconnecttest.com,DIRECT
+  # 影视采集站 CDN：GeoDNS 动态边缘节点，直连避免代理出口冷连接拖慢模拟器播放首帧
+  - DOMAIN-SUFFIX,lzcdn28.com,DIRECT
+  - DOMAIN-SUFFIX,lzcdn31.com,DIRECT
+  - DOMAIN-SUFFIX,lzcdn32.com,DIRECT
+  - DOMAIN-SUFFIX,alzcname.com,DIRECT
   - RULE-SET,Private-Domain,DIRECT
   - RULE-SET,Private-IP,DIRECT,no-resolve
   - RULE-SET,Cats-Team-AdRules,REJECT

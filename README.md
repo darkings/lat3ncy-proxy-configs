@@ -121,7 +121,7 @@ Windows 版用于 Stelliberty 的 Mihomo 内核，以单个远程 YAML 覆写叠
 
 Windows 版提供全节点自动测速，以及香港、台湾、日本、新加坡、美国五个地区自动测速组。Proxy 保留单节点手动选择；OpenAI、GitHub、Microsoft、Steam、Google、YouTube、Spotify、Telegram 等应用策略组只提供 Proxy、DIRECT 和地区自动组，避免重复展开全部节点。Zed 流量进入 Proxy，避免其 Cloudflare 编辑预测请求被直连网络间歇性重置；Apple（含 iCloud）流量完全直连，不经过任何策略组。Apple/iCloud 域名在 `fake-ip-filter` 中返回真实 IP，客户端（含不走系统代理的后台同步组件）直连真实节点，避免假地址中转。BYOK 模型接口继续使用对应服务或最终代理规则。Google 覆盖搜索、Gmail、Drive、Gemini 等服务；YouTube 使用更具体的独立规则并优先匹配。自动纳入订阅节点的策略组通过统一的 `exclude-filter` 排除流量、到期、客服、公告、频道等信息节点。
 
-OneDrive 保留独立规则集，但流量并入 Microsoft 策略。Microsoft、Steam 的中国区下载/CDN 子集优先直连，商店、社区和国际服务进入对应策略组；Apple 全部服务（含 iCloud 同步与 APNs 推送）直连。Windows 配置不加入 TikTok、抖音、拼多多等移动 App 专项规则，也不包含 HTTPS 响应重写。
+OneDrive 保留独立规则集，但流量并入 Microsoft 策略。Microsoft、Steam 的中国区下载/CDN 子集优先直连，商店、社区和国际服务进入对应策略组；Apple 全部服务（含 iCloud 同步与 APNs 推送）直连。影视采集站 CDN（lzcdn28/31/32.com 及其 CNAME 域 lzcname.com）使用 GeoDNS 动态边缘节点，直连避免代理出口冷连接拖慢模拟器播放首帧。Windows 配置不加入 TikTok、抖音、拼多多等移动 App 专项规则，也不包含 HTTPS 响应重写。
 
 Stelliberty 的系统代理绕过属于应用设置，不在远程覆写中。建议保留 `100.*`、`*.ts.net` 和 `*.tailscale.com`。如需开启 TUN，应使用 `mixed` 栈、关闭严格路由，并把 `100.64.0.0/10` 和 `fd7a:115c:a1e0::/48` 加入路由排除；确认 WSL 和 Tailnet 均正常后再继续调整。
 
