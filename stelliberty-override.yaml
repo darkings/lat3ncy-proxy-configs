@@ -43,8 +43,10 @@ dns:
     - https://dns.alidns.com/dns-query
     - https://doh.pub/dns-query
   nameserver-policy:
-    "+.ts.net": system
-    "+.tailscale.com": system
+    "+.ts.net":
+      - system
+    "+.tailscale.com":
+      - system
   respect-rules: false
 
 sniffer:
