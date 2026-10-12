@@ -629,6 +629,7 @@ def parse_rewrite_line(line: str):
 
 # ---------- Script parsing (reuse) ----------
 SCRIPT_RE_HTTP = re.compile(r'^(http-(?:response|request))\s+(\S+)\s+(.*)$')
+SCRIPT_RE_EXPR = re.compile(r'^(response|request)\s+if\s+\$\{url\}\s*~=\s*(.*?)\s+then\s+script\(\s*["\']?(.*?)["\']?\s*\)(?:\s+with\s+(.*))?$', re.I)
 def parse_script_params(rest: str) -> dict:
     params = {}
     tokens = []
@@ -695,6 +696,19 @@ def parse_script_line(line: str) -> dict | None:
         params = parse_script_params(rest)
         params["type"] = typ.replace("http-","")
         params["match"] = pattern
+        return params
+    m_expr = SCRIPT_RE_EXPR.match(line)
+    if m_expr:
+        typ, raw_pat, script_url, rest = m_expr.groups()
+        pat = raw_pat.strip()
+        if pat.startswith("/"):
+            last_slash = pat.rfind("/")
+            if last_slash > 0:
+                pat = pat[1:last_slash]
+        params = parse_script_params(rest or "")
+        params["type"] = typ.lower()
+        params["match"] = pat
+        params["script_path"] = script_url
         return params
     if line.startswith("cron"):
         after = line[4:].strip()
