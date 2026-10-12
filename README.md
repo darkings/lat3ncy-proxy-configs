@@ -92,7 +92,13 @@ macOS 版面向 Mac 本机客户端，不作为局域网网关。它使用 Steam
 
 Stash 版要求 iOS 客户端 3.4 或更高版本，使用名为 `Tailscale` 的策略组包裹 `Tailscale-Node` 原生节点（Tailscale 机器名为 `ios`）。它不依赖同时启动独立的 Tailscale App：`*.ts.net`、`100.64.0.0/10` 和 `fd7a:115c:a1e0::/48` 会进入该策略组，`*.tailscale.com` 登录与控制面则保持直连，避免认证和建链递归。该节点关闭普通公网延迟测试，因为没有指定 exit node；普通互联网流量仍由 Proxy 与各应用策略处理。
 
-导入 `stash-ios.yaml` 后，先启用 Stash 并用 Safari 打开 `https://sub.store`，在本机 Sub-Store 中创建名称严格为 `ios` 的订阅，再把私人机场地址保存在这个订阅中。主配置已内置 `SubStore` 远程代理集，每小时读取 `http://sub.store/download/ios?target=Stash`，并通过 `subscribe-url` 读取同一地址的流量/到期响应头；使用与 Stash 协议及字段最匹配的输出。不要把机场地址填到“通用 → 订阅链接”，也不要把它提交到仓库。首次创建后在“远程代理集”中手动刷新一次 `SubStore`，Proxy、Auto 和五个地区组就会自动纳入节点；Proxy 显式包含 `Auto` 和 `SubStore` 节点，但不包含 `Tailscale`，避免没有 exit node 时把普通公网流量送入 Tailnet。Tailscale 由独立策略组和 Tailnet 规则使用。其他 Clash 系客户端可单独读取 `http://sub.store/download/ios?target=ClashMeta`，两者仍使用同一个 `ios` 订阅数据。
+导入 `stash-ios.yaml` 后，先启用 Stash 并用 Safari 打开 `https://sub.store`，在本机 Sub-Store 中创建名称严格为 `ios` 的订阅，再把私人机场地址保存在这个订阅中。主配置已内置 `SubStore` 远程代理集，每 24 小时读取 `http://sub.store/download/ios?target=Stash`，并通过 `subscribe-url` 读取同一地址的流量/到期响应头；使用与 Stash 协议及字段最匹配的输出。不要把机场地址填到“通用 → 订阅链接”，也不要把它提交到仓库。首次创建后在“远程代理集”中手动刷新一次 `SubStore`，Proxy、Auto 和五个地区组就会自动纳入节点；Proxy 显式包含 `Auto` 和 `SubStore` 节点，但不包含 `Tailscale`，避免没有 exit node 时把普通公网流量送入 Tailnet。Tailscale 由独立策略组和 Tailnet 规则使用。其他 Clash 系客户端可单独读取 `http://sub.store/download/ios?target=ClashMeta`，两者仍使用同一个 `ios` 订阅数据。
+
+如果使用名称同为 `ios` 的组合订阅，添加并启用下面的覆写。它只把 `SubStore.url` 和 `subscribe-url` 同步切换到 `http://sub.store/download/collection/ios?target=Stash`，保留策略组、缓存路径和健康检查。单条订阅与组合订阅的下载接口不同，仅把组合订阅命名为 `ios` 不会自动切换。组合流量信息需要在 Sub-Store 中另行设置合并处理，主配置不能自行合并多个机场的流量/到期信息；详见 [Sub-Store 组合订阅文档](https://sub-store-org.github.io/doc/subscription/collection)。
+
+```text
+https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/stash/overrides/substore-ios-collection.stoverride
+```
 
 随后打开代理列表中的 `Tailscale-Node` 节点菜单，进入“Tailscale 认证”并完成首次登录。公开文件故意省略 `auth-key`，也不要把认证密钥、私人订阅或 Tailnet 专属主机名提交到仓库。认证成功后，建议在 Tailscale 管理后台为该 Stash 设备关闭 Key Expiry；如果 Tailnet 使用 IPv6 地址，还需在 Stash“网络设置”中开启 Tunnel IPv6 Routing。没有 exit node 时，不要用 `Tailscale-Node` 访问普通公网 IP；如果确实需要公网出口，请在本地配置可用的 `exit-node`，不要提交到公开配置。
 
@@ -101,6 +107,10 @@ Stash 版要求 iOS 客户端 3.4 或更高版本，使用名为 `Tailscale` 的
 去广告分为两层：Cats-Team AdRules 默认在规则层拦截广告域名，不需要 MITM；应用响应净化必须使用 Stash 覆写、HTTP Engine 和受信任的 MITM 证书。`stash-ios.yaml` 已集中声明 26 个脚本 provider，使用该主配置时只需从上面的云端列表添加并启用所需应用覆写；若使用其他主配置，再额外启用 `kelee-scripts.stoverride`。Stash 的“仅使用 Tunnel 代理”必须关闭，否则多数应用请求不会进入 HTTP Engine；拼多多还会绕过系统 HTTP Proxy，因此其覆写对两个 MITM 域名定向启用了 `force-http-engine`。转换器会为每个首方 App 覆写的域名 REJECT 规则自动生成 UDP/443 的 AND 阻断，强制 QUIC 回退到可解密重写的 TCP（拼多多额外保留已识别 QUIC 的阻断）；转换器还按 anti-AD、Cats-Team、ClydeTime/RuCu6 与 fmz200 模块交叉核对结果补齐上游插件漏掉的广告面——域名层：喜马拉雅（`ad`、`adsebs`、`adbs`、`adwbs`、`dns`、`linkeye`、`location`、`xdcs-collector`）、高德（`optimus-ads`、`adashx`、`awaken`、`adiu`、`amdc` 等）、京东（`ad.3.cn`、`addata`、`ads-union`、`dsp-x`、`jrad`、`jzt`、`bdsp`、`kepler`、`dns.jd.com` 等）、淘宝（阿里妈妈、tanx、直通车 `simba` 全系、百川网关、`taobaoad.com`、`tunion-api` 等）、知乎（`appcloud`、`sugar`、`crash2`）、微信公众号（`ad.weixin.qq.com`）和番茄小说（`applog-hl`、穿山甲 `pangolin-sdk-toutiao.com`、`byteorge`、`iegadp` 等）；接口层：喜马拉雅（`adRealTime`、`ting`、焦点图）、高德（DSP 启动配置、`mps scene`、`city_feed`、`ads_attribution`、足迹/消息）、京东（`getWidgetV1052`）、淘宝（`poplayer` 弹层模板）、闲鱼（搜索激活/发现、`coin`、`resell`、圈子横幅等 6 条）、知乎（`ad-style-service`、`bazaar`/`market` 弹窗、评论头卡、`qa_ad_card`、`brand-ad` 等 17 条）和哔哩哔哩（`api.vc.bilibili.com` 搜索词/话题/动态竖列及番剧相关推荐），主配置规则层也补齐 `adbs`、`adwbs`、`dns.ximalaya.com` 三个缺口并加入喜马拉雅广告域名的 QUIC 阻断。Loon 的 `.lpx` 不能直接写进 Stash YAML；公有仓库只提交转换器和目标清单，21 个精选插件的 Stash 输出由云端同步任务生成，转换器保留 URL/JSON body rewrite/脚本/MITM 语义，并把受 UA 限制的脚本及拼多多动态 vendor chunk 改为云端自托管地址。
 
 `*.ts.net` 没有加入 `fake-ip-filter` 是有意设计：Stash 需要保留域名映射，才能把 MagicDNS 名称交给内置 Tailscale 节点。只有 Tailscale 登录与控制域名返回真实 IP 并直连。Cats-Team 广告规则每 6 小时更新，其余 MetaCubeX MRS 规则每天更新，以降低 iOS Network Extension 的规则内存占用。
+
+国内分流按资源缺失场景保留本地兜底：微信/腾讯、抖音常用域名、百度和 Apple/iCloud 核心域名不依赖远程规则即可直连；微信三个 HTTPDNS 域名在广告库之前放行，其余本地业务直连规则在广告库之后，保留域名去广告。GitHub 下载入口使用本地代理规则，避免依赖尚未加载的 GitHub 规则集。其他国内流量依次由 `.cn`、CN-Domain、可解析域名的 CN-IP 和 GEOIP 处理，最后才进入 Proxy；GEOIP 仍需要客户端的 GeoIP 数据库，不能替代全部远程规则。去广告覆写默认前置规则，若覆写重新拦截微信 HTTPDNS，本地例外也可能被覆盖。
+
+DNS 使用两个国内 UDP 服务器并发解析，避免四路重复查询；保持 Fake-IP 和 DNS 默认直连。移除全局 UDP/443 拦截，保留喜马拉雅及应用覆写对广告域名的定向 QUIC 阻断。以上采用 [Stash 官方配置优化建议](https://stash.wiki/en/faq/effective-stash) 和 [规则集缓存机制](https://stash.wiki/en/rules/rule-set)。
 
 ## Stelliberty Windows
 
@@ -149,7 +159,7 @@ GitHub Actions 会检查 Loon/Stash/Stelliberty 配置结构、策略与规则�
 
 Loon 主配置不会实时自动更新。仓库发布新版后，需要使用对应 Raw 链接刷新或重新导入；远程规则和插件由 Loon 的资源更新机制刷新。
 
-Stash 主配置更新时需要刷新 Raw 配置；设备本地添加的 provider 和 Tailscale 登录状态不应写回公开文件，更新前应确认本地编辑不会被覆盖。MRS 规则由 Stash 按各自的 `interval` 在后台刷新。
+Stash 主配置更新时需要刷新 Raw 配置；设备本地添加的 provider 和 Tailscale 登录状态不应写回公开文件，更新前应确认本地编辑不会被覆盖。MRS 规则由 Stash 按各自的 `interval` 在后台刷新。启动时 Stash 优先读取规则集的本地缓存，缓存不存在或无法解析才下载远程资源；保留现有 `path`，避免无故丢失缓存。导入后应检查远程资源中的 Apple、CN-Domain、CN-IP 已下载并有有效内容。单次刷新失败不等于旧缓存必然失效；资源缺失时，本地兜底仅保护列出的服务，不能保证所有网站的完整分流。若“直连”模式正常而“规则”模式异常，在“活跃连接”中检查命中规则；国内业务命中 `MATCH` 并走海外节点时，先刷新缺失规则资源。
 
 Stelliberty 更新时，在“覆写”页面点击远程覆写的刷新按钮，再重新加载目标订阅；不需要删除或重新导入节点订阅。Sub-Store 输出按 Stelliberty 中设置的订阅更新周期刷新，Cats-Team 与 MetaCubeX 规则由 Mihomo 按 `interval` 自动更新。
 

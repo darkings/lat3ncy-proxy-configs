@@ -4,6 +4,7 @@
     "loon-macos.lcf",
     "stash-ios.yaml",
     "stash/overrides/pinduoduo-cleanup.stoverride",
+    "stash/overrides/substore-ios-collection.stoverride",
     "stelliberty-override.yaml",
     "README.md"
   ],
@@ -24,6 +25,8 @@
     "controlplane.tailscale.com",
     "pfile.pddpic.com",
     "sub.store",
+    "stash.wiki",
+    "sub-store-org.github.io",
     "t.me",
     "www.gstatic.com"
   ],

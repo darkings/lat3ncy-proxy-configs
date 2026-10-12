@@ -1,0 +1,8 @@
+name: Sub-Store ios 组合订阅
+desc: 将主配置的节点下载和流量查询切换到本机名为 ios 的组合订阅。
+
+subscribe-url: "http://sub.store/download/collection/ios?target=Stash"
+
+proxy-providers:
+  SubStore:
+    url: "http://sub.store/download/collection/ios?target=Stash"
