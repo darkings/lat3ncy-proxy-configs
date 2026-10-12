@@ -20,11 +20,13 @@ dns:
   ipv6: true
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
+  fake-ip-filter-mode: blacklist
   default-nameserver:
     - 223.5.5.5
-  nameserver:
-    - 223.5.5.5
     - 119.29.29.29
+  nameserver:
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
   fake-ip-filter:
     - "*.lan"
     - "*.local"
@@ -33,6 +35,7 @@ dns:
     - "ntp.*.com"
     - "sub.store"
     - "+.tailscale.com"
+    - "+.ts.net"
     - "+.apple.com"
     - "+.apple.com.cn"
     - "+.icloud.com"
@@ -41,9 +44,13 @@ dns:
     - "+.icloud-content.com.cn"
     - "+.me.com"
     - "+.mac.com"
+    - "+.mzstatic.com"
+    - "+.aaplimg.com"
+    - "+.cdn-apple.com"
+    - "+.apple-cloudkit.com"
 
 # Built-in Sub-Store request handling. Create a local Sub-Store subscription
-# named "ios"; the provider below fetches its Stash output every hour.
+# named "ios"; the provider below fetches its Stash output every 24 hours (interval: 86400).
 http:
   mitm:
     - sub.store
@@ -53,13 +60,13 @@ http:
       type: request
       require-body: true
       max-size: -1
-      timeout: 900
+      timeout: 180
     - match: ^https?:\/\/sub\.store
       name: sub-store-ui
       type: request
       require-body: true
       max-size: -1
-      timeout: 900
+      timeout: 60
 
 script-providers:
   sub-store-ui:
@@ -164,7 +171,11 @@ proxy-providers:
   SubStore:
     url: "http://sub.store/download/ios?target=Stash"
     path: ./providers/substore-ios.yaml
-    interval: 3600
+    interval: 86400
+    health-check:
+      enable: true
+      url: https://www.gstatic.com/generate_204
+      interval: 600
     headers:
       User-Agent: Stash
 
@@ -179,15 +190,13 @@ proxy-groups:
       - Japan
       - Singapore
       - United States
-    use:
-      - SubStore
-    filter: '(?i)^(?!Tailscale(?:-Node)?$)(?!.*(?:群|邀请|返利|官网|客服|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|机场|通知|频道|教程|更新|作者|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)).+$'
     icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/Global.png
 
   - name: Tailscale
     type: select
     proxies:
       - Tailscale-Node
+      - DIRECT
 
   - name: Spotify
     type: select
@@ -242,7 +251,7 @@ proxy-groups:
     type: url-test
     use:
       - SubStore
-    filter: '(?i)^(?!Tailscale(?:-Node)?$)(?!.*(?:剩余|流量|套餐|到期|过期|有效期|已用|重置|TRAFFIC|EXPIRE|REMAINING|RESET)).*(?:香港|港|🇭🇰|\bHK\b|Hong[ -]?Kong).*$'
+    filter: '(?i)^(?!Tailscale(?:-Node)?$)(?!.*(?:群|邀请|返利|官网|客服|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|机场|通知|频道|教程|更新|作者|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)).*(?:香港|港|🇭🇰|\bHK\b|Hong[ -]?Kong).*$'
     interval: 1800
     lazy: true
     icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/HK.png
@@ -251,7 +260,7 @@ proxy-groups:
     type: url-test
     use:
       - SubStore
-    filter: '(?i)^(?!Tailscale(?:-Node)?$)(?!.*(?:剩余|流量|套餐|到期|过期|有效期|已用|重置|TRAFFIC|EXPIRE|REMAINING|RESET)).*(?:台湾|台灣|臺灣|台北|臺北|🇹🇼|\bTW\b|Taiwan|Taipei).*$'
+    filter: '(?i)^(?!Tailscale(?:-Node)?$)(?!.*(?:群|邀请|返利|官网|客服|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|机场|通知|频道|教程|更新|作者|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)).*(?:台湾|台灣|臺灣|台北|臺北|🇹🇼|\bTW\b|Taiwan|Taipei).*$'
     interval: 1800
     lazy: true
     icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/TW.png
@@ -260,7 +269,7 @@ proxy-groups:
     type: url-test
     use:
       - SubStore
-    filter: '(?i)^(?!Tailscale(?:-Node)?$)(?!.*(?:剩余|流量|套餐|到期|过期|有效期|已用|重置|TRAFFIC|EXPIRE|REMAINING|RESET)).*(?:日本|东京|東京|大阪|🇯🇵|\bJP\b|Japan|Tokyo|Osaka).*$'
+    filter: '(?i)^(?!Tailscale(?:-Node)?$)(?!.*(?:群|邀请|返利|官网|客服|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|机场|通知|频道|教程|更新|作者|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)).*(?:日本|东京|東京|大阪|🇯🇵|\bJP\b|Japan|Tokyo|Osaka).*$'
     interval: 1800
     lazy: true
     icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/JP.png
@@ -269,7 +278,7 @@ proxy-groups:
     type: url-test
     use:
       - SubStore
-    filter: '(?i)^(?!Tailscale(?:-Node)?$)(?!.*(?:剩余|流量|套餐|到期|过期|有效期|已用|重置|TRAFFIC|EXPIRE|REMAINING|RESET)).*(?:新加坡|狮城|獅城|🇸🇬|\bSG\b|Singapore).*$'
+    filter: '(?i)^(?!Tailscale(?:-Node)?$)(?!.*(?:群|邀请|返利|官网|客服|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|机场|通知|频道|教程|更新|作者|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)).*(?:新加坡|狮城|獅城|🇸🇬|\bSG\b|Singapore).*$'
     interval: 1800
     lazy: true
     icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/SG.png
@@ -278,13 +287,14 @@ proxy-groups:
     type: url-test
     use:
       - SubStore
-    filter: '(?i)^(?!Tailscale(?:-Node)?$)(?!.*(?:剩余|流量|套餐|到期|过期|有效期|已用|重置|TRAFFIC|EXPIRE|REMAINING|RESET)).*(?:美国|美國|🇺🇸|\bUS(?:A)?\b|United[ -]?States|America|Los[ -]?Angeles|San[ -]?Jose|Seattle|New[ -]?York).*$'
+    filter: '(?i)^(?!Tailscale(?:-Node)?$)(?!.*(?:群|邀请|返利|官网|客服|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|机场|通知|频道|教程|更新|作者|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)).*(?:美国|美國|🇺🇸|\bUS(?:A)?\b|United[ -]?States|America|Los[ -]?Angeles|San[ -]?Jose|Seattle|New[ -]?York).*$'
     interval: 1800
     lazy: true
     icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/US.png
 
 rule-providers:
   Cats-Team-AdRules:
+    type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/Cats-Team/AdRules/main/adrules-mihomo.mrs
@@ -292,6 +302,7 @@ rule-providers:
     interval: 21600
 
   Private-Domain:
+    type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs
@@ -299,6 +310,7 @@ rule-providers:
     interval: 86400
 
   Private-IP:
+    type: http
     behavior: ipcidr
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs
@@ -306,6 +318,7 @@ rule-providers:
     interval: 86400
 
   Spotify:
+    type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs
@@ -313,6 +326,7 @@ rule-providers:
     interval: 86400
 
   Telegram-Domain:
+    type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs
@@ -320,6 +334,7 @@ rule-providers:
     interval: 86400
 
   Telegram-IP:
+    type: http
     behavior: ipcidr
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs
@@ -327,6 +342,7 @@ rule-providers:
     interval: 86400
 
   OpenAI:
+    type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/openai.mrs
@@ -334,6 +350,7 @@ rule-providers:
     interval: 86400
 
   GitHub:
+    type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs
@@ -341,6 +358,7 @@ rule-providers:
     interval: 86400
 
   Microsoft-CN:
+    type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft%40cn.mrs
@@ -348,6 +366,7 @@ rule-providers:
     interval: 86400
 
   Microsoft:
+    type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft.mrs
@@ -355,6 +374,7 @@ rule-providers:
     interval: 86400
 
   Apple:
+    type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.mrs
@@ -362,6 +382,7 @@ rule-providers:
     interval: 86400
 
   YouTube:
+    type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs
@@ -369,6 +390,7 @@ rule-providers:
     interval: 86400
 
   Google:
+    type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs
@@ -376,6 +398,7 @@ rule-providers:
     interval: 86400
 
   TikTok:
+    type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tiktok.mrs
@@ -383,6 +406,7 @@ rule-providers:
     interval: 86400
 
   CN-Domain:
+    type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs
@@ -390,6 +414,7 @@ rule-providers:
     interval: 86400
 
   NonCN-Domain:
+    type: http
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/geolocation-!cn.mrs
@@ -397,6 +422,7 @@ rule-providers:
     interval: 86400
 
   CN-IP:
+    type: http
     behavior: ipcidr
     format: mrs
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs
