@@ -331,7 +331,7 @@ rule-providers:
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft%40cn.mrs
     path: ./ruleset/stelliberty-microsoft-cn.mrs
     interval: 86400
-    proxy: DIRECT
+    proxy: Proxy
 
   Microsoft:
     type: http
@@ -358,7 +358,7 @@ rule-providers:
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam%40cn.mrs
     path: ./ruleset/stelliberty-steam-cn.mrs
     interval: 86400
-    proxy: DIRECT
+    proxy: Proxy
 
   Steam:
     type: http
@@ -403,7 +403,7 @@ rule-providers:
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs
     path: ./ruleset/stelliberty-cn-domain.mrs
     interval: 86400
-    proxy: DIRECT
+    proxy: Proxy
 
   NonCN-Domain:
     type: http
@@ -421,7 +421,7 @@ rule-providers:
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs
     path: ./ruleset/stelliberty-cn-ip.mrs
     interval: 86400
-    proxy: DIRECT
+    proxy: Proxy
 
 # 本文件完整接管规则顺序：系统与私有网络优先，随后广告和桌面应用，最后国内外分流。
 rules:
