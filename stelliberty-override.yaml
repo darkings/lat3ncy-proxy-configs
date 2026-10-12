@@ -180,7 +180,7 @@ proxy-groups:
     url: https://www.gstatic.com/generate_204
     interval: 1800
     tolerance: 150
-    lazy: true
+    lazy: false
     timeout: 5000
     max-failed-times: 3
     expected-status: 204

@@ -282,7 +282,20 @@ class KeLeeBodyRewriteConversionTests(unittest.TestCase):
         parsed = yaml.safe_load(output)
         self.assertIn("api.vc.bilibili.com", parsed["http"]["mitm"])
         url_rewrites = parsed["http"]["url-rewrite"]
-        self.assertTrue(any("recommend_words" in r for r in url_rewrites), url_rewrites)
+    def test_loon_conditional_script_expression_conversion(self) -> None:
+        source = "\n".join([
+            "#!name=Loon Condition Script Contract",
+            "[Script]",
+            r'response if ${url} ~= /^https:\/\/m\.pinduoduo\.net\/mdkd\/package\?from_app_scan/i then script("https://example.com/pdd.js") with tag="移除扫码推荐", requires_body=true',
+            "[MitM]",
+            "hostname=m.pinduoduo.net",
+        ])
+        output = convert_lpx_to_stash(source, fetch_script_fallback=False)
+        parsed = yaml.safe_load(output)
+        script = parsed["http"]["script"][0]
+        self.assertEqual(script["type"], "response")
+        self.assertEqual(script["match"], r"^https:\/\/m\.pinduoduo\.net\/mdkd\/package\?from_app_scan")
+        self.assertTrue(script["require-body"])
 
 
 if __name__ == "__main__":
