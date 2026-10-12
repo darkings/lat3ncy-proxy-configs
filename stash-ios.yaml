@@ -25,6 +25,8 @@ dns:
     - 223.5.5.5
     - 119.29.29.29
   nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
     - https://dns.alidns.com/dns-query
     - https://doh.pub/dns-query
   fake-ip-filter:
@@ -35,7 +37,6 @@ dns:
     - "ntp.*.com"
     - "sub.store"
     - "+.tailscale.com"
-    - "+.ts.net"
     - "+.apple.com"
     - "+.apple.com.cn"
     - "+.icloud.com"
@@ -190,6 +191,9 @@ proxy-groups:
       - Japan
       - Singapore
       - United States
+    use:
+      - SubStore
+    filter: '(?i)^(?!Tailscale(?:-Node)?$)(?!.*(?:群|邀请|返利|官网|客服|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|机场|通知|频道|教程|更新|作者|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)).+$'
     icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/Global.png
 
   - name: Tailscale
@@ -467,5 +471,6 @@ rules:
   - RULE-SET,TikTok,TikTok
   - RULE-SET,CN-Domain,DIRECT
   - RULE-SET,NonCN-Domain,Proxy
-  - RULE-SET,CN-IP,DIRECT,no-resolve
+  - RULE-SET,CN-IP,DIRECT
+  - GEOIP,CN,DIRECT
   - MATCH,Proxy
