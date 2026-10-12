@@ -27,17 +27,8 @@ dns:
   nameserver:
     - 223.5.5.5
     - 119.29.29.29
-    - https://223.5.5.5/dns-query
-    - https://1.12.12.12/dns-query
-  nameserver-policy:
-    "geosite:cn,apple,apple-cn":
-      - 223.5.5.5
-      - 119.29.29.29
-      - system
-    "+.ts.net":
-      - system
-    "+.tailscale.com":
-      - system
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
   fake-ip-filter:
     - "*.lan"
     - "*.local"
@@ -46,6 +37,13 @@ dns:
     - "ntp.*.com"
     - "sub.store"
     - "+.tailscale.com"
+    # 微信与腾讯长连接直连真实 IP，避免 Fake-IP 触发微信安全自检导致“无法连接服务器”
+    - "+.weixin.qq.com"
+    - "+.wechat.com"
+    - "+.qpic.cn"
+    - "+.qq.com"
+    - "+.tencent.com"
+    # Apple 与 iCloud 完全直连：返回真实 IP，避免 fake-ip 中转，加速同步
     - "+.apple.com"
     - "+.apple.com.cn"
     - "+.icloud.com"
@@ -478,6 +476,18 @@ rules:
   - RULE-SET,Telegram-Domain,Telegram
   - RULE-SET,Telegram-IP,Telegram,no-resolve
   - RULE-SET,TikTok,TikTok
+  # 阻止 QUIC (HTTP/3 over UDP:443)，迫使客户端回退到高并发稳定的 TCP (HTTP/2)，解决图片加载卡死与 App 转圈
+  - AND,((NETWORK,UDP),(DST-PORT,443)),REJECT
+  # 常用国内核心服务直连：避免依赖远端规则库与 Fake-IP 真实解析耗时，彻底解决微信连接失败与百度加载慢
+  - DOMAIN-SUFFIX,weixin.qq.com,DIRECT
+  - DOMAIN-SUFFIX,wechat.com,DIRECT
+  - DOMAIN-SUFFIX,qpic.cn,DIRECT
+  - DOMAIN-SUFFIX,qq.com,DIRECT
+  - DOMAIN-SUFFIX,tencent.com,DIRECT
+  - DOMAIN-SUFFIX,baidu.com,DIRECT
+  - DOMAIN-SUFFIX,bdstatic.com,DIRECT
+  - DOMAIN-SUFFIX,bcebos.com,DIRECT
+  - DOMAIN-SUFFIX,cn,DIRECT
   - RULE-SET,CN-Domain,DIRECT
   - RULE-SET,NonCN-Domain,Proxy
   - RULE-SET,CN-IP,DIRECT
