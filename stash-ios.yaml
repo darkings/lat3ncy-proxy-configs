@@ -27,8 +27,6 @@ dns:
   nameserver:
     - 223.5.5.5
     - 119.29.29.29
-    - https://dns.alidns.com/dns-query
-    - https://doh.pub/dns-query
   fake-ip-filter:
     - "*.lan"
     - "*.local"
@@ -37,13 +35,13 @@ dns:
     - "ntp.*.com"
     - "sub.store"
     - "+.tailscale.com"
-    # 微信与腾讯长连接直连真实 IP，避免 Fake-IP 触发微信安全自检导致“无法连接服务器”
+    # 保留腾讯服务的真实 IP 兼容列表；分流可靠性由下方本地规则保证。
     - "+.weixin.qq.com"
     - "+.wechat.com"
     - "+.qpic.cn"
     - "+.qq.com"
     - "+.tencent.com"
-    # Apple 与 iCloud 完全直连：返回真实 IP，避免 fake-ip 中转，加速同步
+    # Apple 与 iCloud 返回真实 IP；下方本地规则保证核心域名直连。
     - "+.apple.com"
     - "+.apple.com.cn"
     - "+.icloud.com"
@@ -449,6 +447,14 @@ rules:
   - IP-CIDR6,fd7a:115c:a1e0::/48,Tailscale,no-resolve
   - RULE-SET,Private-Domain,DIRECT
   - RULE-SET,Private-IP,DIRECT,no-resolve
+  # 资源下载入口独立于远程 GitHub 规则，缺少缓存时仍能经代理下载规则库。
+  - DOMAIN,raw.githubusercontent.com,GitHub
+  - DOMAIN-SUFFIX,github.com,GitHub
+  - DOMAIN-SUFFIX,githubusercontent.com,GitHub
+  # 保留微信自己的解析服务，避免广告库阻断 HTTPDNS 后连接不稳定。
+  - DOMAIN,dns.weixin.qq.com,DIRECT
+  - DOMAIN,dns.weixin.qq.com.cn,DIRECT
+  - DOMAIN,aedns.weixin.qq.com,DIRECT
   - RULE-SET,Cats-Team-AdRules,REJECT
   # Ximalaya ad-block gap fills (anti-AD + Cats-Team cross-check): three ad
   # hosts absent from both the plugin and Cats-Team, plus QUIC fallback
@@ -465,6 +471,39 @@ rules:
   - AND,((DOMAIN,ad.ximalaya.com),(NETWORK,UDP),(DST-PORT,443)),REJECT
   - AND,((DOMAIN,adbs.ximalaya.com),(NETWORK,UDP),(DST-PORT,443)),REJECT
   - AND,((DOMAIN,adwbs.ximalaya.com),(NETWORK,UDP),(DST-PORT,443)),REJECT
+  # 常用国内服务的本地兜底：CN-Domain/CN-IP 未下载时也不落入 MATCH,Proxy。
+  # 广告规则在前，正常业务域名直连；去广告覆写的规则仍可能优先于主配置。
+  - DOMAIN-SUFFIX,weixin.qq.com,DIRECT
+  - DOMAIN-SUFFIX,weixin.qq.com.cn,DIRECT
+  - DOMAIN-SUFFIX,wechat.com,DIRECT
+  - DOMAIN-SUFFIX,qpic.cn,DIRECT
+  - DOMAIN-SUFFIX,qq.com,DIRECT
+  - DOMAIN-SUFFIX,tencent.com,DIRECT
+  - DOMAIN-SUFFIX,douyin.com,DIRECT
+  - DOMAIN-SUFFIX,douyincdn.com,DIRECT
+  - DOMAIN-SUFFIX,douyinpic.com,DIRECT
+  - DOMAIN-SUFFIX,douyinstatic.com,DIRECT
+  - DOMAIN-SUFFIX,douyinvod.com,DIRECT
+  - DOMAIN-SUFFIX,iesdouyin.com,DIRECT
+  - DOMAIN-SUFFIX,amemv.com,DIRECT
+  - DOMAIN-SUFFIX,snssdk.com,DIRECT
+  - DOMAIN-SUFFIX,zijieapi.com,DIRECT
+  - DOMAIN-SUFFIX,baidu.com,DIRECT
+  - DOMAIN-SUFFIX,bdstatic.com,DIRECT
+  - DOMAIN-SUFFIX,bcebos.com,DIRECT
+  # Apple 远程规则未加载时，iCloud、推送、同步与常用 CDN 仍直连。
+  - DOMAIN-SUFFIX,apple.com,DIRECT
+  - DOMAIN-SUFFIX,apple.com.cn,DIRECT
+  - DOMAIN-SUFFIX,icloud.com,DIRECT
+  - DOMAIN-SUFFIX,icloud.com.cn,DIRECT
+  - DOMAIN-SUFFIX,icloud-content.com,DIRECT
+  - DOMAIN-SUFFIX,icloud-content.com.cn,DIRECT
+  - DOMAIN-SUFFIX,me.com,DIRECT
+  - DOMAIN-SUFFIX,mac.com,DIRECT
+  - DOMAIN-SUFFIX,mzstatic.com,DIRECT
+  - DOMAIN-SUFFIX,aaplimg.com,DIRECT
+  - DOMAIN-SUFFIX,cdn-apple.com,DIRECT
+  - DOMAIN-SUFFIX,apple-cloudkit.com,DIRECT
   - RULE-SET,Microsoft-CN,DIRECT
   - RULE-SET,Apple,DIRECT
   - RULE-SET,OpenAI,OpenAI
@@ -476,20 +515,10 @@ rules:
   - RULE-SET,Telegram-Domain,Telegram
   - RULE-SET,Telegram-IP,Telegram,no-resolve
   - RULE-SET,TikTok,TikTok
-  # 阻止 QUIC (HTTP/3 over UDP:443)，迫使客户端回退到高并发稳定的 TCP (HTTP/2)，解决图片加载卡死与 App 转圈
-  - AND,((NETWORK,UDP),(DST-PORT,443)),REJECT
-  # 常用国内核心服务直连：避免依赖远端规则库与 Fake-IP 真实解析耗时，彻底解决微信连接失败与百度加载慢
-  - DOMAIN-SUFFIX,weixin.qq.com,DIRECT
-  - DOMAIN-SUFFIX,wechat.com,DIRECT
-  - DOMAIN-SUFFIX,qpic.cn,DIRECT
-  - DOMAIN-SUFFIX,qq.com,DIRECT
-  - DOMAIN-SUFFIX,tencent.com,DIRECT
-  - DOMAIN-SUFFIX,baidu.com,DIRECT
-  - DOMAIN-SUFFIX,bdstatic.com,DIRECT
-  - DOMAIN-SUFFIX,bcebos.com,DIRECT
   - DOMAIN-SUFFIX,cn,DIRECT
   - RULE-SET,CN-Domain,DIRECT
   - RULE-SET,NonCN-Domain,Proxy
+  # IP 兜底允许解析漏网域名；GEOIP 不依赖 CN-IP provider，但需要可用 GeoIP 数据库。
   - RULE-SET,CN-IP,DIRECT
   - GEOIP,CN,DIRECT
   - MATCH,Proxy

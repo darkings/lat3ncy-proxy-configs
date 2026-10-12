@@ -46,6 +46,9 @@ jobs:
       - name: Validate KeLee conversion semantics
         run: python tests/test_kelee_conversion.py
 
+      - name: Validate Stash routing when remote rules are unavailable
+        run: python tests/test_stash_routing.py
+
       - name: Validate generated Loon configurations
         run: python scripts/generate_loon_configs.py --check
 
