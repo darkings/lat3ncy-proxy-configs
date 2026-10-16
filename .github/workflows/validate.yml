@@ -41,13 +41,16 @@ jobs:
           ./tests/Test-DocumentPolicy.ps1
 
       - name: Validate Python tooling
-        run: python -m py_compile scripts/generate_loon_configs.py scripts/generate_microsoft_cn.py scripts/check_remote_resources.py scripts/convert_kelee_lpx.py scripts/check_kelee_update.py scripts/generate_kelee_html.py scripts/validate_stash.py tests/test_kelee_conversion.py
+        run: python -m py_compile scripts/generate_loon_configs.py scripts/generate_microsoft_cn.py scripts/check_remote_resources.py scripts/convert_kelee_lpx.py scripts/check_kelee_update.py scripts/generate_kelee_html.py scripts/validate_stash.py scripts/generate_stash_countries.py tests/test_kelee_conversion.py tests/test_stash_countries.py
 
       - name: Validate KeLee conversion semantics
         run: python tests/test_kelee_conversion.py
 
       - name: Validate Stash routing when remote rules are unavailable
         run: python tests/test_stash_routing.py
+
+      - name: Validate private Stash country group generator
+        run: python tests/test_stash_countries.py
 
       - name: Validate generated Loon configurations
         run: python scripts/generate_loon_configs.py --check

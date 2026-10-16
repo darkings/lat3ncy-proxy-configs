@@ -17,6 +17,9 @@
 __pycache__/
 *.py[cod]
 
+# Locally generated Stash profile and private subscription exports/labels.
+/.local/
+
 # KeLee/Stash 生成物只在本地和云端发布，不回写公有仓库。
 # targets.json 是公开的转换目标清单，保留在仓库中。
 /stash/overrides/kelee/*

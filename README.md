@@ -100,6 +100,17 @@ Stash 版要求 iOS 客户端 3.4 或更高版本，使用名为 `Tailscale` 的
 https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/stash/overrides/substore-ios-collection.stoverride
 ```
 
+### 按订阅节点生成非空国家组（可选，本地手动导入）
+
+Stash 3.6.3 的 `use`/`filter` 只会刷新已有组的成员，不会按节点增删组。需要新增国家随订阅出现、无节点国家不显示时，可在**已正常工作的主配置旁**生成第二份配置做对比。请先备份并保留现有主配置，不要把生成地址直接设成当前 `sub.store` 请求：Stash 尚未启动时本机脚本可能无法处理请求。
+
+1. 在手机的 Sub-Store 中保持原来的 `ios` 订阅和 Stash 配置不变。用已启动的 Stash/Safari 在本机取得 `/download/ios?target=Stash` 的**私有节点 YAML**，通过隔空投送或其他安全方式放到电脑本仓库的 `.local/nodes.yaml`；组合订阅使用 `/download/collection/ios?target=Stash`。不要上传到在线 YAML 工具、仓库、网盘公开分享或把私人 URL 粘贴进配置。电脑只需 Python 3 和 PyYAML（`python -m pip install PyYAML`）。
+2. 在仓库根目录运行 `python scripts/generate_stash_countries.py --nodes .local/nodes.yaml`；组合订阅再加 `--collection`。输出到 `.local/stash-ios-countries.yaml`，两者均受 `.gitignore` 保护；**不要强制 git add 或发布生成文件**。如导出的是文本节点链接而非含 `proxies:` 的 Stash YAML，请重新导出。程序读取节点名称，不把节点的地址、密码复制到生成配置里，但名称可能带有私人标签，所以输出仍仅供本地使用。
+3. 检查输出只含实际有节点的国家组（例如 `Country DE - Germany`），旧的五个国家也仅在有节点时出现。不能识别国家的节点继续保留在 `Auto`/`Proxy`，不会猜测所属国家。设备本机 `SubStore` 远程代理集依然照旧提供真实节点；`rules`、DNS、Tailscale 和远程规则路径都来自主模板。把**生成后的完整 YAML 文件**作为另一份本地配置导入 Stash，确认代理集下载、国外/国内分流、Tailscale 后再选用，不要删除原配置。
+4. **节点国家或名称变化后**，须重新安全导出、运行生成器，并重新导入/更新整份本地生成配置；只刷新 Stash 的代理集不会增删组。为避免旧节点名造成空组，若本机订阅与导出不同步，先在 Stash 手动刷新 `SubStore`。生成器会对重名节点、组名冲突、只有被 Auto 排除的信息节点或无效输入报错，此时先在 Sub-Store 整理名称，不要靠手工改动输出文件掩盖问题。
+
+这一方案是**手动生成后导入**，不是后台自动刷新完整配置；若要全自动，必须另设独立、安全且不会依赖当前 Stash 启动的生成/托管入口。Sub-Store [文件脚本](https://sub-store-org.github.io/doc/file/scripts)可供进一步扩展，但本仓库不发布含私有订阅数据的完整配置。
+
 随后打开代理列表中的 `Tailscale-Node` 节点菜单，进入“Tailscale 认证”并完成首次登录。公开文件故意省略 `auth-key`，也不要把认证密钥、私人订阅或 Tailnet 专属主机名提交到仓库。认证成功后，建议在 Tailscale 管理后台为该 Stash 设备关闭 Key Expiry；如果 Tailnet 使用 IPv6 地址，还需在 Stash“网络设置”中开启 Tunnel IPv6 Routing。没有 exit node 时，不要用 `Tailscale-Node` 访问普通公网 IP；如果确实需要公网出口，请在本地配置可用的 `exit-node`，不要提交到公开配置。
 
 `sub.store` 被固定映射到 `127.0.0.1`，下载请求只由本机 Sub-Store 脚本处理，避免脚本关闭时把本地订阅数据发往公网同名域名。Sub-Store 脚本从其官方 `release` 分支的 jsDelivr 镜像加载，首次没有代理节点也能下载。若首页仍没有流量或过期时间，请在 Sub-Store 的 `ios` 订阅中关闭“不查询订阅流量信息”，并在机场提供独立流量查询地址时填写 `subInfoUrl`/`subInfoUserAgent`；如果源站本身不返回 `Subscription-Userinfo`，Stash 无法凭空显示这些数据。若 `https://sub.store` 无法打开，应先确认 Stash 已启动，并生成、安装和信任 Stash MITM 证书。
