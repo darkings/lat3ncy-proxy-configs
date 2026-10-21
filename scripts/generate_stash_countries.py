@@ -118,11 +118,15 @@ def build_profile(template: dict, names: list[str], collection: bool = False) ->
     if any(original[name].get("use") != ["SubStore"] for name in OLD_REGIONS):
         raise ValueError("Template country groups no longer use SubStore")
     grouped: dict[str, list[str]] = defaultdict(list)
-    # The base Proxy/Auto groups reject subscription-status placeholders. A
-    # country group must not re-introduce these as "working" region nodes.
-    eligible = [n for n in names if re.fullmatch(original["Auto"]["filter"], n)]
+    # Proxy still pulls from SubStore, so its filter is the authority for
+    # excluding subscription-status placeholders from generated country groups
+    # (Auto now lists country groups instead of individual nodes).
+    status_filter = original["Proxy"].get("filter")
+    if not status_filter:
+        raise ValueError("Template Proxy group has no filter; update the generator first")
+    eligible = [n for n in names if re.fullmatch(status_filter, n)]
     if not eligible:
-        raise ValueError("All exported nodes are excluded by Auto; refusing an empty Auto group that could become DIRECT")
+        raise ValueError("All exported nodes are excluded by the Proxy filter; refusing an empty Auto group that could become DIRECT")
     for name in eligible:
         code = country_of(name)
         if code:
@@ -152,6 +156,11 @@ def build_profile(template: dict, names: list[str], collection: bool = False) ->
         if not all(old in proxy_list for old in OLD_REGIONS):
             raise ValueError(f"Template selection group {group_name} has changed")
         group["proxies"] = [p for p in proxy_list if p not in OLD_REGIONS] + new_names
+    # Auto aggregates country groups, never individual subscription nodes.
+    auto = original["Auto"]
+    if "use" in auto or not set(OLD_REGIONS) <= set(auto.get("proxies") or []):
+        raise ValueError("Template Auto group no longer aggregates country groups")
+    auto["proxies"] = new_names
     profile["proxy-groups"] = [g for g in groups if g["name"] not in OLD_REGIONS] + country_groups
     if collection:
         url = "http://sub.store/download/collection/ios?target=Stash"
