@@ -414,6 +414,14 @@ def check_file(p: pathlib.Path):
                 add("BODY", "E_JQ_EMPTY", f"{p.name}: body-rewrite jq 缺 expression: {s[:160]}")
             if "jq" in act and len(expr) >= 2 and expr[0] == expr[-1] and expr[0] in {'"', "'"}:
                 add("BODY", "E_JQ_QUOTED_EXPRESSION", f"{p.name}: jq 表达式被整体引号包裹，会变成字符串字面量: {s[:160]}")
+            # json-del 只接受裸路径。JSON 数组残留或引号会让 Stash 直接报
+            # "invalid expression" 并拒绝加载整份配置；数组下标 data[0] 合法。
+            if act in {"response-json-del", "request-json-del"}:
+                path_re = re.compile(r"^[A-Za-z0-9_@-]+(?:\.[A-Za-z0-9_@-]+|\[\d+\])*$")
+                for token in expr.split():
+                    if not path_re.match(token):
+                        add("BODY", "E_JSON_PATH_INVALID", f"{p.name}: json-del 路径非法 '{token[:60]}': {s[:160]}")
+                        break
         # RE2 for match pattern (first token)
         pat = parts[0].strip("'\"") if parts else ""
         try:

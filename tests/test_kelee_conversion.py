@@ -366,6 +366,34 @@ class KeleeExpressionRewriteTests(unittest.TestCase):
         self.assertIn("E_EXPR_ACTION_UNSUPPORTED", output)
         self.assertIn("response.some.unknown", output)
 
+    def test_json_delete_bracket_list_is_flattened(self) -> None:
+        parsed = self.convert([
+            r'response if ${url} ~= /^https:\/\/m5\.amap\.com\/ws\/shield\/frogserver\/aocs\/updatable/i then json.delete(["data.splash", "data.taxi_activity"])',
+            r'response if ${url} ~= /^https:\/\/m5\.amap\.com\/ws\/shield\/scene\/recommend/i then json.delete("$.data.shadingWords")',
+            r'response if ${url} ~= /^https:\/\/saas-ad\.cloudpnr\.com\/ad$/i then json.delete(["data[0]", "data[1]"])',
+        ])
+        body = parsed["http"]["body-rewrite"]
+        joined = "\n".join(body)
+        self.assertIn(r"response-json-del data.splash data.taxi_activity", joined)
+        self.assertIn(r"response-json-del data.shadingWords", joined)
+        self.assertIn(r"response-json-del data[0] data[1]", joined)
+        # Stash rejects JSON-array wrappers and quoted paths; index syntax is fine.
+        for rule in body:
+            payload = rule.split(" response-", 1)[1]
+            self.assertNotIn('["', payload)
+            self.assertNotIn('"]', payload)
+            self.assertNotIn('"', payload)
+
+    def test_jq_leading_comment_is_stripped(self) -> None:
+        parsed = self.convert([
+            r'response if ${url} ~= /^https:\/\/api\.example\.com\/feed$/i then response.json.jq("# keep .x\ndel(.ad) | .kept = \"#tag\"")',
+        ])
+        rule = parsed["http"]["body-rewrite"][0]
+        self.assertNotIn("# keep", rule)
+        self.assertIn("del(.ad)", rule)
+        # '#' inside a jq string literal must survive.
+        self.assertIn('"#tag"', rule)
+
     def test_legacy_directive_rewrites_are_unchanged(self) -> None:
         parsed = self.convert([
             r"^https:\/\/ad\.example\.com\/x - reject-dict",
