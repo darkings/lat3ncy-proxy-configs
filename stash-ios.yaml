@@ -90,9 +90,6 @@ script-providers:
   bilibili-json-kokoryh:
     url: https://stash.invalid/scripts/bilibili-json-kokoryh.js
     interval: 86400
-  amap-remove-ads:
-    url: https://stash.invalid/scripts/amap-remove-ads.js
-    interval: 86400
   jd-remove-ads:
     url: https://stash.invalid/scripts/jd-remove-ads.js
     interval: 86400
