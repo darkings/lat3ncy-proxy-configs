@@ -733,8 +733,14 @@ def parse_expression_rewrite(line: str):
     if not m:
         return None
     direction = m.group(1).lower()
-    pattern = strip_loon_regex(m.group(2))
+    raw_pattern = m.group(2)
     call = m.group(3).strip()
+    # `... /re/i as urlMatch then redirect(307, "${urlMatch.2}")` binds capture
+    # groups for later substitution. Stash has no capture-variable grammar, so
+    # keep these visible as unsupported instead of emitting a broken redirect.
+    if re.search(r'\s+as\s+[A-Za-z_]\w*\s*$', raw_pattern):
+        return ("unsupported", "", "capture-binding", call)
+    pattern = strip_loon_regex(raw_pattern)
     call_m = EXPR_CALL_RE.match(call)
     if not call_m:
         return None
@@ -759,10 +765,17 @@ def parse_expression_rewrite(line: str):
     if name in EXPR_URL_ACTIONS:
         return ("url", pattern, EXPR_URL_ACTIONS[name], "")
     if name == "redirect":
-        target = unquote_loon_arg(argstr)
-        if not target:
+        args = split_loon_args(argstr)
+        if not args:
             return None
-        return ("url", pattern, "302", target)
+        code = unquote_loon_arg(args[0]) if len(args) > 1 else "302"
+        target = unquote_loon_arg(args[-1])
+        if not target or "${" in target:
+            # Capture substitution (${urlMatch.2}) cannot be expressed in Stash.
+            return None
+        if code not in ("301", "302", "307", "308"):
+            target, code = code, "302"
+        return ("url", pattern, code, target)
     if name in ("json.delete", "json.del"):
         paths = [normalize_json_path(p) for p in split_loon_args(argstr)]
         paths = [p for p in paths if p]
