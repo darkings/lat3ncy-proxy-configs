@@ -426,6 +426,28 @@ def check_file(p: pathlib.Path):
                     if not ok:
                         add("BODY", "E_JSON_PATH_INVALID", f"{p.name}: json-del 路径非法 '{token[:60]}'（Stash 会用 jq 编译，需合法标识符）: {s[:120]}")
                         break
+            # json-add/json-replace：path value 成对出现，路径位必须合法，
+            # 值位不允许残留 JSON 数组（Stash 只接受单个 jq 字面量）。
+            if act in {"response-json-add", "request-json-add",
+                       "response-json-replace", "request-json-replace"}:
+                path_re = re.compile(r"^[A-Za-z0-9_@-]+(?:\.[A-Za-z0-9_@-]+|\[\d+\])*$")
+                seg_re = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+                toks = expr.split()
+                if len(toks) % 2:
+                    add("BODY", "E_JSON_PAIR_ODD", f"{p.name}: json-add/json-replace 需要成对 path value: {s[:160]}")
+                else:
+                    for index in range(0, len(toks), 2):
+                        path_token = toks[index]
+                        ok = bool(path_re.match(path_token)) and all(
+                            seg_re.match(seg.split("[", 1)[0]) for seg in path_token.split(".")
+                        )
+                        if not ok:
+                            add("BODY", "E_JSON_PATH_INVALID", f"{p.name}: json-add/json-replace 路径非法 '{path_token[:60]}': {s[:120]}")
+                            break
+                    for value_token in toks[1::2]:
+                        if "[" in value_token or "]" in value_token:
+                            add("BODY", "E_JSON_VALUE_ARRAY", f"{p.name}: json-add/json-replace 值不得为数组 '{value_token[:60]}': {s[:120]}")
+                            break
         # RE2 for match pattern (first token)
         pat = parts[0].strip("'\"") if parts else ""
         try:

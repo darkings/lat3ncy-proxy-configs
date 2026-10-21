@@ -430,6 +430,14 @@ class KeleeExpressionRewriteTests(unittest.TestCase):
         ]), fetch_script_fallback=False)
         self.assertIn("E_JQ_UNBALANCED", output)
 
+    def test_json_replace_parallel_arrays_are_flattened(self) -> None:
+        parsed = self.convert([
+            r'response if ${url} ~= /^https:\/\/api\.example\.com\/jd$/i then json.replace(["data.a.b", "data.c.d"], [0, 0])',
+        ])
+        body = parsed["http"]["body-rewrite"][0]
+        self.assertIn("response-json-replace data.a.b 0 data.c.d 0", body)
+        self.assertNotIn("[", body.split(" response-json-replace ", 1)[1])
+
     def test_legacy_directive_rewrites_are_unchanged(self) -> None:
         parsed = self.convert([
             r"^https:\/\/ad\.example\.com\/x - reject-dict",
