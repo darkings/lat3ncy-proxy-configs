@@ -81,6 +81,31 @@ def load_meta():
         # Clean desc
         entry["desc"] = entry["desc"].replace("\\n"," ").strip()
         enriched.append(entry)
+    # The script-provider bundle is not an upstream .lpx target, but every
+    # override that declares http.script needs it enabled alongside. Surface it
+    # as a pinned dependency so it cannot be missed when installing.
+    bundle = REPO_ROOT / "stash/overrides/kelee/kelee-scripts.stoverride"
+    if bundle.exists():
+        try:
+            import yaml
+            provider_count = len((yaml.safe_load(bundle.read_text(encoding="utf-8")) or {}).get("script-providers") or {})
+        except Exception:
+            provider_count = 0
+        enriched.insert(0, {
+            "filename": "kelee-scripts.stoverride",
+            "stoverride": "kelee-scripts.stoverride",
+            "name": "脚本 Provider 合集",
+            "desc": f"KeLee 转换后共用的脚本 provider（{provider_count} 个）。启用任何含 http.script 的覆写时必须同时启用本文件。",
+            "icon": "https://raw.githubusercontent.com/luestr/IconResource/main/Other_icon/120px/Default.png",
+            "author": "本仓库自动生成",
+            "date": "",
+            "tag": ["依赖"],
+            "url": "",
+            "raw": f"{RAW_BASE}/kelee-scripts.stoverride",
+            "jsd": f"{JSD_BASE}/kelee-scripts.stoverride",
+            "dependency": True,
+            "hash": "",
+        })
     # sort: dependency first, then original targets order (already)
     return enriched
 
