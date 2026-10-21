@@ -63,10 +63,16 @@ $expectedGroups = @('Proxy', 'Tailscale', 'Spotify', 'Telegram', 'OpenAI', 'GitH
 foreach ($group in $expectedGroups) {
     Assert-Match "(?m)^\s+- name: $([regex]::Escape($group))\s*$" "Stash missing proxy group: $group"
 }
-foreach ($group in @('Proxy', 'Auto', 'Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States')) {
+foreach ($group in @('Proxy', 'Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States')) {
     $block = [regex]::Match($config, "(?ms)^\s{2}- name: $([regex]::Escape($group))\s*\r?\n.*?(?=^\s{2}- name:|^rule-providers:)").Value
     if ($block -notmatch '(?ms)^\s{4}use:\s*\r?\n\s{6}- SubStore\s*$') { throw "Stash $group must reference the SubStore provider explicitly" }
     if ($block -notmatch '\(\?!Tailscale\(\?:-Node\)\?\$\)') { throw "Stash $group must exclude the Tailscale node from ordinary proxy selection" }
+}
+# Auto aggregates country groups instead of listing every subscription node.
+$autoBlock = [regex]::Match($config, '(?ms)^\s{2}- name: Auto\s*\r?\n.*?(?=^rule-providers:)').Value
+if ($autoBlock -match '(?m)^\s{4}use:') { throw 'Stash Auto must not expand individual nodes from SubStore' }
+foreach ($region in @('Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States')) {
+    if ($autoBlock -notmatch "(?m)^\s{6}- $([regex]::Escape($region))\s*$") { throw "Stash Auto must include country group: $region" }
 }
 Assert-Match '(?ms)^\s{2}- name: Tailscale\s*\r?\n\s{4}type: select\s*\r?\n\s{4}proxies:\s*\r?\n\s{6}- Tailscale-Node\s*$' 'Stash Tailscale strategy group is incomplete'
 Assert-Match '(?ms)^\s{2}- name: Proxy\s*\r?\n.*?^\s{6}- Auto\s*$' 'Stash Proxy group must expose Auto as a selectable policy'
