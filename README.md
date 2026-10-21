@@ -28,37 +28,7 @@ Stash iOS 直连镜像（jsDelivr）：
 https://cdn.jsdelivr.net/gh/darkings/lat3ncy-proxy-configs@main/stash-ios.yaml
 ```
 
-Stash 应用覆写列表（无需代理的自托管地址）：
-
-```text
-https://stash.ponyo.fun/
-```
-
-Stash 拼多多最新版 Loon 转换覆写：
-
-```text
-https://stash.ponyo.fun/PinDuoDuo_remove_ads.stoverride
-```
-
-Stash 知乎最新版 Loon 转换覆写：
-
-```text
-https://stash.ponyo.fun/Zhihu_remove_ads.stoverride
-```
-
-Stash 番茄小说最新版 Loon 转换覆写：
-
-```text
-https://stash.ponyo.fun/DragonRead_remove_ads.stoverride
-```
-
-Stash 共用脚本 provider（含 `http.script` 的 KeLee 覆写需与之同时启用）：
-
-```text
-https://stash.ponyo.fun/kelee-scripts.stoverride
-```
-
-脚本 provider 由转换器集中拆到这个 bundle，插件内只保留 `name` 引用。
+Stash 应用覆写（KeLee Loon 插件自动转换）：按需在本地自托管的覆写列表页安装，含 `http.script` 的覆写需与同页置顶的脚本 provider 合集一起启用；转换生成物不发布到本仓库。
 
 KeLee 的 Loon→Stash 转换器和目标清单提交在本仓库；`.stoverride`、转换后的 JavaScript、索引页和哈希文件属于生成物，不回写公有 Git 历史，由云端同步任务按需生成并发布。
 
