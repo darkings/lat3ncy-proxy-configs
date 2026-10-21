@@ -784,6 +784,23 @@ def normalize_json_path(raw: str) -> str:
 
 
 JSON_PATH_RE = re.compile(r"^[A-Za-z0-9_@-]+(?:\.[A-Za-z0-9_@-]+|\[\d+\])*$")
+JQ_SEGMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def is_valid_stash_path(path: str) -> bool:
+    """A json-del path must be expressible as jq, or Stash refuses the config.
+
+    Stash compiles these paths to jq, so every dotted segment must be a valid
+    jq identifier: ``data.920bestwishes`` is a syntax error ("jq says:
+    expected"), while ``data[0]`` is fine.
+    """
+    if not JSON_PATH_RE.match(path):
+        return False
+    for segment in path.split("."):
+        name = segment.split("[", 1)[0]
+        if not JQ_SEGMENT_RE.match(name):
+            return False
+    return True
 
 
 def parse_json_path_args(argstr: str) -> List[str]:
@@ -800,7 +817,7 @@ def parse_json_path_args(argstr: str) -> List[str]:
     paths: List[str] = []
     for part in split_loon_args(raw):
         path = normalize_json_path(part).strip().strip('"').strip("'").strip()
-        if path and JSON_PATH_RE.match(path):
+        if path and is_valid_stash_path(path):
             paths.append(path)
     return paths
 
@@ -1470,7 +1487,7 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             # （json-add/json-replace 的值允许 JSON 字面量引号，不能一并拦截。）
             if stash_action in {"response-json-del", "request-json-del"}:
                 if not expression.split() or not all(
-                    JSON_PATH_RE.match(token) for token in expression.split()
+                    is_valid_stash_path(token) for token in expression.split()
                 ):
                     unsupported_rewrites.append(f"# E_JSON_PATH_INVALID {ast.raw}")
                     continue
