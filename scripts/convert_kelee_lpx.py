@@ -796,6 +796,30 @@ def unquote_loon_arg(raw: str) -> str:
     return raw
 
 
+def parse_json_pairs(path_arg: str, value_arg: str) -> List[str]:
+    """Build Stash ``path value`` pairs from Loon ``json.replace`` arguments.
+
+    Loon also accepts the parallel-array form
+    ``json.replace(["a.b", "c.d"], [0, 0])``; Stash needs flat ``a.b 0 c.d 0``.
+    """
+    paths = parse_json_path_args(path_arg)
+    if not paths:
+        return []
+    raw_values = value_arg.strip()
+    if raw_values.startswith("[") and raw_values.endswith("]"):
+        values = [v.strip() for v in split_loon_args(raw_values[1:-1]) if v.strip()]
+    else:
+        values = [raw_values] if raw_values else []
+    if len(values) != len(paths):
+        return []
+    pairs: List[str] = []
+    for path, value in zip(paths, values):
+        if not value or any(ch in value for ch in "[]"):
+            return []
+        pairs.extend([path, value])
+    return pairs
+
+
 def split_loon_args(argstr: str) -> List[str]:
     """Split Loon call arguments on top-level commas, honouring quotes."""
     parts: List[str] = []
@@ -940,10 +964,10 @@ def parse_expression_rewrite(line: str):
         args = split_loon_args(argstr)
         if len(args) < 2:
             return None
-        path, value = normalize_json_path(args[0]), unquote_loon_arg(args[1])
-        if not path or not value:
+        pairs = parse_json_pairs(args[0], args[1])
+        if not pairs:
             return None
-        return ("body", pattern, f"{direction}-body-json-replace", f"{path} {value}")
+        return ("body", pattern, f"{direction}-body-json-replace", " ".join(pairs))
     if name == "json.jq_file":
         url = unquote_loon_arg(argstr)
         if not url:
@@ -1549,6 +1573,16 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
                     is_valid_stash_path(token) for token in expression.split()
                 ):
                     unsupported_rewrites.append(f"# E_JSON_PATH_INVALID {ast.raw}")
+                    continue
+            # json-add/json-replace 是空格分隔的 path value 对；奇数个 token 或
+            # 路径位非法（如残留 JSON 数组）都会让 Stash 拒绝整份配置。
+            if stash_action in {"response-json-add", "request-json-add",
+                                "response-json-replace", "request-json-replace"}:
+                toks = expression.split()
+                if len(toks) % 2 or not all(
+                    is_valid_stash_path(toks[i]) for i in range(0, len(toks), 2)
+                ):
+                    unsupported_rewrites.append(f"# E_JSON_PAIR_INVALID {ast.raw}")
                     continue
             if stash_action in {"response-replace-regex","request-replace-regex"}:
                 body_rewrite.append(f"{pattern} {stash_action} {expression}")
