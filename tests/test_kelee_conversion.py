@@ -405,6 +405,31 @@ class KeleeExpressionRewriteTests(unittest.TestCase):
         self.assertIn("data.splash", body)
         self.assertIn("data.metadata.foo", body)
 
+    def test_multiline_jq_continuation_is_rejoined(self) -> None:
+        # Upstream wraps a long program; a naive per-line parse truncates it.
+        source = "\n".join([
+            "#!name=Continuation Contract",
+            "[Rewrite]",
+            r"^https:\/\/info\.amap\.com\/ws\/x response-body-json-jq 'del(.a) | map(select(",
+            r"  .b == 1))'",
+            "[MitM]",
+            "hostname=info.amap.com",
+        ])
+        parsed = yaml.safe_load(convert_lpx_to_stash(source, fetch_script_fallback=False))
+        payload = parsed["http"]["body-rewrite"][0].split(" response-jq ", 1)[1]
+        self.assertIn("map(select(", payload)
+        self.assertTrue(payload.rstrip().endswith("))'") or payload.rstrip().endswith("))"), payload)
+
+    def test_unbalanced_jq_is_rejected(self) -> None:
+        output = convert_lpx_to_stash("\n".join([
+            "#!name=Unbalanced Contract",
+            "[Rewrite]",
+            r'^https:\/\/api\.example\.com\/x response-body-json-jq "def keep: IN( \"a\","',
+            "[MitM]",
+            "hostname=api.example.com",
+        ]), fetch_script_fallback=False)
+        self.assertIn("E_JQ_UNBALANCED", output)
+
     def test_legacy_directive_rewrites_are_unchanged(self) -> None:
         parsed = self.convert([
             r"^https:\/\/ad\.example\.com\/x - reject-dict",
