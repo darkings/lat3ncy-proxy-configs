@@ -394,6 +394,17 @@ class KeleeExpressionRewriteTests(unittest.TestCase):
         # '#' inside a jq string literal must survive.
         self.assertIn('"#tag"', rule)
 
+    def test_json_delete_skips_jq_invalid_segments(self) -> None:
+        parsed = self.convert([
+            r'response if ${url} ~= /^https:\/\/api\.example\.com\/cfg$/i then json.delete(["data.splash", "data.920bestwishes", "data.metadata.foo"])',
+        ])
+        body = parsed["http"]["body-rewrite"][0]
+        # Digit-leading key cannot be a jq identifier: must be dropped, not shipped.
+        self.assertNotIn("920bestwishes", body)
+        # Ordinary dotted keys, including ones containing "data", stay intact.
+        self.assertIn("data.splash", body)
+        self.assertIn("data.metadata.foo", body)
+
     def test_legacy_directive_rewrites_are_unchanged(self) -> None:
         parsed = self.convert([
             r"^https:\/\/ad\.example\.com\/x - reject-dict",

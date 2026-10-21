@@ -414,13 +414,17 @@ def check_file(p: pathlib.Path):
                 add("BODY", "E_JQ_EMPTY", f"{p.name}: body-rewrite jq 缺 expression: {s[:160]}")
             if "jq" in act and len(expr) >= 2 and expr[0] == expr[-1] and expr[0] in {'"', "'"}:
                 add("BODY", "E_JQ_QUOTED_EXPRESSION", f"{p.name}: jq 表达式被整体引号包裹，会变成字符串字面量: {s[:160]}")
-            # json-del 只接受裸路径。JSON 数组残留或引号会让 Stash 直接报
-            # "invalid expression" 并拒绝加载整份配置；数组下标 data[0] 合法。
+            # json-del 只接受裸路径；Stash 会把这些路径编译成 jq，因此每一段
+            # 都必须是合法 jq 标识符（data.920bestwishes 会导致 jq 语法错误）。
             if act in {"response-json-del", "request-json-del"}:
                 path_re = re.compile(r"^[A-Za-z0-9_@-]+(?:\.[A-Za-z0-9_@-]+|\[\d+\])*$")
+                seg_re = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
                 for token in expr.split():
-                    if not path_re.match(token):
-                        add("BODY", "E_JSON_PATH_INVALID", f"{p.name}: json-del 路径非法 '{token[:60]}': {s[:160]}")
+                    ok = bool(path_re.match(token)) and all(
+                        seg_re.match(seg.split("[", 1)[0]) for seg in token.split(".")
+                    )
+                    if not ok:
+                        add("BODY", "E_JSON_PATH_INVALID", f"{p.name}: json-del 路径非法 '{token[:60]}'（Stash 会用 jq 编译，需合法标识符）: {s[:120]}")
                         break
         # RE2 for match pattern (first token)
         pat = parts[0].strip("'\"") if parts else ""
