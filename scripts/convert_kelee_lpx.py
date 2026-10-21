@@ -514,6 +514,57 @@ def jq_for_replace(pairs: List[str]) -> str:
         exprs.append(f".{key} = {val_str}")
     return " | ".join(exprs)
 
+def jq_is_balanced(expression: str) -> bool:
+    """True when quotes/brackets/parentheses in a jq program are balanced."""
+    pairs = {")": "(", "]": "[", "}": "{"}
+    stack: List[str] = []
+    in_string = False
+    index = 0
+    while index < len(expression):
+        char = expression[index]
+        if in_string:
+            if char == "\\":
+                index += 2
+                continue
+            if char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char in "([{":
+            stack.append(char)
+        elif char in ")]}":
+            if not stack or stack.pop() != pairs[char]:
+                return False
+        index += 1
+    return not stack and not in_string
+
+
+def _needs_continuation(text: str) -> bool:
+    """Heuristic: does this Loon line look cut in the middle of an expression?"""
+    return not jq_is_balanced(text.split(" then ", 1)[-1] if " then " in text else text)
+
+
+def merge_continuation_lines(entries: List[str]) -> List[str]:
+    """Rejoin Loon rewrites/scripts that upstream wrapped across several lines.
+
+    Amap writes a multi-line jq program; splitting per line truncated it into
+    ``def keep_skeleton: IN( "baseInfo",`` which Stash rejects with
+    "expected closing parenthesis, but the expression ends here".
+    """
+    merged: List[str] = []
+    buffer = ""
+    for entry in entries:
+        candidate = f"{buffer}\n{entry}" if buffer else entry
+        if _needs_continuation(candidate):
+            buffer = candidate
+            continue
+        merged.append(candidate)
+        buffer = ""
+    if buffer:
+        merged.append(buffer)
+    return merged
+
+
 def strip_jq_comments(expr: str) -> str:
     """Drop jq `#` comments so a flattened one-line program still executes.
 
@@ -684,7 +735,8 @@ HEADER_ALLOW = {"request-add","request-del","request-replace","request-replace-r
 LEGACY_HEADER_ACTIONS = {"header-add","header-del","header-replace","response-header-add","response-header-del","response-header-replace"}
 
 def parse_rewrite_line(line: str):
-    m = re.match(r'^(\S+)\s+(\S+)(?:\s+(.*))?$', line.strip())
+    # re.S: merged multi-line jq payloads must reach the body generator whole.
+    m = re.match(r'^(\S+)\s+(\S+)(?:\s+(.*))?$', line.strip(), re.S)
     if not m:
         return None
     return m.group(1), m.group(2), (m.group(3) or "").strip()
@@ -1142,6 +1194,8 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
         if k.lower() == "rewrite":
             rewrite_raw = sections[k]
             break
+    # Upstream wraps long jq programs across lines; rejoin before parsing.
+    rewrite_raw = merge_continuation_lines(list(rewrite_raw))
     if redirect_from_rules:
         rewrite_raw = rewrite_raw + redirect_from_rules
     rewrite_raw = rewrite_raw + APP_EXTRA_REWRITES.get(source_filename, [])
@@ -1480,6 +1534,11 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
                     # the whole rule is a comment and would be a no-op.
                     unsupported_rewrites.append(f"# E_JQ_COMMENT_ONLY {ast.raw}")
                     continue
+                if not jq_is_balanced(expression):
+                    # Never ship a truncated jq program: Stash rejects the whole
+                    # profile with "expected closing parenthesis".
+                    unsupported_rewrites.append(f"# E_JQ_UNBALANCED {ast.raw}")
+                    continue
             # PyYAML 负责 YAML 标量引用；这里写入 Stash 实际要解析的原始表达式。
             # 对 jq/json 动作增加字面双引号会把表达式变成 jq 字符串，而不是执行它。
             # json-del 只接受裸路径；JSON 数组残留或带引号会被 Stash 判为
@@ -1535,7 +1594,7 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
     script_raw = []
     for k in list(sections.keys()):
         if k.lower() == "script":
-            script_raw = sections[k]
+            script_raw = merge_continuation_lines(list(sections[k]))
             break
     if expression_script_lines:
         # Expression-form script() rewrites join the regular [Script] input.
