@@ -627,6 +627,179 @@ def parse_rewrite_line(line: str):
         return None
     return m.group(1), m.group(2), (m.group(3) or "").strip()
 
+# ---------- Loon expression syntax ----------
+# Current Loon plugins express rewrites as a conditional instead of a directive:
+#   response if ${url} ~= /^https:\/\/api\.example\.com\/x\?/i then response.json.jq(".a = 1")
+#   request  if ${url} ~= /^https:\/\/ad\.example\.com\//i then reject_dict(200)
+# The naive parse_rewrite_line() above reads "if" as the action, so these lines
+# used to fall through every allow list and end up as unsupported comments.
+# Translate them back to the legacy directive form the rest of this converter
+# already understands; Stash itself has no such expression grammar.
+EXPR_REWRITE_RE = re.compile(
+    r'^(request|response)\s+if\s+\$\{url\}\s*~=\s*(.*?)\s+then\s+(.*)$', re.I | re.S
+)
+EXPR_CALL_RE = re.compile(r'^([A-Za-z_][\w.\-]*)\s*\((.*)\)\s*$', re.S)
+EXPR_URL_ACTIONS = {
+    "reject_dict": "reject-dict",
+    "reject_array": "reject-array",
+    "reject_img": "reject-img",
+    "reject_image": "reject-img",
+    "reject_200": "reject-200",
+}
+EXPR_BODY_ACTIONS = {
+    ("response", "json.jq"): "response-body-json-jq",
+    ("response", "body.json.jq"): "response-body-json-jq",
+    ("request", "json.jq"): "request-body-json-jq",
+    ("request", "body.json.jq"): "request-body-json-jq",
+}
+
+
+def strip_loon_regex(raw: str) -> str:
+    """Convert Loon's ``/pattern/flags`` literal into a bare RE2 expression.
+
+    Stash matches with RE2 and has no delimiter syntax; the case-insensitive
+    flag becomes the RE2 inline modifier ``(?i)``. Loon also escapes ``/``
+    inside the pattern, which RE2 does not need.
+    """
+    raw = raw.strip()
+    m = re.match(r'^/(.*)/([A-Za-z]*)$', raw, re.S)
+    if not m:
+        return raw
+    body, flags = m.group(1), m.group(2).lower()
+    body = body.replace("\\/", "/")
+    if "i" in flags:
+        body = "(?i)" + body
+    return body
+
+
+def unquote_loon_arg(raw: str) -> str:
+    """Unwrap a Loon string argument and undo escaping of inner quotes."""
+    raw = raw.strip()
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ('"', "'"):
+        inner = raw[1:-1]
+        # Loon writes jq payloads with escaped quotes (\"...\"); jq needs them raw.
+        return re.sub(r'\\(["\'\\])', r'\1', inner)
+    return raw
+
+
+def split_loon_args(argstr: str) -> List[str]:
+    """Split Loon call arguments on top-level commas, honouring quotes."""
+    parts: List[str] = []
+    current = ""
+    depth = 0
+    quote = None
+    for ch in argstr:
+        if quote:
+            current += ch
+            if ch == quote and not current.endswith("\\" + quote):
+                quote = None
+        elif ch in ('"', "'"):
+            quote = ch
+            current += ch
+        elif ch in "([{":
+            depth += 1
+            current += ch
+        elif ch in ")]}":
+            depth = max(0, depth - 1)
+            current += ch
+        elif ch == "," and depth == 0:
+            if current.strip():
+                parts.append(current.strip())
+            current = ""
+        else:
+            current += ch
+    if current.strip():
+        parts.append(current.strip())
+    return parts
+
+
+def normalize_json_path(raw: str) -> str:
+    """Stash JSON paths must not start with a dot; Loon usually writes one."""
+    path = unquote_loon_arg(raw).strip()
+    return path[1:] if path.startswith(".") else path
+
+
+def parse_expression_rewrite(line: str):
+    """Parse a Loon 3.x expression rewrite into (kind, pattern, directive, payload).
+
+    ``kind`` is one of:
+      * ``url``   – directive is a Stash url-rewrite action (reject family)
+      * ``body``  – directive is a Loon body action, payload is the raw jq expression
+      * ``script``– directive is the direction, payload is the script URL
+      * ``unsupported`` – directive is the unrecognised function name
+    Returns ``None`` when the line is not an expression rewrite at all.
+    """
+    m = EXPR_REWRITE_RE.match(line.strip())
+    if not m:
+        return None
+    direction = m.group(1).lower()
+    pattern = strip_loon_regex(m.group(2))
+    call = m.group(3).strip()
+    call_m = EXPR_CALL_RE.match(call)
+    if not call_m:
+        return None
+    name = call_m.group(1).lower()
+    argstr = call_m.group(2).strip()
+    # Functions are usually namespaced by side: response.json.jq(...).
+    for side in ("response", "request"):
+        prefix = side + "."
+        if name.startswith(prefix):
+            direction = side
+            name = name[len(prefix):]
+            break
+    if name in ("script", "script-path"):
+        url = unquote_loon_arg(argstr)
+        if not url:
+            return None
+        return ("script", pattern, direction, url)
+    if name == "reject":
+        code = unquote_loon_arg(argstr)
+        # Loon reject(404) behaves like Stash `reject`; reject(200) like `reject-200`.
+        return ("url", pattern, "reject-200" if code == "200" else "reject", "")
+    if name in EXPR_URL_ACTIONS:
+        return ("url", pattern, EXPR_URL_ACTIONS[name], "")
+    if name == "redirect":
+        target = unquote_loon_arg(argstr)
+        if not target:
+            return None
+        return ("url", pattern, "302", target)
+    if name in ("json.delete", "json.del"):
+        paths = [normalize_json_path(p) for p in split_loon_args(argstr)]
+        paths = [p for p in paths if p]
+        if not paths:
+            return None
+        return ("body", pattern, f"{direction}-body-json-del", " ".join(paths))
+    if name in ("json.replace", "json.replace_regex"):
+        args = split_loon_args(argstr)
+        if len(args) < 2:
+            return None
+        path, value = normalize_json_path(args[0]), unquote_loon_arg(args[1])
+        if not path or not value:
+            return None
+        return ("body", pattern, f"{direction}-body-json-replace", f"{path} {value}")
+    if name == "json.jq_file":
+        url = unquote_loon_arg(argstr)
+        if not url:
+            return None
+        try:
+            # Same contract as jq-path: inline the remote expression.
+            content = re.sub(r'\s*\n\s*', ' ', fetch_text(url).strip())
+        except Exception:
+            return None
+        if not content:
+            return None
+        return ("body", pattern, f"{direction}-body-json-jq", content)
+    if name in ("mock", "body.mock"):
+        body = unquote_loon_arg(argstr)
+        return ("mock", pattern, "mock", body)
+    directive = EXPR_BODY_ACTIONS.get((direction, name))
+    if directive:
+        expression = unquote_loon_arg(argstr)
+        if not expression:
+            return None
+        return ("body", pattern, directive, expression)
+    return ("unsupported", pattern, name, argstr)
+
 # ---------- Script parsing (reuse) ----------
 SCRIPT_RE_HTTP = re.compile(r'^(http-(?:response|request))\s+(\S+)\s+(.*)$')
 SCRIPT_RE_EXPR = re.compile(r'^(response|request)\s+if\s+\$\{url\}\s*~=\s*(.*?)\s+then\s+script\(\s*["\']?(.*?)["\']?\s*\)(?:\s+with\s+(.*))?$', re.I)
@@ -859,9 +1032,55 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
     rewrite_raw = rewrite_raw + APP_EXTRA_REWRITES.get(source_filename, [])
 
     ast_list: List[RuleAST] = []
+    expression_unsupported: List[str] = []
+    expression_script_lines: List[str] = []
     for idx, line in enumerate(rewrite_raw):
         line_stripped = line.strip()
         if not line_stripped or line_stripped.startswith("#"):
+            continue
+        expr = parse_expression_rewrite(line_stripped)
+        if expr is not None:
+            kind, pattern, directive, payload = expr
+            if kind == "unsupported":
+                expression_unsupported.append(
+                    f"# E_EXPR_ACTION_UNSUPPORTED {directive}() {line_stripped}"
+                )
+                continue
+            if kind == "script":
+                # Feed the [Script] pipeline below with a legacy-style line so it
+                # resolves the provider URL and registers it like any other script.
+                expression_script_lines.append(
+                    f"http-{directive} {pattern} script-path={payload}, requires-body=true"
+                )
+                continue
+            if kind == "mock":
+                ast = RuleAST(
+                    id=f"r{idx}",
+                    sourceLine=idx,
+                    loonType="mock",
+                    targetModule="mock",
+                    match=pattern,
+                    action="mock",
+                    target=payload,
+                    raw=f"{pattern} mock {payload}".strip(),
+                )
+                ast.mock = {"data": payload, "data-type": "json", "status-code": 200}
+                ast_list.append(ast)
+                continue
+            # Reuse the directive pipeline; raw keeps only pattern+directive so
+            # the body generator takes the expression from ast.target verbatim.
+            ast = RuleAST(
+                id=f"r{idx}",
+                sourceLine=idx,
+                loonType=directive.lower(),
+                targetModule="url-rewrite",
+                match=pattern,
+                action=directive,
+                target=payload,
+                raw=f"{pattern} {directive}",
+            )
+            ast = classify_rule(ast)
+            ast_list.append(ast)
             continue
         parsed = parse_rewrite_line(line_stripped)
         if not parsed:
@@ -902,7 +1121,7 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
     header_rewrite: List[str] = []
     body_rewrite: List[str] = []
     mock_list: List[Dict] = []
-    unsupported_rewrites: List[str] = []
+    unsupported_rewrites: List[str] = list(expression_unsupported)
 
     for ast in ast_list:
         mod = ast.targetModule
@@ -1187,6 +1406,9 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
         if k.lower() == "script":
             script_raw = sections[k]
             break
+    if expression_script_lines:
+        # Expression-form script() rewrites join the regular [Script] input.
+        script_raw = list(script_raw) + expression_script_lines
     registry = ScriptRegistry()
     script_entries = []
     provider_names = set()
