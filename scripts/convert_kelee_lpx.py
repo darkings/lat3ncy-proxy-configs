@@ -514,6 +514,22 @@ def jq_for_replace(pairs: List[str]) -> str:
         exprs.append(f".{key} = {val_str}")
     return " | ".join(exprs)
 
+def clean_script_url(url: str) -> str:
+    """Drop inline Loon arguments glued to a script URL.
+
+    Some plugins write ``script-path=https://host/x.js", {${tab}, ${level}}``
+    and the parser keeps the trailing fragment. Truncating at the first quote,
+    space or ``${`` restores a fetchable URL and yields a sane provider name.
+    """
+    url = url.strip().strip("\"'")
+    cut = len(url)
+    for token in ('"', "'", " ", "${"):
+        idx = url.find(token)
+        if idx != -1:
+            cut = min(cut, idx)
+    return url[:cut].strip().rstrip(",")
+
+
 def sanitize_provider_name(tag: str, script_url: str, existing: set) -> str:
     base = None
     if script_url:
@@ -1438,6 +1454,7 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             script_url = parsed["script_path"]
         if "script-path" in parsed:
             script_url = parsed["script-path"]
+        script_url = clean_script_url(script_url)
         # 先算 better_url（kelee -> 自托管到 stash/scripts/<basename>.js，同 URL 复用）
         better_url_pre = script_url
         # 统一用 script_url 的 basename 作文件名，保证同 URL 的 14 条 Amap 共用同一文件

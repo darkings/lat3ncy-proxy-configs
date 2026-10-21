@@ -29,10 +29,22 @@ MAIN_CONFIG = REPO_ROOT / "stash-ios.yaml"
 CONVERTER_VERSION = 9
 
 def fetch_lpx(url: str) -> str:
-    req = urllib.request.Request(url, headers=FETCH_HEADERS)
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        charset = resp.headers.get_content_charset() or "utf-8"
-        return resp.read().decode(charset, errors="replace")
+    """Fetch an upstream .lpx, retrying transient TLS/EOF failures.
+
+    kelee.one sits behind Cloudflare; a single dropped TLS session used to abort
+    the whole publish run (observed as SSL UNEXPECTED_EOF_WHILE_READING).
+    """
+    last_error = None
+    for attempt in range(3):
+        try:
+            req = urllib.request.Request(url, headers=FETCH_HEADERS)
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                charset = resp.headers.get_content_charset() or "utf-8"
+                return resp.read().decode(charset, errors="replace")
+        except Exception as exc:  # noqa: BLE001 - retry any transport error
+            last_error = exc
+            time.sleep(1 + attempt)
+    raise last_error
 
 def lpx_hash_and_date(text: str):
     # hash of normalized text
@@ -87,7 +99,12 @@ def write_provider_bundle(providers: dict):
 
 
 def sync_main_config_providers(providers: dict, old_provider_names: set):
-    """Synchronize providers when running from a full repository checkout."""
+    """Refresh URLs of providers the main config already declares.
+
+    Converted KeLee providers belong to kelee-scripts.stoverride; adding them
+    here would duplicate the bundle and could inject unexpanded Loon
+    placeholders into the public config.
+    """
     if not MAIN_CONFIG.exists():
         return False
     text = MAIN_CONFIG.read_text(encoding="utf-8")
@@ -95,13 +112,10 @@ def sync_main_config_providers(providers: dict, old_provider_names: set):
     current = data.get("script-providers") or {}
     merged = {}
     for name, value in current.items():
-        if name in old_provider_names:
-            if name in providers:
-                merged[name] = providers[name]
-        else:
-            merged[name] = value
-    merged.update({name: value for name, value in providers.items() if name not in merged})
-    replacement = yaml.safe_dump(
+        replacement = providers.get(name)
+        # Keep main-config-only providers untouched; refresh known names in place.
+        merged[name] = replacement if (name in old_provider_names and replacement) else value
+    replacement_block = yaml.safe_dump(
         {"script-providers": merged},
         sort_keys=False,
         allow_unicode=True,
@@ -111,7 +125,7 @@ def sync_main_config_providers(providers: dict, old_provider_names: set):
     pattern = re.compile(r"(?ms)^script-providers:\s*\n.*?(?=^\S)")
     if not pattern.search(text):
         raise RuntimeError("stash-ios.yaml missing top-level script-providers block")
-    updated = pattern.sub(replacement, text, count=1)
+    updated = pattern.sub(replacement_block, text, count=1)
     if updated != text:
         MAIN_CONFIG.write_text(updated, encoding="utf-8")
         return True
