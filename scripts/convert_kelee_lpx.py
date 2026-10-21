@@ -514,6 +514,52 @@ def jq_for_replace(pairs: List[str]) -> str:
         exprs.append(f".{key} = {val_str}")
     return " | ".join(exprs)
 
+def strip_jq_comments(expr: str) -> str:
+    """Drop jq `#` comments so a flattened one-line program still executes.
+
+    Loon payloads are multi-line and often start with a descriptive comment;
+    after newlines are collapsed into spaces that comment would swallow the
+    whole program, silently turning the rule into a no-op.
+    """
+    cleaned: List[str] = []
+    current: List[str] = []
+    in_string = False
+    index = 0
+    text = expr
+    while index < len(text):
+        char = text[index]
+        if char == "\\" and in_string:
+            current.append(text[index:index + 2])
+            index += 2
+            continue
+        if char == '"':
+            in_string = not in_string
+            current.append(char)
+        elif char in "\r\n" or (char == "\\" and index + 1 < len(text) and text[index + 1] == "n" and not in_string):
+            if char == "\\":
+                index += 1
+            piece = "".join(current).strip()
+            if piece:
+                cleaned.append(piece)
+            current = []
+        elif char == "#" and not in_string:
+            # skip the remainder of this logical line (real or escaped newline)
+            while index < len(text):
+                if text[index] in "\r\n":
+                    break
+                if text[index] == "\\" and index + 1 < len(text) and text[index + 1] == "n":
+                    break
+                index += 1
+            continue
+        else:
+            current.append(char)
+        index += 1
+    tail = "".join(current).strip()
+    if tail:
+        cleaned.append(tail)
+    return " ".join(cleaned).strip() or expr
+
+
 def clean_script_url(url: str) -> str:
     """Drop inline Loon arguments glued to a script URL.
 
@@ -730,9 +776,33 @@ def split_loon_args(argstr: str) -> List[str]:
 
 
 def normalize_json_path(raw: str) -> str:
-    """Stash JSON paths must not start with a dot; Loon usually writes one."""
+    """Stash JSON paths take no leading ``.``/``$.`` and no quotes."""
     path = unquote_loon_arg(raw).strip()
+    if path.startswith("$."):
+        return path[2:]
     return path[1:] if path.startswith(".") else path
+
+
+JSON_PATH_RE = re.compile(r"^[A-Za-z0-9_@-]+(?:\.[A-Za-z0-9_@-]+|\[\d+\])*$")
+
+
+def parse_json_path_args(argstr: str) -> List[str]:
+    """Flatten Loon ``json.delete`` arguments into Stash path tokens.
+
+    Loon accepts ``a, b`` as well as the bracket form ``["a", "b"]``; Stash only
+    accepts space-separated bare paths, so a bracket list must be unwrapped or
+    the whole rule is rejected as ``invalid expression``. Array indices such as
+    ``data[0]`` are legal Stash paths and must survive.
+    """
+    raw = argstr.strip()
+    if raw.startswith("[") and raw.endswith("]"):
+        raw = raw[1:-1]
+    paths: List[str] = []
+    for part in split_loon_args(raw):
+        path = normalize_json_path(part).strip().strip('"').strip("'").strip()
+        if path and JSON_PATH_RE.match(path):
+            paths.append(path)
+    return paths
 
 
 def parse_expression_rewrite(line: str):
@@ -793,8 +863,7 @@ def parse_expression_rewrite(line: str):
             target, code = code, "302"
         return ("url", pattern, code, target)
     if name in ("json.delete", "json.del"):
-        paths = [normalize_json_path(p) for p in split_loon_args(argstr)]
-        paths = [p for p in paths if p]
+        paths = parse_json_path_args(argstr)
         if not paths:
             return None
         return ("body", pattern, f"{direction}-body-json-del", " ".join(paths))
@@ -1387,8 +1456,24 @@ def convert_lpx_to_stash(lpx_text: str, lpx_url: str = "", fetch_script_fallback
             if "jq" in stash_action and not expression:
                 unsupported_rewrites.append(f"# E_JQ_EMPTY {ast.raw}")
                 continue
+            if stash_action in {"response-jq", "request-jq"}:
+                expression = strip_jq_comments(expression)
+                if expression.lstrip().startswith("#"):
+                    # Upstream glued a comment to the program with no newline, so
+                    # the whole rule is a comment and would be a no-op.
+                    unsupported_rewrites.append(f"# E_JQ_COMMENT_ONLY {ast.raw}")
+                    continue
             # PyYAML 负责 YAML 标量引用；这里写入 Stash 实际要解析的原始表达式。
             # 对 jq/json 动作增加字面双引号会把表达式变成 jq 字符串，而不是执行它。
+            # json-del 只接受裸路径；JSON 数组残留或带引号会被 Stash 判为
+            # invalid expression。数组下标（data[0]）是合法路径，不能误杀。
+            # （json-add/json-replace 的值允许 JSON 字面量引号，不能一并拦截。）
+            if stash_action in {"response-json-del", "request-json-del"}:
+                if not expression.split() or not all(
+                    JSON_PATH_RE.match(token) for token in expression.split()
+                ):
+                    unsupported_rewrites.append(f"# E_JSON_PATH_INVALID {ast.raw}")
+                    continue
             if stash_action in {"response-replace-regex","request-replace-regex"}:
                 body_rewrite.append(f"{pattern} {stash_action} {expression}")
             else:
