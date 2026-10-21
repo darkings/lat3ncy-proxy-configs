@@ -298,5 +298,85 @@ class KeLeeBodyRewriteConversionTests(unittest.TestCase):
         self.assertTrue(script["require-body"])
 
 
+class KeleeExpressionRewriteTests(unittest.TestCase):
+    """Loon 3.x conditional rewrites must survive conversion, not be dropped."""
+
+    def convert(self, rewrite_lines: list[str]) -> dict:
+        source = "\n".join([
+            "#!name=Expression Rewrite Contract",
+            "[Rewrite]",
+            *rewrite_lines,
+            "[MitM]",
+            "hostname=api.example.com",
+        ])
+        return yaml.safe_load(
+            convert_lpx_to_stash(
+                source, "https://example.invalid/Expression.lpx", fetch_script_fallback=False
+            )
+        )
+
+    def test_reject_dict_expression_becomes_url_rewrite(self) -> None:
+        parsed = self.convert([
+            r'request if ${url} ~= /^https:\/\/acs\.m\.taobao\.com\/gw\/mtop\.alibaba\.advertisementservice\.getadv/i then reject_dict(200)',
+        ])
+        self.assertEqual(
+            parsed["http"]["url-rewrite"],
+            [r"(?i)^https://acs\.m\.taobao\.com/gw/mtop\.alibaba\.advertisementservice\.getadv - reject-dict"],
+        )
+
+    def test_body_jq_expression_becomes_body_rewrite(self) -> None:
+        parsed = self.convert([
+            r'response if ${url} ~= /^https:\/\/api\.zhihu\.com\/topstory\/recommend\?/i then response.json.jq(".data |= map(select(.type == \"ComponentCard\"))")',
+        ])
+        body = parsed["http"]["body-rewrite"]
+        self.assertEqual(len(body), 1)
+        self.assertTrue(body[0].startswith(r"(?i)^https://api\.zhihu\.com/topstory/recommend\? response-jq "))
+        # Escaped quotes in the Loon payload must reach jq unescaped.
+        self.assertIn('.data |= map(select(.type == "ComponentCard"))', body[0])
+        self.assertNotIn('\\"', body[0])
+
+    def test_reject_codes_map_to_reject_and_reject_200(self) -> None:
+        parsed = self.convert([
+            r'response if ${url} ~= /^https:\/\/api\.example\.com\/gone$/i then reject(404)',
+            r'response if ${url} ~= /^https:\/\/api\.example\.com\/empty$/i then reject(200)',
+        ])
+        rewrites = parsed["http"]["url-rewrite"]
+        self.assertIn(r"(?i)^https://api\.example\.com/gone$ - reject", rewrites)
+        self.assertIn(r"(?i)^https://api\.example\.com/empty$ - reject-200", rewrites)
+
+    def test_script_expression_in_rewrite_section_registers_provider(self) -> None:
+        parsed = self.convert([
+            r'response if ${url} ~= /^https:\/\/m-cloud\.zhihu\.com\/api\/cloud\/zhihu\/config\/all\?/i then script("https://example.invalid/zhihu.js")',
+        ])
+        script = parsed["http"]["script"][0]
+        self.assertEqual(script["type"], "response")
+        self.assertTrue(script["require-body"])
+        self.assertEqual(script["match"], r"(?i)^https://m-cloud\.zhihu\.com/api/cloud/zhihu/config/all\?")
+        provider = parsed["script-providers"][script["name"]]
+        self.assertEqual(provider["url"], "https://example.invalid/zhihu.js")
+
+    def test_unknown_expression_action_is_reported_not_silent(self) -> None:
+        output = convert_lpx_to_stash("\n".join([
+            "#!name=Unknown Action Contract",
+            "[Rewrite]",
+            r'response if ${url} ~= /^https:\/\/api\.example\.com\/x$/i then response.some.unknown(1)',
+            "[MitM]",
+            "hostname=api.example.com",
+        ]), fetch_script_fallback=False)
+        self.assertIn("E_EXPR_ACTION_UNSUPPORTED", output)
+        self.assertIn("response.some.unknown", output)
+
+    def test_legacy_directive_rewrites_are_unchanged(self) -> None:
+        parsed = self.convert([
+            r"^https:\/\/ad\.example\.com\/x - reject-dict",
+            r"^https:\/\/api\.example\.com\/feed response-body-json-jq 'del(.ad)'",
+        ])
+        self.assertIn(r"^https:\/\/ad\.example\.com\/x - reject-dict", parsed["http"]["url-rewrite"])
+        self.assertTrue(
+            any("del(.ad)" in rule for rule in parsed["http"]["body-rewrite"]),
+            parsed["http"]["body-rewrite"],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
