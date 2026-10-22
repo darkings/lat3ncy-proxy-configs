@@ -118,9 +118,8 @@ proxy-groups:
       - Japan
       - Singapore
       - United States
-    use:
-      - SubStore
-    filter: '(?i)^(?!Tailscale(?:-Node)?$)(?!.*(?:群|邀请|返利|官网|客服|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|机场|通知|频道|教程|更新|作者|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)).+$'
+    # 不在此展开 SubStore 的具体节点：顶层只暴露自动/直连/国家组。
+    # 需要逐个挑节点时进入对应国家组选择即可，节点不会消失。
     icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/Global.png
 
   - name: Tailscale

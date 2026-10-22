@@ -64,7 +64,7 @@ macOS 版面向 Mac 本机客户端，不作为局域网网关。它使用 Steam
 
 Stash 版要求 iOS 客户端 3.4 或更高版本，使用名为 `Tailscale` 的策略组包裹 `Tailscale-Node` 原生节点（Tailscale 机器名为 `ios`）。它不依赖同时启动独立的 Tailscale App：`*.ts.net`、`100.64.0.0/10` 和 `fd7a:115c:a1e0::/48` 会进入该策略组，`*.tailscale.com` 登录与控制面则保持直连，避免认证和建链递归。该节点关闭普通公网延迟测试，因为没有指定 exit node；普通互联网流量仍由 Proxy 与各应用策略处理。
 
-导入 `stash-ios.yaml` 后，先启用 Stash 并用 Safari 打开 `https://sub.store`，在本机 Sub-Store 中创建名称严格为 `ios` 的订阅，再把私人机场地址保存在这个订阅中。主配置已内置 `SubStore` 远程代理集，每 24 小时读取 `http://sub.store/download/ios?target=Stash`，并通过 `subscribe-url` 读取同一地址的流量/到期响应头；使用与 Stash 协议及字段最匹配的输出。不要把机场地址填到“通用 → 订阅链接”，也不要把它提交到仓库。首次创建后在“远程代理集”中手动刷新一次 `SubStore`，Proxy、Auto 和五个地区组就会自动纳入节点；Proxy 显式包含 `Auto` 和 `SubStore` 节点，但不包含 `Tailscale`，避免没有 exit node 时把普通公网流量送入 Tailnet。Tailscale 由独立策略组和 Tailnet 规则使用。其他 Clash 系客户端可单独读取 `http://sub.store/download/ios?target=ClashMeta`，两者仍使用同一个 `ios` 订阅数据。
+导入 `stash-ios.yaml` 后，先启用 Stash 并用 Safari 打开 `https://sub.store`，在本机 Sub-Store 中创建名称严格为 `ios` 的订阅，再把私人机场地址保存在这个订阅中。主配置已内置 `SubStore` 远程代理集，每 24 小时读取 `http://sub.store/download/ios?target=Stash`，并通过 `subscribe-url` 读取同一地址的流量/到期响应头；使用与 Stash 协议及字段最匹配的输出。不要把机场地址填到“通用 → 订阅链接”，也不要把它提交到仓库。首次创建后在“远程代理集”中手动刷新一次 `SubStore`，五个地区组就会自动纳入节点；`Proxy` 与 `Auto` 只列策略组、不展开具体节点（要挑单个节点进入对应国家组），也不包含 `Tailscale`，避免没有 exit node 时把普通公网流量送入 Tailnet。Tailscale 由独立策略组和 Tailnet 规则使用。其他 Clash 系客户端可单独读取 `http://sub.store/download/ios?target=ClashMeta`，两者仍使用同一个 `ios` 订阅数据。
 
 如果使用名称同为 `ios` 的组合订阅，添加并启用下面的覆写。它只把 `SubStore.url` 和 `subscribe-url` 同步切换到 `http://sub.store/download/collection/ios?target=Stash`，保留策略组、缓存路径和健康检查。单条订阅与组合订阅的下载接口不同，仅把组合订阅命名为 `ios` 不会自动切换。组合流量信息需要在 Sub-Store 中另行设置合并处理，主配置不能自行合并多个机场的流量/到期信息；详见 [Sub-Store 组合订阅文档](https://sub-store-org.github.io/doc/subscription/collection)。
 

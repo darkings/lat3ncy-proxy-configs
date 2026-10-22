@@ -21,6 +21,14 @@ TEMPLATE = ROOT / "stash-ios.yaml"
 OUTPUT = ROOT / ".local" / "stash-ios-countries.yaml"
 OLD_REGIONS = ("Hong Kong", "Taiwan", "Japan", "Singapore", "United States")
 SELECT_GROUPS = ("Proxy", "Spotify", "Telegram", "OpenAI", "GitHub", "Microsoft", "Google", "YouTube", "TikTok")
+# Subscription-status placeholders ("剩余流量 3G", "套餐到期 …") must never be
+# treated as usable nodes. The template no longer carries this filter (Proxy now
+# lists only groups), so the generator keeps the single source of truth here.
+STATUS_NODE_FILTER = (
+    r"(?i)^(?!Tailscale(?:-Node)?$)(?!.*(?:群|邀请|返利|官网|客服|订阅|剩余|流量|套餐|到期|过期"
+    r"|有效期|已用|重置|机场|通知|频道|教程|更新|作者|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC"
+    r"|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)).+$"
+)
 
 # A country flag always works (including countries not in this table). These
 # aliases also cover common subscriptions without flags; unknown nodes remain
@@ -118,15 +126,11 @@ def build_profile(template: dict, names: list[str], collection: bool = False) ->
     if any(original[name].get("use") != ["SubStore"] for name in OLD_REGIONS):
         raise ValueError("Template country groups no longer use SubStore")
     grouped: dict[str, list[str]] = defaultdict(list)
-    # Proxy still pulls from SubStore, so its filter is the authority for
-    # excluding subscription-status placeholders from generated country groups
-    # (Auto now lists country groups instead of individual nodes).
-    status_filter = original["Proxy"].get("filter")
-    if not status_filter:
-        raise ValueError("Template Proxy group has no filter; update the generator first")
-    eligible = [n for n in names if re.fullmatch(status_filter, n)]
+    # Country groups must not re-introduce subscription-status placeholders, so
+    # filter the export with the same rule the template used to carry on Proxy.
+    eligible = [n for n in names if re.fullmatch(STATUS_NODE_FILTER, n)]
     if not eligible:
-        raise ValueError("All exported nodes are excluded by the Proxy filter; refusing an empty Auto group that could become DIRECT")
+        raise ValueError("All exported nodes look like subscription-status placeholders; refusing to emit Direct-only groups")
     for name in eligible:
         code = country_of(name)
         if code:
