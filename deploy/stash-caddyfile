@@ -1,0 +1,21 @@
+:80 {
+	@stash host stash.ponyo.fun
+	handle @stash {
+		root * /srv
+
+		# 覆写文件是小型 YAML/文本，脚本是 MB 级 JS；不压缩时每次都要跨洋传输。
+		encode zstd gzip
+
+		@scripts path /scripts/*
+		header @scripts Cache-Control "public, max-age=31536000, immutable"
+
+		@overrides path *.stoverride
+		header @overrides Cache-Control "public, max-age=600"
+
+		@entry path / /index.html
+		header @entry Cache-Control "public, max-age=60"
+
+		file_server
+	}
+	respond 404
+}
