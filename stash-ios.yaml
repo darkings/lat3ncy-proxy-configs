@@ -11,9 +11,10 @@ ipv6: false
 # The local Sub-Store subscription named "ios" must keep flow lookup enabled.
 subscribe-url: "http://sub.store/download/ios?target=Stash"
 
-# Sub-Store uses a local request script; never resolve this synthetic host publicly.
-hosts:
-  sub.store: 127.0.0.1
+# Sub-Store 由 Stash 自带（配置页「创建/工具」里的 Sub-Store 条目），
+# 不再在配置里映射 hosts、声明 mitm/script 或 script-providers：
+# 自带实现会直接应答 sub.store，任何自定义宿主映射都会把它挡在 127.0.0.1，
+# 表现为前端 "code: 0 Network Error" 并索要后端地址。
 
 dns:
   enable: true
@@ -33,7 +34,6 @@ dns:
     - "*.arpa"
     - "time.*.com"
     - "ntp.*.com"
-    - "sub.store"
     - "+.tailscale.com"
     # 保留腾讯服务的真实 IP 兼容列表；分流可靠性由下方本地规则保证。
     - "+.weixin.qq.com"
@@ -54,38 +54,6 @@ dns:
     - "+.aaplimg.com"
     - "+.cdn-apple.com"
     - "+.apple-cloudkit.com"
-
-# Sub-Store 自带在本配置内，脚本走自托管镜像：Stash 只有在拿到节点之后才能翻墙，
-# 若脚本本身指向 GitHub Releases，首次会形成「无节点→脚本下不动→无节点」的死锁，
-# 前端于是报 Network Error 并要求填写后端地址。
-# provider 名称刻意用 substore-* 而不是官方的 sub-store-0/1：若设备上还装着官方
-# Sub-Store 覆写，同名的 provider 会互相覆盖（很可能覆盖成不可达的 GitHub 地址）。
-http:
-  mitm:
-    - sub.store
-  script:
-    # 与官方 Stash.stoverride 的匹配顺序一致：1 号处理下载/预览/同步等重路由，
-    # 0 号兜底并应答 /api/utils/env 探测（该路由只存在于 0 号脚本）。
-    - match: ^https?:\/\/sub\.store\/((download)|api\/(preview|sync|(utils\/node-info)))
-      name: substore-backend
-      type: request
-      require-body: true
-      max-size: -1
-      timeout: 900
-    - match: ^https?:\/\/sub\.store
-      name: substore-frontend
-      type: request
-      require-body: true
-      max-size: -1
-      timeout: 900
-
-script-providers:
-  substore-frontend:
-    url: https://stash.ponyo.fun/scripts/sub-store-0.min.js
-    interval: 86400
-  substore-backend:
-    url: https://stash.ponyo.fun/scripts/sub-store-1.min.js
-    interval: 86400
 
 # Complete first-time login from this node's "Tailscale Authentication" page.
 # auth-key and exit-node are deliberately omitted from the public configuration.
@@ -373,7 +341,6 @@ rule-providers:
 
 # Tailscale rules must remain before private-network and advertising rules.
 rules:
-  - DOMAIN,sub.store,DIRECT
   - DOMAIN-SUFFIX,tailscale.com,DIRECT
   - DOMAIN-SUFFIX,ts.net,Tailscale
   - IP-CIDR,100.64.0.0/10,Tailscale,no-resolve
