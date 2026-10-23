@@ -37,8 +37,12 @@ $officialBackendRoute = '((download)|api\/(preview|sync|(utils\/node-info)))'
 if (-not $config.Contains($officialBackendRoute)) {
     throw 'Sub-Store backend script must match the official route set'
 }
-if (-not $config.Contains('name: sub-store-1') -or -not $config.Contains('name: sub-store-0')) {
-    throw 'Sub-Store scripts must be sub-store-1 (backend) and sub-store-0 (frontend)'
+# Provider names must not collide with the official sub-store-0/1 override.
+if ($config -match 'name: sub-store-[01]' -or $config -match '(?m)^\s{2}sub-store-[01]:') {
+    throw 'Sub-Store providers must use unique names to avoid clobbering the official override'
+}
+if (-not $config.Contains('name: substore-backend') -or -not $config.Contains('name: substore-frontend')) {
+    throw 'Sub-Store scripts must be substore-backend / substore-frontend'
 }
 if (-not $config.Contains('timeout: 900')) {
     throw 'Sub-Store scripts must keep the official 900s timeout'

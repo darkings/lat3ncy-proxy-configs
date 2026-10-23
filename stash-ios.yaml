@@ -58,30 +58,32 @@ dns:
 # Sub-Store 自带在本配置内，脚本走自托管镜像：Stash 只有在拿到节点之后才能翻墙，
 # 若脚本本身指向 GitHub Releases，首次会形成「无节点→脚本下不动→无节点」的死锁，
 # 前端于是报 Network Error 并要求填写后端地址。
+# provider 名称刻意用 substore-* 而不是官方的 sub-store-0/1：若设备上还装着官方
+# Sub-Store 覆写，同名的 provider 会互相覆盖（很可能覆盖成不可达的 GitHub 地址）。
 http:
   mitm:
     - sub.store
   script:
-    # 与官方 Stash.stoverride 一致：sub-store-1 处理下载/预览/同步等重路由，
-    # sub-store-0 作为兜底并应答 /api/utils/env 探测（该路由只存在于 0 号脚本）。
+    # 与官方 Stash.stoverride 的匹配顺序一致：1 号处理下载/预览/同步等重路由，
+    # 0 号兜底并应答 /api/utils/env 探测（该路由只存在于 0 号脚本）。
     - match: ^https?:\/\/sub\.store\/((download)|api\/(preview|sync|(utils\/node-info)))
-      name: sub-store-1
+      name: substore-backend
       type: request
       require-body: true
       max-size: -1
       timeout: 900
     - match: ^https?:\/\/sub\.store
-      name: sub-store-0
+      name: substore-frontend
       type: request
       require-body: true
       max-size: -1
       timeout: 900
 
 script-providers:
-  sub-store-0:
+  substore-frontend:
     url: https://stash.ponyo.fun/scripts/sub-store-0.min.js
     interval: 86400
-  sub-store-1:
+  substore-backend:
     url: https://stash.ponyo.fun/scripts/sub-store-1.min.js
     interval: 86400
 
