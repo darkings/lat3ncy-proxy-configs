@@ -29,11 +29,19 @@ Assert-Match '(?m)^hosts:\s*\r?\n\s{2}sub\.store:\s*127\.0\.0\.1\s*$' 'Sub-Store
 Assert-Match '(?ms)^proxy-providers:\s*\r?\n\s{2}SubStore:\s*\r?\n\s{4}url:\s*"http://sub\.store/download/ios\?target=Stash"\s*\r?\n\s{4}path:\s*\./providers/substore-ios\.yaml\s*\r?\n\s{4}interval:\s*(?:3600|86400)\s*\r?\n(?:\s{4}health-check:\s*\r?\n.*?\r?\n)?\s{4}headers:\s*\r?\n\s{6}User-Agent:\s*Stash\s*$' 'Stash fixed-name Sub-Store provider is incomplete'
 Assert-Match '(?m)^subscribe-url:\s*"http://sub\.store/download/ios\?target=Stash"\s*$' 'Stash subscription info URL is missing'
 foreach ($script in @('sub-store-0.min.js', 'sub-store-1.min.js')) {
-    Assert-Match "(?m)^\s{4}url:\s*https://cdn\.jsdelivr\.net/gh/sub-store-org/Sub-Store@release/$([regex]::Escape($script))\s*$" "Missing direct Sub-Store script: $script"
+    Assert-Match "(?m)^\s{4}url:\s*https://github\.com/sub-store-org/Sub-Store/releases/latest/download/$([regex]::Escape($script))\s*$" "Missing official Sub-Store script: $script"
 }
-Assert-Match '(?ms)^http:.*?^\s{4}- match: \^https\?:\\/\\/sub\\\.store\\/\(' 'Sub-Store backend script is missing'
-if ($config -notmatch '(?ms)- match: \^https\?:\\/\\/sub\\\.store\\/\(\?:download\|api\)') {
-    throw 'Sub-Store backend script must cover every /api/ route (frontend probes /api/utils/env)'
+# These entries must mirror the upstream Stash.stoverride exactly; a wrong match
+# range or a short timeout makes the frontend ask for a backend address.
+$officialBackendRoute = '((download)|api\/(preview|sync|(utils\/node-info)))'
+if (-not $config.Contains($officialBackendRoute)) {
+    throw 'Sub-Store backend script must match the official route set'
+}
+if (-not $config.Contains('name: sub-store-1') -or -not $config.Contains('name: sub-store-0')) {
+    throw 'Sub-Store scripts must be sub-store-1 (backend) and sub-store-0 (frontend)'
+}
+if (-not $config.Contains('timeout: 900')) {
+    throw 'Sub-Store scripts must keep the official 900s timeout'
 }
 
 $fakeIpMatch = [regex]::Match($config, '(?ms)^\s{2}fake-ip-filter:\s*\r?\n(.*?)(?=^\S|^\s{2}[a-zA-Z][^:]*:)')
