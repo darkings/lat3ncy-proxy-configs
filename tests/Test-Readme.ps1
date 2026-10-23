@@ -61,7 +61,7 @@ foreach ($guidance in @(
     'macOS 还将 `100.100.100.100/32` 加入 `skip-proxy`',
     'Stash 版要求 iOS 客户端 3.4 或更高版本',
     '创建名称严格为 `ios` 的订阅',
-    '`sub.store` 被固定映射到 `127.0.0.1`',
+    'Sub-Store 由 Stash 自带',
     'Cats-Team AdRules 默认在规则层拦截广告域名',
     'Loon 的 `.lpx` 不能直接写进 Stash YAML',
     '进入“Tailscale 认证”并完成首次登录',

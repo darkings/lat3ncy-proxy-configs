@@ -15,7 +15,7 @@ function Assert-NoMatch {
     if ($config -match $Pattern) { throw $Message }
 }
 
-foreach ($key in @('mode', 'hosts', 'dns', 'http', 'script-providers', 'subscribe-url', 'proxies', 'proxy-providers', 'proxy-groups', 'rule-providers', 'rules')) {
+foreach ($key in @('mode', 'dns', 'subscribe-url', 'proxies', 'proxy-providers', 'proxy-groups', 'rule-providers', 'rules')) {
     Assert-Match "(?m)^$([regex]::Escape($key)):\s*" "Stash config missing top-level key: $key"
 }
 
@@ -25,38 +25,23 @@ Assert-NoMatch '(?m)^\s*auth-key:' 'Public Stash config must not contain a Tails
 Assert-NoMatch '(?m)^\s*exit-node:' 'Public Stash config must not force a Tailscale exit node'
 Assert-NoMatch '(?i)api\.9dragonfly\.com|authorization:\s*bearer|token=' 'Public Stash config must not contain a private subscription or token'
 
-Assert-Match '(?m)^hosts:\s*\r?\n\s{2}sub\.store:\s*127\.0\.0\.1\s*$' 'Sub-Store synthetic host must remain local'
+# Sub-Store is built into Stash: the profile only references its endpoint and must
+# not wire hosts/mitm/script/script-providers itself, or the built-in handler is
+# bypassed and the frontend reports "code: 0 Network Error".
+foreach ($forbidden in @('(?m)^hosts:\s*$', '(?m)^http:\s*$', '(?m)^script-providers:\s*$')) {
+    if ($config -match $forbidden) { throw "Profile must not declare Sub-Store wiring: $forbidden" }
+}
+
 Assert-Match '(?ms)^proxy-providers:\s*\r?\n\s{2}SubStore:\s*\r?\n\s{4}url:\s*"http://sub\.store/download/ios\?target=Stash"\s*\r?\n\s{4}path:\s*\./providers/substore-ios\.yaml\s*\r?\n\s{4}interval:\s*(?:3600|86400)\s*\r?\n(?:\s{4}health-check:\s*\r?\n.*?\r?\n)?\s{4}headers:\s*\r?\n\s{6}User-Agent:\s*Stash\s*$' 'Stash fixed-name Sub-Store provider is incomplete'
 Assert-Match '(?m)^subscribe-url:\s*"http://sub\.store/download/ios\?target=Stash"\s*$' 'Stash subscription info URL is missing'
-# Sub-Store scripts must be self-hosted: GitHub Releases is unreachable before
-# any node exists, which deadlocks first-run downloads.
-foreach ($script in @('sub-store-0.min.js', 'sub-store-1.min.js')) {
-    Assert-Match "(?m)^\s{4}url:\s*https://stash\.ponyo\.fun/scripts/$([regex]::Escape($script))\s*$" "Sub-Store script must be self-hosted: $script"
-}
-$officialBackendRoute = '((download)|api\/(preview|sync|(utils\/node-info)))'
-if (-not $config.Contains($officialBackendRoute)) {
-    throw 'Sub-Store backend script must match the official route set'
-}
-# Provider names must not collide with the official sub-store-0/1 override.
-if ($config -match 'name: sub-store-[01]' -or $config -match '(?m)^\s{2}sub-store-[01]:') {
-    throw 'Sub-Store providers must use unique names to avoid clobbering the official override'
-}
-if (-not $config.Contains('name: substore-backend') -or -not $config.Contains('name: substore-frontend')) {
-    throw 'Sub-Store scripts must be substore-backend / substore-frontend'
-}
-if (-not $config.Contains('timeout: 900')) {
-    throw 'Sub-Store scripts must keep the official 900s timeout'
-}
 
 $fakeIpMatch = [regex]::Match($config, '(?ms)^\s{2}fake-ip-filter:\s*\r?\n(.*?)(?=^\S|^\s{2}[a-zA-Z][^:]*:)')
 if (-not $fakeIpMatch.Success) { throw 'Stash fake-ip-filter is missing' }
 $fakeIpFilter = $fakeIpMatch.Groups[1].Value
 if ($fakeIpFilter -notmatch '\+\.tailscale\.com') { throw 'Tailscale control domains must return real IPs' }
 if ($fakeIpFilter -match '\+\.ts\.net') { throw 'MagicDNS names must retain fake IP mapping for routing to the native Tailscale node' }
-if ($fakeIpFilter -notmatch 'sub\.store') { throw 'Sub-Store synthetic host must not receive a fake IP' }
 
 foreach ($rule in @(
-    'DOMAIN,sub.store,DIRECT',
     'DOMAIN-SUFFIX,tailscale.com,DIRECT',
     'DOMAIN-SUFFIX,ts.net,Tailscale',
     'IP-CIDR,100.64.0.0/10,Tailscale,no-resolve',
