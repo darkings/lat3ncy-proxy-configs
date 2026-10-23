@@ -60,29 +60,29 @@ dns:
 http:
   mitm:
     - sub.store
+  # 与 Sub-Store 官方 Stash.stoverride 完全一致：sub-store-1 处理后端重路由，
+  # sub-store-0 负责前端与 /api/utils/env 探测。此组合在官方文档中已验证可用，
+  # 修改匹配范围或调小 timeout 都可能导致前端要求填写后端地址。
   script:
-    # 后端脚本必须覆盖全部 /api/ 路由：Sub-Store 前端靠 /api/utils/env 探测后端，
-    # 落空会被 UI 脚本当成页面请求返回 HTML，表现为“要求填写后端地址与路径”。
-    - match: ^https?:\/\/sub\.store\/(?:download|api)
-      name: sub-store-core
+    - match: ^https?:\/\/sub\.store\/((download)|api\/(preview|sync|(utils\/node-info)))
+      name: sub-store-1
       type: request
       require-body: true
       max-size: -1
-      timeout: 180
-    # 其余路径（首页、静态资源）交给前端脚本。
+      timeout: 900
     - match: ^https?:\/\/sub\.store
-      name: sub-store-ui
+      name: sub-store-0
       type: request
       require-body: true
       max-size: -1
-      timeout: 60
+      timeout: 900
 
 script-providers:
-  sub-store-ui:
-    url: https://cdn.jsdelivr.net/gh/sub-store-org/Sub-Store@release/sub-store-0.min.js
+  sub-store-0:
+    url: https://github.com/sub-store-org/Sub-Store/releases/latest/download/sub-store-0.min.js
     interval: 86400
-  sub-store-core:
-    url: https://cdn.jsdelivr.net/gh/sub-store-org/Sub-Store@release/sub-store-1.min.js
+  sub-store-1:
+    url: https://github.com/sub-store-org/Sub-Store/releases/latest/download/sub-store-1.min.js
     interval: 86400
 
 # Complete first-time login from this node's "Tailscale Authentication" page.
