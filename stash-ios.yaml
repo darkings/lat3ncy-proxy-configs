@@ -61,12 +61,15 @@ http:
   mitm:
     - sub.store
   script:
-    - match: ^https?:\/\/sub\.store\/((download)|api\/(preview|sync|(utils\/node-info)))
+    # 后端脚本必须覆盖全部 /api/ 路由：Sub-Store 前端靠 /api/utils/env 探测后端，
+    # 落空会被 UI 脚本当成页面请求返回 HTML，表现为“要求填写后端地址与路径”。
+    - match: ^https?:\/\/sub\.store\/(?:download|api)
       name: sub-store-core
       type: request
       require-body: true
       max-size: -1
       timeout: 180
+    # 其余路径（首页、静态资源）交给前端脚本。
     - match: ^https?:\/\/sub\.store
       name: sub-store-ui
       type: request

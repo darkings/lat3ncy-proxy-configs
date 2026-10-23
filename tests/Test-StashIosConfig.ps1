@@ -31,7 +31,10 @@ Assert-Match '(?m)^subscribe-url:\s*"http://sub\.store/download/ios\?target=Stas
 foreach ($script in @('sub-store-0.min.js', 'sub-store-1.min.js')) {
     Assert-Match "(?m)^\s{4}url:\s*https://cdn\.jsdelivr\.net/gh/sub-store-org/Sub-Store@release/$([regex]::Escape($script))\s*$" "Missing direct Sub-Store script: $script"
 }
-Assert-Match '(?ms)^http:.*?^\s{4}- match: \^https\?:\\/\\/sub\\\.store\\/\(\(download\)\|api' 'Sub-Store download request script is missing'
+Assert-Match '(?ms)^http:.*?^\s{4}- match: \^https\?:\\/\\/sub\\\.store\\/\(' 'Sub-Store backend script is missing'
+if ($config -notmatch '(?ms)- match: \^https\?:\\/\\/sub\\\.store\\/\(\?:download\|api\)') {
+    throw 'Sub-Store backend script must cover every /api/ route (frontend probes /api/utils/env)'
+}
 
 $fakeIpMatch = [regex]::Match($config, '(?ms)^\s{2}fake-ip-filter:\s*\r?\n(.*?)(?=^\S|^\s{2}[a-zA-Z][^:]*:)')
 if (-not $fakeIpMatch.Success) { throw 'Stash fake-ip-filter is missing' }
