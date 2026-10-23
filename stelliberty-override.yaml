@@ -74,6 +74,7 @@ sniffer:
 proxy-groups:
   - name: Proxy
     type: select
+    # 只暴露自动/直连/地区组；具体节点进对应地区组里挑。
     proxies:
       - Auto
       - DIRECT
@@ -82,8 +83,6 @@ proxy-groups:
       - Japan
       - Singapore
       - United States
-    include-all: true
-    exclude-filter: '(?i)(群|邀请|返利|循环|官网|客服|网站|网址|获取|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|机场|下次|版本|官址|备用|联系|邮箱|工单|贩卖|通知|倒卖|防止|国内|地址|频道|无法|说明|使用|提示|特别|访问|支持|教程|关注|更新|作者|加入|超时|收藏|福利|好友|失联|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|EMAIL|PANEL|CHANNEL|AUTHOR|NOTICE|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)'
 
   - name: Spotify
     type: select
@@ -174,15 +173,10 @@ proxy-groups:
       - United States
 
   - name: Auto
-    # 只在国家/地区组之间自动择优，不展开订阅里的具体节点：
-    # 面板更清爽，测速对象从全部节点降为 5 个国家组。
+    # 对所有订阅节点做自动测速；Proxy 只列组，不展开节点。
     type: url-test
-    proxies:
-      - Hong Kong
-      - Taiwan
-      - Japan
-      - Singapore
-      - United States
+    include-all: true
+    exclude-filter: '(?i)(群|邀请|返利|循环|官网|客服|网站|网址|获取|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|机场|下次|版本|官址|备用|联系|邮箱|工单|贩卖|通知|倒卖|防止|国内|地址|频道|无法|说明|使用|提示|特别|访问|支持|教程|关注|更新|作者|加入|超时|收藏|福利|好友|失联|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|EMAIL|PANEL|CHANNEL|AUTHOR|NOTICE|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)'
     url: https://www.gstatic.com/generate_204
     interval: 1800
     tolerance: 150

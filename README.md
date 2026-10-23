@@ -66,7 +66,7 @@ Stash 版要求 iOS 客户端 3.4 或更高版本，使用名为 `Tailscale` 的
 
 Sub-Store 由 Stash 自带（配置页「创建/工具」菜单里的 Sub-Store 条目）。`stash-ios.yaml` 只保留两处引用：`subscribe-url` 与 `SubStore` 远程代理集，都指向 `http://sub.store/download/ios?target=Stash`；**不再声明 `hosts`、`http.mitm`、`http.script` 与 `script-providers`**——自定义宿主映射会把来自带的 `sub.store` 挡到 `127.0.0.1`，前端只会报 `code: 0 Network Error` 并索要后端地址。若自带条目尚未安装，先在「配置 → 创建/工具」里安装 Sub-Store。
 
-导入 `stash-ios.yaml` 后，先启用 Stash 并用 Safari 打开 `https://sub.store`，在本机 Sub-Store 中创建名称严格为 `ios` 的订阅，再把私人机场地址保存在这个订阅中。主配置已内置 `SubStore` 远程代理集，每 24 小时读取 `http://sub.store/download/ios?target=Stash`，并通过 `subscribe-url` 读取同一地址的流量/到期响应头；使用与 Stash 协议及字段最匹配的输出。不要把机场地址填到“通用 → 订阅链接”，也不要把它提交到仓库。首次创建后在“远程代理集”中手动刷新一次 `SubStore`，五个地区组就会自动纳入节点；`Proxy` 与 `Auto` 只列策略组、不展开具体节点（要挑单个节点进入对应国家组），也不包含 `Tailscale`，避免没有 exit node 时把普通公网流量送入 Tailnet。Tailscale 由独立策略组和 Tailnet 规则使用。其他 Clash 系客户端可单独读取 `http://sub.store/download/ios?target=ClashMeta`，两者仍使用同一个 `ios` 订阅数据。
+导入 `stash-ios.yaml` 后，先启用 Stash 并用 Safari 打开 `https://sub.store`，在本机 Sub-Store 中创建名称严格为 `ios` 的订阅，再把私人机场地址保存在这个订阅中。主配置已内置 `SubStore` 远程代理集，每 24 小时读取 `http://sub.store/download/ios?target=Stash`，并通过 `subscribe-url` 读取同一地址的流量/到期响应头；使用与 Stash 协议及字段最匹配的输出。不要把机场地址填到“通用 → 订阅链接”，也不要把它提交到仓库。首次创建后在“远程代理集”中手动刷新一次 `SubStore`，五个地区组就会自动纳入节点；`Proxy` 只列 `Auto`、`DIRECT` 与五个国家组（要挑单个节点进入对应国家组），`Auto` 则对所有订阅节点做自动测速；两者都不包含 `Tailscale`，避免没有 exit node 时把普通公网流量送入 Tailnet。Tailscale 由独立策略组和 Tailnet 规则使用。其他 Clash 系客户端可单独读取 `http://sub.store/download/ios?target=ClashMeta`，两者仍使用同一个 `ios` 订阅数据。
 
 如果使用名称同为 `ios` 的组合订阅，添加并启用下面的覆写。它只把 `SubStore.url` 和 `subscribe-url` 同步切换到 `http://sub.store/download/collection/ios?target=Stash`，保留策略组、缓存路径和健康检查。单条订阅与组合订阅的下载接口不同，仅把组合订阅命名为 `ios` 不会自动切换。组合流量信息需要在 Sub-Store 中另行设置合并处理，主配置不能自行合并多个机场的流量/到期信息；详见 [Sub-Store 组合订阅文档](https://sub-store-org.github.io/doc/subscription/collection)。
 
@@ -112,7 +112,7 @@ Windows 版用于 Stelliberty 的 Mihomo 内核，以单个远程 YAML 覆写叠
 
 单 YAML 完整接管节点订阅的 DNS、嗅探、策略组和分流规则，同时继续使用订阅提供的节点。嗅探采用保守模式，不改写目标地址，并跳过局域网、MagicDNS、Tailscale 控制域名及 Tailnet IPv4/IPv6。配置将这些私有网络和 Windows 联网检测置于规则最前；Cats-Team AdRules 每 6 小时更新，MetaCubeX 私有网络及国内外分流 MRS 每天更新。
 
-Windows 版的 Auto 只在香港、台湾、日本、新加坡、美国五个地区自动测速组之间择优，不展开订阅里的具体节点；Proxy 保留单节点手动选择；OpenAI、GitHub、Microsoft、Steam、Google、YouTube、Spotify、Telegram 等应用策略组只提供 Proxy、DIRECT 和地区自动组，避免重复展开全部节点。Zed 流量进入 Proxy，避免其 Cloudflare 编辑预测请求被直连网络间歇性重置；Apple（含 iCloud）流量完全直连，不经过任何策略组。Apple/iCloud 域名在 `fake-ip-filter` 中返回真实 IP，客户端（含不走系统代理的后台同步组件）直连真实节点，避免假地址中转。BYOK 模型接口继续使用对应服务或最终代理规则。Google 覆盖搜索、Gmail、Drive、Gemini 等服务；YouTube 使用更具体的独立规则并优先匹配。自动纳入订阅节点的策略组通过统一的 `exclude-filter` 排除流量、到期、客服、公告、频道等信息节点。
+Windows 版的 Proxy 只列 Auto、DIRECT 与五个地区自动测速组（不展开具体节点），Auto 对所有订阅节点做自动测速；OpenAI、GitHub、Microsoft、Steam、Google、YouTube、Spotify、Telegram 等应用策略组只提供 Proxy、DIRECT 和地区自动组，避免重复展开全部节点。Zed 流量进入 Proxy，避免其 Cloudflare 编辑预测请求被直连网络间歇性重置；Apple（含 iCloud）流量完全直连，不经过任何策略组。Apple/iCloud 域名在 `fake-ip-filter` 中返回真实 IP，客户端（含不走系统代理的后台同步组件）直连真实节点，避免假地址中转。BYOK 模型接口继续使用对应服务或最终代理规则。Google 覆盖搜索、Gmail、Drive、Gemini 等服务；YouTube 使用更具体的独立规则并优先匹配。自动纳入订阅节点的策略组通过统一的 `exclude-filter` 排除流量、到期、客服、公告、频道等信息节点。
 
 OneDrive 保留独立规则集，但流量并入 Microsoft 策略。Microsoft、Steam 的中国区下载/CDN 子集优先直连，商店、社区和国际服务进入对应策略组；Apple 全部服务（含 iCloud 同步与 APNs 推送）直连。影视采集站 CDN（lzcdn28/31/32.com 及其 CNAME 域 lzcname.com）使用 GeoDNS 动态边缘节点，直连避免代理出口冷连接拖慢模拟器播放首帧。Windows 配置不加入 TikTok、抖音、拼多多等移动 App 专项规则，也不包含 HTTPS 响应重写。
 

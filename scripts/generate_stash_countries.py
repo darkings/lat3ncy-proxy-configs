@@ -160,11 +160,11 @@ def build_profile(template: dict, names: list[str], collection: bool = False) ->
         if not all(old in proxy_list for old in OLD_REGIONS):
             raise ValueError(f"Template selection group {group_name} has changed")
         group["proxies"] = [p for p in proxy_list if p not in OLD_REGIONS] + new_names
-    # Auto aggregates country groups, never individual subscription nodes.
+    # Auto latency-tests every subscription node, so it must keep use/filter and
+    # must not be rewritten into a country-group list.
     auto = original["Auto"]
-    if "use" in auto or not set(OLD_REGIONS) <= set(auto.get("proxies") or []):
-        raise ValueError("Template Auto group no longer aggregates country groups")
-    auto["proxies"] = new_names
+    if auto.get("use") != ["SubStore"] or not auto.get("filter"):
+        raise ValueError("Template Auto group must still test all SubStore nodes")
     profile["proxy-groups"] = [g for g in groups if g["name"] not in OLD_REGIONS] + country_groups
     if collection:
         url = "http://sub.store/download/collection/ios?target=Stash"
