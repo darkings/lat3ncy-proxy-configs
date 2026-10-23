@@ -187,17 +187,12 @@ proxy-groups:
     icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/US.png
 
   - name: Auto
-    # 只在国家/地区组之间自动择优，不展开具体节点：
-    # 1) 面板更清爽，不会把订阅里几十上百个节点铺在 Auto 里；
-    # 2) 测速对象从“全部节点”降为 5 个国家组，显著降低 iOS 网络扩展的
-    #    测速开销；每个国家组内部仍然是 url-test，会自动挑该国最快的节点。
+    # Auto 直接对所有订阅节点做自动测速；Proxy 只暴露 Auto/直连/国家组，
+    # 想按地区挑节点时进对应国家组。
     type: url-test
-    proxies:
-      - Hong Kong
-      - Taiwan
-      - Japan
-      - Singapore
-      - United States
+    use:
+      - SubStore
+    filter: '(?i)^(?!Tailscale(?:-Node)?$)(?!.*(?:群|邀请|返利|官网|客服|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|机场|通知|频道|教程|更新|作者|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)).+$'
     interval: 1800
     lazy: true
     icon: https://raw.githubusercontent.com/Orz-3/mini/master/Color/Urltest.png

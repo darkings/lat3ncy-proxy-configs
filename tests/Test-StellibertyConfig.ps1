@@ -54,21 +54,20 @@ foreach ($allowedName in @('香港 01', '日本-HY2', 'United States 02')) {
 
 foreach ($region in @('Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States')) {
     $references = [regex]::Matches($config, "(?m)^\s{6}- $([regex]::Escape($region))\s*$").Count
-    # 9 selectable groups + Auto (which now aggregates the regional groups)
-    if ($references -ne 10) { throw "Every selectable group must include regional auto group: $region" }
+    # 9 selectable groups (Proxy + 8 app groups); Auto expands nodes instead.
+    if ($references -ne 9) { throw "Every selectable group must include regional auto group: $region" }
 }
 $selectGroups = @('Proxy', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Steam', 'Google', 'YouTube')
 Assert-Match '(?ms)- name: Auto.*?lazy: false' 'Auto group must probe immediately on startup'
-# Auto must aggregate regional groups instead of expanding subscription nodes.
+# Proxy stays group-only; Auto latency-tests every subscription node.
+$proxyBlock = [regex]::Match($config, '(?ms)^\s{2}- name: Proxy\s*\r?\n.*?(?=^\s{2}- name:)').Value
+if ($proxyBlock -match '(?m)^\s{4}(?:include-all|exclude-filter):') {
+    throw 'Proxy must not expand individual subscription nodes'
+}
 $autoBlock = [regex]::Match($config, '(?ms)^\s{2}- name: Auto\s*\r?\n.*?(?=^\s{2}- name:)').Value
 if (-not $autoBlock) { throw 'Missing Auto group block' }
-if ($autoBlock -match '(?m)^\s{4}(?:include-all|exclude-filter):') {
-    throw 'Auto must not expand individual subscription nodes'
-}
-foreach ($region in @('Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States')) {
-    if ($autoBlock -notmatch "(?m)^\s{6}- $([regex]::Escape($region))\s*$") {
-        throw "Auto must include regional group: $region"
-    }
+if ($autoBlock -notmatch '(?m)^\s{4}include-all:\s*true\s*$' -or $autoBlock -notmatch '(?m)^\s{4}exclude-filter:') {
+    throw 'Auto must latency-test every subscription node (include-all + exclude-filter)'
 }
 foreach ($group in $selectGroups) {
     $block = [regex]::Match(

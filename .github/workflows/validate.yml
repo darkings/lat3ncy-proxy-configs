@@ -79,8 +79,8 @@ jobs:
           assert 'use' not in proxy, 'Proxy must stay group-only at the top level'
           assert proxy['proxies'] == ['Auto', 'DIRECT', 'Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States']
           auto = next(g for g in stash['proxy-groups'] if g['name'] == 'Auto')
-          assert 'use' not in auto, 'Auto must aggregate country groups, not individual nodes'
-          assert auto['proxies'] == ['Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States']
+          assert auto['use'] == ['SubStore'], 'Auto must latency-test every subscription node'
+          assert 'proxies' not in auto, 'Auto must not be rewritten into a country-group list'
           assert stash['rules'].index('DOMAIN-SUFFIX,ts.net,Tailscale') < stash['rules'].index('MATCH,Proxy')
 
           pinduoduo = yaml.safe_load(Path('stash/overrides/pinduoduo-cleanup.stoverride').read_text(encoding='utf-8'))
