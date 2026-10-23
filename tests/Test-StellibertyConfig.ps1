@@ -42,7 +42,7 @@ foreach ($group in @(
 }
 $subscriptionStatusFilter = '(?i)(群|邀请|返利|循环|官网|客服|网站|网址|获取|订阅|剩余|流量|套餐|到期|过期|有效期|已用|重置|机场|下次|版本|官址|备用|联系|邮箱|工单|贩卖|通知|倒卖|防止|国内|地址|频道|无法|说明|使用|提示|特别|访问|支持|教程|关注|更新|作者|加入|超时|收藏|福利|好友|失联|\b(?:USE|USED|TOTAL|EXPIRE|EXPIRED|EMAIL|PANEL|CHANNEL|AUTHOR|NOTICE|TRAFFIC|REMAINING|RESET|BANDWIDTH)\d*\b|\d{4}-\d{2}-\d{2}|\dG)'
 $excludeFilterLines = [regex]::Matches($config, "(?m)^\s{4}exclude-filter:\s*'$([regex]::Escape($subscriptionStatusFilter))'\s*$")
-if ($excludeFilterLines.Count -ne 7) {
+if ($excludeFilterLines.Count -ne 6) {
     throw 'Every Stelliberty group that expands subscription nodes must exclude status entries'
 }
 foreach ($blockedName in @('香港 剩余流量 20GB', '日本 套餐到期', 'US Remaining 50G', '新加坡 Bandwidth 100G', '客服频道', 'Airport Notice', '2026-08-01')) {
@@ -54,10 +54,22 @@ foreach ($allowedName in @('香港 01', '日本-HY2', 'United States 02')) {
 
 foreach ($region in @('Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States')) {
     $references = [regex]::Matches($config, "(?m)^\s{6}- $([regex]::Escape($region))\s*$").Count
-    if ($references -ne 9) { throw "Every selectable group must include regional auto group: $region" }
+    # 9 selectable groups + Auto (which now aggregates the regional groups)
+    if ($references -ne 10) { throw "Every selectable group must include regional auto group: $region" }
 }
 $selectGroups = @('Proxy', 'Spotify', 'Telegram', 'OpenAI', 'GitHub', 'Microsoft', 'Steam', 'Google', 'YouTube')
 Assert-Match '(?ms)- name: Auto.*?lazy: false' 'Auto group must probe immediately on startup'
+# Auto must aggregate regional groups instead of expanding subscription nodes.
+$autoBlock = [regex]::Match($config, '(?ms)^\s{2}- name: Auto\s*\r?\n.*?(?=^\s{2}- name:)').Value
+if (-not $autoBlock) { throw 'Missing Auto group block' }
+if ($autoBlock -match '(?m)^\s{4}(?:include-all|exclude-filter):') {
+    throw 'Auto must not expand individual subscription nodes'
+}
+foreach ($region in @('Hong Kong', 'Taiwan', 'Japan', 'Singapore', 'United States')) {
+    if ($autoBlock -notmatch "(?m)^\s{6}- $([regex]::Escape($region))\s*$") {
+        throw "Auto must include regional group: $region"
+    }
+}
 foreach ($group in $selectGroups) {
     $block = [regex]::Match(
         $config,
