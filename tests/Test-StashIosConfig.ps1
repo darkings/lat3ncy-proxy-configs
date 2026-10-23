@@ -15,7 +15,7 @@ function Assert-NoMatch {
     if ($config -match $Pattern) { throw $Message }
 }
 
-foreach ($key in @('mode', 'hosts', 'dns', 'subscribe-url', 'proxies', 'proxy-providers', 'proxy-groups', 'rule-providers', 'rules')) {
+foreach ($key in @('mode', 'hosts', 'dns', 'http', 'script-providers', 'subscribe-url', 'proxies', 'proxy-providers', 'proxy-groups', 'rule-providers', 'rules')) {
     Assert-Match "(?m)^$([regex]::Escape($key)):\s*" "Stash config missing top-level key: $key"
 }
 
@@ -28,12 +28,20 @@ Assert-NoMatch '(?i)api\.9dragonfly\.com|authorization:\s*bearer|token=' 'Public
 Assert-Match '(?m)^hosts:\s*\r?\n\s{2}sub\.store:\s*127\.0\.0\.1\s*$' 'Sub-Store synthetic host must remain local'
 Assert-Match '(?ms)^proxy-providers:\s*\r?\n\s{2}SubStore:\s*\r?\n\s{4}url:\s*"http://sub\.store/download/ios\?target=Stash"\s*\r?\n\s{4}path:\s*\./providers/substore-ios\.yaml\s*\r?\n\s{4}interval:\s*(?:3600|86400)\s*\r?\n(?:\s{4}health-check:\s*\r?\n.*?\r?\n)?\s{4}headers:\s*\r?\n\s{6}User-Agent:\s*Stash\s*$' 'Stash fixed-name Sub-Store provider is incomplete'
 Assert-Match '(?m)^subscribe-url:\s*"http://sub\.store/download/ios\?target=Stash"\s*$' 'Stash subscription info URL is missing'
-# Sub-Store wiring lives in the official Stash.stoverride; duplicating it here
-# breaks backend detection, so the main config must stay free of it.
-Assert-NoMatch '(?m)^http:\s*$' 'Public Stash config must not declare http (Sub-Store override owns it)'
-Assert-NoMatch '(?m)^script-providers:\s*$' 'Public Stash config must not declare script-providers'
-if ($config -notmatch 'Sub-Store 官方 Stash\.stoverride|sub-store-org/Sub-Store/master/config/Stash\.stoverride') {
-    throw 'Config must point at the official Sub-Store override'
+# Sub-Store scripts must be self-hosted: GitHub Releases is unreachable before
+# any node exists, which deadlocks first-run downloads.
+foreach ($script in @('sub-store-0.min.js', 'sub-store-1.min.js')) {
+    Assert-Match "(?m)^\s{4}url:\s*https://stash\.ponyo\.fun/scripts/$([regex]::Escape($script))\s*$" "Sub-Store script must be self-hosted: $script"
+}
+$officialBackendRoute = '((download)|api\/(preview|sync|(utils\/node-info)))'
+if (-not $config.Contains($officialBackendRoute)) {
+    throw 'Sub-Store backend script must match the official route set'
+}
+if (-not $config.Contains('name: sub-store-1') -or -not $config.Contains('name: sub-store-0')) {
+    throw 'Sub-Store scripts must be sub-store-1 (backend) and sub-store-0 (frontend)'
+}
+if (-not $config.Contains('timeout: 900')) {
+    throw 'Sub-Store scripts must keep the official 900s timeout'
 }
 
 $fakeIpMatch = [regex]::Match($config, '(?ms)^\s{2}fake-ip-filter:\s*\r?\n(.*?)(?=^\S|^\s{2}[a-zA-Z][^:]*:)')
