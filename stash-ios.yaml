@@ -55,12 +55,35 @@ dns:
     - "+.cdn-apple.com"
     - "+.apple-cloudkit.com"
 
-# Sub-Store 由官方 Stash.stoverride（或已安装的同名覆写）提供，本配置不再重复声明
-# mitm / http.script / script-providers：重复声明会把 /api 请求抢到未命中的脚本上，
-# 前端反而提示需要填写后端地址。
-# 使用前请先安装官方覆写：
-#   https://raw.githubusercontent.com/sub-store-org/Sub-Store/master/config/Stash.stoverride
-# 订阅与代理集仍指向 sub.store，由该覆写在本机应答。
+# Sub-Store 自带在本配置内，脚本走自托管镜像：Stash 只有在拿到节点之后才能翻墙，
+# 若脚本本身指向 GitHub Releases，首次会形成「无节点→脚本下不动→无节点」的死锁，
+# 前端于是报 Network Error 并要求填写后端地址。
+http:
+  mitm:
+    - sub.store
+  script:
+    # 与官方 Stash.stoverride 一致：sub-store-1 处理下载/预览/同步等重路由，
+    # sub-store-0 作为兜底并应答 /api/utils/env 探测（该路由只存在于 0 号脚本）。
+    - match: ^https?:\/\/sub\.store\/((download)|api\/(preview|sync|(utils\/node-info)))
+      name: sub-store-1
+      type: request
+      require-body: true
+      max-size: -1
+      timeout: 900
+    - match: ^https?:\/\/sub\.store
+      name: sub-store-0
+      type: request
+      require-body: true
+      max-size: -1
+      timeout: 900
+
+script-providers:
+  sub-store-0:
+    url: https://stash.ponyo.fun/scripts/sub-store-0.min.js
+    interval: 86400
+  sub-store-1:
+    url: https://stash.ponyo.fun/scripts/sub-store-1.min.js
+    interval: 86400
 
 # Complete first-time login from this node's "Tailscale Authentication" page.
 # auth-key and exit-node are deliberately omitted from the public configuration.

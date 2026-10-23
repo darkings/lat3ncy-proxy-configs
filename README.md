@@ -64,11 +64,7 @@ macOS 版面向 Mac 本机客户端，不作为局域网网关。它使用 Steam
 
 Stash 版要求 iOS 客户端 3.4 或更高版本，使用名为 `Tailscale` 的策略组包裹 `Tailscale-Node` 原生节点（Tailscale 机器名为 `ios`）。它不依赖同时启动独立的 Tailscale App：`*.ts.net`、`100.64.0.0/10` 和 `fd7a:115c:a1e0::/48` 会进入该策略组，`*.tailscale.com` 登录与控制面则保持直连，避免认证和建链递归。该节点关闭普通公网延迟测试，因为没有指定 exit node；普通互联网流量仍由 Proxy 与各应用策略处理。
 
-Sub-Store 不在 `stash-ios.yaml` 里重复声明：本配置只保留 `hosts`（把 `sub.store` 固定到 `127.0.0.1`）、`subscribe-url` 与 `SubStore` 远程代理集，mitm／`http.script`／`script-providers` 全部交给官方覆写，避免两套脚本抢同一个 `/api` 请求后前端提示“需要填写后端地址”。使用前请先在 Stash 覆写页安装并启用官方 Sub-Store 覆写：
-
-```text
-https://raw.githubusercontent.com/sub-store-org/Sub-Store/master/config/Stash.stoverride
-```
+Sub-Store 由 `stash-ios.yaml` 自带：`hosts` 把 `sub.store` 固定到 `127.0.0.1`，`http.mitm` + `http.script` 用官方匹配规则（`sub-store-1` 处理后端重路由，`sub-store-0` 兜底并应答 `/api/utils/env`），`script-providers` 指向本仓库自托管镜像而不是 GitHub Releases——首次启动时还没有节点，指向 GitHub 会形成「无节点→脚本下不动→无节点」的死锁，前端就只报 `Network Error` 并索要后端地址。因此不需要再额外安装官方 Sub-Store 覆写，装了两套反而会争抢同一个 `/api` 请求。
 
 导入 `stash-ios.yaml` 后，先启用 Stash 并用 Safari 打开 `https://sub.store`，在本机 Sub-Store 中创建名称严格为 `ios` 的订阅，再把私人机场地址保存在这个订阅中。主配置已内置 `SubStore` 远程代理集，每 24 小时读取 `http://sub.store/download/ios?target=Stash`，并通过 `subscribe-url` 读取同一地址的流量/到期响应头；使用与 Stash 协议及字段最匹配的输出。不要把机场地址填到“通用 → 订阅链接”，也不要把它提交到仓库。首次创建后在“远程代理集”中手动刷新一次 `SubStore`，五个地区组就会自动纳入节点；`Proxy` 与 `Auto` 只列策略组、不展开具体节点（要挑单个节点进入对应国家组），也不包含 `Tailscale`，避免没有 exit node 时把普通公网流量送入 Tailnet。Tailscale 由独立策略组和 Tailnet 规则使用。其他 Clash 系客户端可单独读取 `http://sub.store/download/ios?target=ClashMeta`，两者仍使用同一个 `ios` 订阅数据。
 

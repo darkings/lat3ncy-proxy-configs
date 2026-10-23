@@ -135,6 +135,39 @@ def sync_main_config_providers(providers: dict, old_provider_names: set):
     return False
 
 
+SUBSTORE_ASSETS = {
+    "sub-store-0.min.js": "https://cdn.jsdelivr.net/gh/sub-store-org/Sub-Store@release/sub-store-0.min.js",
+    "sub-store-1.min.js": "https://cdn.jsdelivr.net/gh/sub-store-org/Sub-Store@release/sub-store-1.min.js",
+}
+
+
+def mirror_substore_assets():
+    """Publish the Sub-Store scripts on our own host.
+
+    Stash downloads script-providers through its own rules, so pointing them at
+    GitHub leaves a bootstrap deadlock: without nodes there is no proxy, and
+    without the Sub-Store script there are no nodes. Serving them from the same
+    host as the overrides keeps first-run downloads working.
+    """
+    scripts_dir = OUT_DIR / "scripts"
+    scripts_dir.mkdir(parents=True, exist_ok=True)
+    mirrored = []
+    for name, url in SUBSTORE_ASSETS.items():
+        try:
+            body = fetch_text(url)
+        except Exception as exc:  # noqa: BLE001
+            print(f"  ! failed to mirror {name}: {exc}", flush=True)
+            continue
+        if not body.strip():
+            print(f"  ! empty body for {name}", flush=True)
+            continue
+        (scripts_dir / name).write_text(body, encoding="utf-8")
+        mirrored.append(name)
+    if mirrored:
+        print(f"  mirrored Sub-Store scripts: {', '.join(mirrored)}", flush=True)
+    return mirrored
+
+
 def validate_runtime_assets():
     filename = "9410-b8806e870a26db7d.js"
     asset_path = OUT_DIR / "scripts" / filename
@@ -210,6 +243,7 @@ def main():
         all_providers = order_providers(all_providers, old_providers)
         write_provider_bundle(all_providers)
         main_changed = sync_main_config_providers(all_providers, set(old_providers))
+        mirror_substore_assets()
         validate_runtime_assets()
         HASHES_JSON.write_text(json.dumps(new_hashes, indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"updated {len(changed)} upstream target(s); providers={len(all_providers)}; main-config={main_changed}")
