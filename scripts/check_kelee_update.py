@@ -110,6 +110,9 @@ def sync_main_config_providers(providers: dict, old_provider_names: set):
     text = MAIN_CONFIG.read_text(encoding="utf-8")
     data = yaml.safe_load(text) or {}
     current = data.get("script-providers") or {}
+    if not current:
+        # Providers live entirely in the kelee-scripts bundle now; nothing to sync.
+        return False
     merged = {}
     for name, value in current.items():
         replacement = providers.get(name)
@@ -124,7 +127,7 @@ def sync_main_config_providers(providers: dict, old_provider_names: set):
     ).rstrip() + "\n\n"
     pattern = re.compile(r"(?ms)^script-providers:\s*\n.*?(?=^\S)")
     if not pattern.search(text):
-        raise RuntimeError("stash-ios.yaml missing top-level script-providers block")
+        return False
     updated = pattern.sub(replacement_block, text, count=1)
     if updated != text:
         MAIN_CONFIG.write_text(updated, encoding="utf-8")
