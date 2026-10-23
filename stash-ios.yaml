@@ -55,35 +55,12 @@ dns:
     - "+.cdn-apple.com"
     - "+.apple-cloudkit.com"
 
-# Built-in Sub-Store request handling. Create a local Sub-Store subscription
-# named "ios"; the provider below fetches its Stash output every 24 hours (interval: 86400).
-http:
-  mitm:
-    - sub.store
-  # 与 Sub-Store 官方 Stash.stoverride 完全一致：sub-store-1 处理后端重路由，
-  # sub-store-0 负责前端与 /api/utils/env 探测。此组合在官方文档中已验证可用，
-  # 修改匹配范围或调小 timeout 都可能导致前端要求填写后端地址。
-  script:
-    - match: ^https?:\/\/sub\.store\/((download)|api\/(preview|sync|(utils\/node-info)))
-      name: sub-store-1
-      type: request
-      require-body: true
-      max-size: -1
-      timeout: 900
-    - match: ^https?:\/\/sub\.store
-      name: sub-store-0
-      type: request
-      require-body: true
-      max-size: -1
-      timeout: 900
-
-script-providers:
-  sub-store-0:
-    url: https://github.com/sub-store-org/Sub-Store/releases/latest/download/sub-store-0.min.js
-    interval: 86400
-  sub-store-1:
-    url: https://github.com/sub-store-org/Sub-Store/releases/latest/download/sub-store-1.min.js
-    interval: 86400
+# Sub-Store 由官方 Stash.stoverride（或已安装的同名覆写）提供，本配置不再重复声明
+# mitm / http.script / script-providers：重复声明会把 /api 请求抢到未命中的脚本上，
+# 前端反而提示需要填写后端地址。
+# 使用前请先安装官方覆写：
+#   https://raw.githubusercontent.com/sub-store-org/Sub-Store/master/config/Stash.stoverride
+# 订阅与代理集仍指向 sub.store，由该覆写在本机应答。
 
 # Complete first-time login from this node's "Tailscale Authentication" page.
 # auth-key and exit-node are deliberately omitted from the public configuration.
