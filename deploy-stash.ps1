@@ -495,7 +495,8 @@ function New-RemoteEnvironmentPrefix {
         "STASH_HTTP_PORT='$HttpPort'",
         "STASH_CONTAINER_NAME='$ContainerName'",
         "STASH_KEEP_RELEASES='$KeepReleases'",
-        "STASH_KEEP_ASSET_DAYS='$KeepAssetDays'"
+        "STASH_KEEP_ASSET_DAYS='$KeepAssetDays'",
+        "STASH_CADDY_SITE_ROOT='$CaddySiteRoot'"
     )
     $pairs += $ExtraPairs
     return ($pairs -join " ")
@@ -689,9 +690,10 @@ function Get-ExecutionPlan {
     $lines.Add("        - 发布包 -> $script:RemoteRoot/releases/.staging-<releaseId>")
     $lines.Add("        - 更新器应用 -> $script:RemoteUpdaterRoot/releases/<releaseId>/app")
     $lines.Add("        - 转换器/校验脚本 -> 更新器应用 scripts/")
-    $lines.Add("步骤 6：渲染远端配置：bash <app>/render-config.sh --install-units")
-    $lines.Add("        EnvironmentFile=$script:RemoteUpdaterRoot/env；systemd ExecStart=$script:RemoteUpdaterRoot/current/run-updater.sh")
-    $lines.Add("步骤 7：共享发布事务：bash <app>/publish-release.sh --release-id <releaseId> --staging ... --expected-sums ... --source manual --install-app ...")
+    $lines.Add("步骤 6：共享发布事务（锁内完成配置渲染/安装与环境校验）：bash <app>/publish-release.sh --release-id <releaseId> --staging ... --expected-sums ... --source manual --install-app ...")
+    $lines.Add("        - --render-config-script <app>/render-config.sh --render-install-units --render-enable-timer$(if ($InstallCaddyfile) { ' --render-install-caddyfile' } else { '' })")
+    $lines.Add("        - 发布前快照旧 EnvironmentFile/systemd/Caddyfile；事务失败时连同 current/更新器应用指针一起恢复")
+    $lines.Add("        - EnvironmentFile=$script:RemoteUpdaterRoot/env；systemd ExecStart=$script:RemoteUpdaterRoot/current/run-updater.sh")
     $lines.Add("        - flock $script:RemoteUpdaterRoot/update.lock（并发部署/云端更新会明确失败或跳过）")
     $lines.Add("        - 校验 .build-manifest.json outputs + 期望哈希；copy-forward 仍在保留窗口内的内容寻址脚本")
     $lines.Add("        - staging 原子 mv 到 releases/<releaseId>；原子切换 current 符号链接")
@@ -699,9 +701,9 @@ function Get-ExecutionPlan {
     $lines.Add("        - 健康检查 GET http://127.0.0.1:$HttpPort/ 并校验 HTTP 200 + sha256：首页/代表 .stoverride/代表哈希脚本/provider 合集")
     $lines.Add("        - 成功后原子同步更新状态到 $script:RemoteUpdaterRoot/data；失败自动恢复上一版本并复验，首次部署失败移除 current 指针")
     $lines.Add("        - 更新资产账本/发布状态/事件日志，并执行保留策略（STASH_KEEP_RELEASES=$KeepReleases，STASH_KEEP_ASSET_DAYS=$KeepAssetDays）")
-    $lines.Add("步骤 8：安装并启用 systemd timer stash-kelee-update.timer（每日 03:20，带随机延迟）")
+    $lines.Add("步骤 7：确认事务内已启用 systemd timer stash-kelee-update.timer（每日 03:20，带随机延迟）")
     if (-not $SkipPublicCheck) {
-        $lines.Add("步骤 9：公网检查 GET $($Configuration.Base)/（-SkipPublicCheck 可跳过）")
+        $lines.Add("步骤 8：公网检查 GET $($Configuration.Base)/（-SkipPublicCheck 可跳过）")
     }
     return $lines.ToArray()
 }
@@ -885,44 +887,19 @@ try {
         # Windows checkouts may have CRLF; normalise the uploaded runtime files
         # (never the release payload, whose bytes are pinned by the hash list).
         Invoke-Remote -Description "规范化更新器脚本换行并设置权限" -Command (
-            "find '$remoteUpdaterApp' \\( -name '*.sh' -o -name '*.in' -o -name '*.py' \\) -print0 | " +
-            "xargs -0 -r sed -i 's/\r`$//' && " +
-            "chmod 0755 '$remoteUpdaterApp/run-updater.sh' '$remoteUpdaterApp/publish-release.sh' " +
-            "'$remoteUpdaterApp/health-check.sh' '$remoteUpdaterApp/retention.sh' '$remoteUpdaterApp/render-config.sh' && " +
-            "chmod 0644 '$remoteUpdaterApp/validate.py' '$remoteUpdaterApp/lib/common.sh' '$remoteUpdaterApp/templates/'*.in") | Out-Null
-
-        $renderArgs = @(
-            "--remote-root", $script:RemoteRoot,
-            "--updater-root", $script:RemoteUpdaterRoot,
-            "--public-base", $configuration.Base,
-            "--public-host", $configuration.Host,
-            "--mirror-base", $configuration.MirrorBase,
-            "--http-port", [string]$HttpPort,
-            "--container-name", $ContainerName,
-            "--keep-releases", [string]$KeepReleases,
-            "--keep-asset-days", [string]$KeepAssetDays,
-            "--caddy-site-root", $caddyRoot,
-            "--install-units"
-        )
-        if ($InstallCaddyfile) { $renderArgs += "--install-caddyfile" }
-        $renderCommand = "bash '$remoteUpdaterApp/render-config.sh'"
-        foreach ($arg in $renderArgs) {
-            if ($arg.StartsWith("--")) { $renderCommand += " $arg" } else { $renderCommand += " '$arg'" }
-        }
-        $renderResult = Invoke-RemoteRaw -Command $renderCommand -Description "渲染云端 EnvironmentFile / systemd 单元$(if ($InstallCaddyfile) { ' / Caddyfile' })"
-        Write-Host $renderResult.Output
-        if ($renderResult.ExitCode -ne 0) {
-            throw "远端配置渲染失败（退出码 $($renderResult.ExitCode)）：站点未切换。"
-        }
+            "sed -i 's/\r`$//' '$remoteUpdaterApp/normalize-app.sh' && " +
+            "bash '$remoteUpdaterApp/normalize-app.sh' '$remoteUpdaterApp'") | Out-Null
 
         $publishExtraPairs = @()
         if ($InstallCaddyfile -or $StrictCacheHeaders) {
             $publishExtraPairs += "STASH_STRICT_CACHE_HEADERS='1'"
         }
         $publishPrefix = New-RemoteEnvironmentPrefix -Configuration $configuration -ExtraPairs $publishExtraPairs
+        $publishRenderFlags = "--render-config-script '$remoteUpdaterApp/render-config.sh' --render-install-units --render-enable-timer"
+        if ($InstallCaddyfile) { $publishRenderFlags += " --render-install-caddyfile" }
         $publishCommand = "$publishPrefix bash '$remoteUpdaterApp/publish-release.sh' " +
             "--release-id '$releaseId' --staging '$remoteStaging' --expected-sums '$remoteSums' " +
-            "--source manual --install-app '$remoteUpdaterApp'"
+            "--source manual --install-app '$remoteUpdaterApp' $publishRenderFlags"
         $publishResult = Invoke-RemoteRaw -Command $publishCommand -Description "执行共享发布事务（锁/切换/健康检查/自动回滚）"
         Write-Host $publishResult.Output
         if ($publishResult.ExitCode -ne 0) {
@@ -930,6 +907,7 @@ try {
                 75 { "另一个发布/更新任务正在运行（共享锁被占用）；请稍后重试。" }
                 40 { "新版本健康检查失败，远端已按事务回滚到上一版本。" }
                 30 { "容器重建失败，远端已按事务回滚到上一版本。" }
+                10 { "配置渲染/安装失败，远端已按事务回滚到上一版本。" }
                 50 { "更新状态同步失败，远端已按事务回滚到上一版本。" }
                 60 { "自动回滚也失败，需要人工检查远端 current 指针与容器。" }
                 default { "远端发布事务失败。" }
@@ -937,8 +915,7 @@ try {
             throw "远端发布事务失败（退出码 $($publishResult.ExitCode)）：$hint"
         }
 
-        Invoke-Remote -Description "启用云端更新 timer" -Command (
-            "systemctl daemon-reload && systemctl enable --now stash-kelee-update.timer && " +
+        Invoke-Remote -Description "确认云端更新 timer 已由发布事务启用" -Command (
             "systemctl is-enabled --quiet stash-kelee-update.timer && " +
             "systemctl is-active --quiet stash-kelee-update.timer") | Out-Null
         Invoke-Remote -Description "清理远端临时哈希清单" -Command "rm -f '$remoteSums'" | Out-Null
@@ -952,7 +929,7 @@ try {
         Write-Host "  当前版本：$remoteStaging -> $script:RemoteCurrent（由远端事务切换）"
         Write-Host "  发布状态：$script:RemoteUpdaterRoot/state/publish.env；事件日志：$script:RemoteUpdaterRoot/logs/publish.log"
         Write-Host "  云端更新：systemd timer stash-kelee-update.timer（每日 03:20，带随机延迟；共用发布锁）"
-        Write-Host "  手工回滚：ssh $SshTarget 后执行 bash $script:RemoteUpdaterRoot/current/publish-release.sh --rollback-to <上一个版本>"
+        Write-Host "  手工回滚：ssh $SshTarget 后执行 set -a; . $script:RemoteUpdaterRoot/env; set +a; bash $script:RemoteUpdaterRoot/current/publish-release.sh --rollback-to <上一个版本>"
         exit 0
     } finally {
         if (Test-Path -LiteralPath $localTemp) {

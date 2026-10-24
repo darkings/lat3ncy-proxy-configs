@@ -650,6 +650,8 @@ env "${RUN_ENV[@]}" bash "$PUBLISH" --rollback-to "20260101-000005" >"$RUN_LOG" 
 expect_rc "手工回滚返回 0" 0
 expect_link "手工回滚后 current 指向目标版本" "$REMOTE/current" "$REMOTE/releases/20260101-000005"
 expect_contains "手工回滚记录 manual_rollback" "$REMOTE/updater/state/publish.env" "LAST_ACTION=manual_rollback"
+expect_contains "手工回滚后更新状态同步到目标版本" "$REMOTE/updater/data/stash/overrides/kelee/index.html" "KeLee five"
+expect_eq "手工回滚状态与 current 内容一致" "$(sha256sum "$REMOTE/updater/data/stash/overrides/kelee/index.html" | cut -d' ' -f1)" "$(sha256sum "$REMOTE/releases/20260101-000005/index.html" | cut -d' ' -f1)"
 
 printf '== 场景 10：部署侧 validate.py 校验统一地址与引用完整性 ==\n'
 validate_dir="$TEST_ROOT/validate-bundle"
@@ -812,6 +814,113 @@ expect_rc "缓存策略错误且严格模式时健康检查失败" 40
 expect_contains "健康检查报告 Cache-Control 问题" "$RUN_LOG" "Cache-Control"
 run_health "STASH_STRICT_CACHE_HEADERS=0" "FAKE_CURL_CACHE_MODE=bad"
 expect_rc "宽松模式仅警告不阻断" 0
+
+
+printf '== 场景 15：更新器应用换行/权限规范化（远端部署命令回归） ==\n'
+NORM_ROOT="$TEST_ROOT/normalize-app"
+cp -R "$UPDATER" "$NORM_ROOT"
+for crlf_file in normalize-app.sh publish-release.sh lib/common.sh templates/env.in; do
+    sed -i 's/$/\r/' "$NORM_ROOT/$crlf_file"
+done
+# deploy-stash.ps1 bootstraps the helper with a one-line sed (a CRLF script
+# cannot run itself), then invokes it with bash.
+sed -i 's/\r$//' "$NORM_ROOT/normalize-app.sh"
+LAST_RC=0
+env "${RUN_ENV[@]}" bash "$NORM_ROOT/normalize-app.sh" "$NORM_ROOT" >"$RUN_LOG" 2>&1 || LAST_RC=$?
+expect_rc "normalize-app 在 CRLF 输入上成功（等同远端部署命令）" 0
+if grep -q $'\r' "$NORM_ROOT/publish-release.sh" "$NORM_ROOT/lib/common.sh" "$NORM_ROOT/templates/env.in"; then
+    fail "normalize-app 未清除 CRLF"
+else
+    pass "normalize-app 已清除 .sh/.in 的 CRLF"
+fi
+if [[ -x "$NORM_ROOT/publish-release.sh" && -x "$NORM_ROOT/normalize-app.sh" ]]; then
+    pass "normalize-app 已恢复入口执行权限"
+else
+    fail "normalize-app 未恢复入口执行权限"
+fi
+LAST_RC=0
+env "${RUN_ENV[@]}" bash "$NORM_ROOT/normalize-app.sh" "$NORM_ROOT" >"$RUN_LOG" 2>&1 || LAST_RC=$?
+expect_rc "normalize-app 可重复执行（幂等）" 0
+DEPLOY_PS="$REPO_ROOT/deploy-stash.ps1"
+expect_contains "deploy-stash 使用 normalize-app.sh" "$DEPLOY_PS" "normalize-app.sh"
+if grep -qF "xargs -0 -r sed" "$DEPLOY_PS"; then
+    fail "deploy-stash 仍使用会中断的 xargs/sed 远端命令"
+else
+    pass "deploy-stash 不再使用有转义问题的 xargs/sed"
+fi
+
+printf '== 场景 16：发布失败恢复更新器应用指针并回滚锁内配置安装 ==\n'
+REMOTE4="$TEST_ROOT/remote4"
+prepare_remote "$REMOTE4"
+mkdir -p "$REMOTE4/updater/releases/app-old/app" "$REMOTE4/updater/releases/app-new/app"
+cp -R "$UPDATER/." "$REMOTE4/updater/releases/app-old/app/"
+cp -R "$UPDATER/." "$REMOTE4/updater/releases/app-new/app/"
+for app_dir in "$REMOTE4/updater/releases/app-old/app" "$REMOTE4/updater/releases/app-new/app"; do
+    mkdir -p "$app_dir/scripts"
+    printf 'placeholder\n' >"$app_dir/scripts/check_kelee_update.py"
+done
+cat >"$REMOTE4/updater/releases/app-old/app/render-config.sh" <<'SH'
+#!/usr/bin/env bash
+set -u
+log_file="${FAKE_RENDER_LOG:-/dev/null}"
+lock_file="${LOCK_FILE:-}"
+if [[ -n "$lock_file" ]] && flock -n -x "$lock_file" true 2>/dev/null; then
+    printf 'lock-not-held\n' >>"$log_file"
+    exit 10
+fi
+printf 'lock-held\n' >>"$log_file"
+printf 'FAKE_RENDER=%s\n' "${FAKE_RENDER_EXIT:-0}" >"$STASH_UPDATER_ROOT/env"
+exit "${FAKE_RENDER_EXIT:-0}"
+SH
+cp "$REMOTE4/updater/releases/app-old/app/render-config.sh" "$REMOTE4/updater/releases/app-new/app/render-config.sh"
+chmod +x "$REMOTE4/updater/releases/app-old/app/render-config.sh" "$REMOTE4/updater/releases/app-new/app/render-config.sh"
+ln -sfn "$REMOTE4/updater/releases/app-old/app" "$REMOTE4/updater/current"
+printf 'OLD_ENV\n' >"$REMOTE4/updater/env"
+echo "$REMOTE4/current" >"$HTTP_STATE_FILE"
+make_env "$REMOTE4"
+export FAKE_RENDER_EXIT=0
+export FAKE_RENDER_LOG="$TEST_ROOT/render.log"
+: >"$FAKE_RENDER_LOG"
+stage_bundle "$REMOTE4" "20260101-000201" "render-ok" 0
+run_publish --release-id "20260101-000201" \
+    --staging "$REMOTE4/releases/.staging-20260101-000201" \
+    --expected-sums "$TEST_ROOT/20260101-000201.sums" \
+    --install-app "$REMOTE4/updater/releases/app-old/app" \
+    --render-config-script "$REMOTE4/updater/releases/app-old/app/render-config.sh" \
+    --render-enable-timer
+expect_rc "带配置渲染的发布成功" 0
+expect_contains "render-config 在共享锁内执行" "$FAKE_RENDER_LOG" "lock-held"
+expect_contains "EnvironmentFile 已由事务写入" "$REMOTE4/updater/env" "FAKE_RENDER=0"
+expect_link "更新器应用指针指向新应用" "$REMOTE4/updater/current" "$REMOTE4/updater/releases/app-old/app"
+PREV_RELEASE="$(readlink -f "$REMOTE4/current")"
+
+stage_bundle "$REMOTE4" "20260101-000202" "render-fail" 0
+export FAKE_RENDER_EXIT=10
+: >"$FAKE_RENDER_LOG"
+run_publish --release-id "20260101-000202" \
+    --staging "$REMOTE4/releases/.staging-20260101-000202" \
+    --expected-sums "$TEST_ROOT/20260101-000202.sums" \
+    --install-app "$REMOTE4/updater/releases/app-new/app" \
+    --render-config-script "$REMOTE4/updater/releases/app-new/app/render-config.sh" \
+    --render-enable-timer
+expect_rc "配置渲染失败时事务返回 10" 10
+expect_link "配置失败后 current 恢复上一版本" "$REMOTE4/current" "$PREV_RELEASE"
+expect_link "配置失败后更新器应用指针恢复上一应用" "$REMOTE4/updater/current" "$REMOTE4/updater/releases/app-old/app"
+expect_contains "配置失败后 EnvironmentFile 恢复发布前内容" "$REMOTE4/updater/env" "FAKE_RENDER=0"
+if grep -qF "FAKE_RENDER=10" "$REMOTE4/updater/env"; then
+    fail "配置失败后仍残留新 EnvironmentFile"
+else
+    pass "新 EnvironmentFile 已被回滚"
+fi
+if find "$REMOTE4/updater/state" -maxdepth 1 -name '.config-backup.*' | grep -q .; then
+    fail "配置备份目录未在事务结束后清理"
+else
+    pass "配置备份目录已在回滚后清理"
+fi
+expect_contains "发布日志记录配置失败回滚" "$REMOTE4/updater/logs/publish.log" "配置渲染/安装失败"
+expect_contains "配置回滚时恢复 timer 启用状态" "$CALLS_LOG" "enable --now stash-kelee-update.timer"
+unset FAKE_RENDER_EXIT FAKE_RENDER_LOG
+make_env "$REMOTE"
 
 printf '\n== 汇总 ==\n'
 printf '通过 %d/%d 项检查\n' "$PASS_COUNT" "$CHECKS"

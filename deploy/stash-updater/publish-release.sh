@@ -46,6 +46,12 @@ usage() {
   --staging DIR          已上传/构建好的发布目录，必须位于 <REMOTE_ROOT>/releases 下
   --expected-sums FILE   sha256sum -c 兼容的期望哈希清单（发布方本地生成，钉住字节）
   --install-app DIR      事务开始时原子切换 <UPDATER_ROOT>/current -> DIR
+  --render-config-script FILE
+                         在锁内、发布成功后运行 render-config.sh（配置安装属于同一事务）
+  --render-install-units 渲染时安装 systemd 单元（/etc/systemd/system）
+  --render-install-caddyfile
+                         渲染时安装 Caddyfile（旧文件先备份）
+  --render-enable-timer  渲染时启用 stash-kelee-update.timer
   --source NAME          日志来源标记：manual | cloud | rollback（默认 manual）
   --no-state-sync        不同步 <UPDATER_ROOT>/data 更新状态（测试/调试用）
   --skip-retention       发布成功后不运行保留策略（测试用）
@@ -64,6 +70,10 @@ RELEASE_ID=""
 STAGING=""
 EXPECTED_SUMS=""
 APP_DIR=""
+RENDER_CONFIG_SCRIPT=""
+RENDER_INSTALL_UNITS=0
+RENDER_INSTALL_CADDYFILE=0
+RENDER_ENABLE_TIMER=0
 SOURCE="manual"
 SYNC_STATE=1
 RUN_RETENTION=1
@@ -91,6 +101,23 @@ while (($#)); do
         [[ $# -ge 2 ]] || die_config "--install-app 缺少参数"
         APP_DIR="$2"
         shift 2
+        ;;
+    --render-config-script)
+        [[ $# -ge 2 ]] || die_config "--render-config-script 缺少参数"
+        RENDER_CONFIG_SCRIPT="$2"
+        shift 2
+        ;;
+    --render-install-units)
+        RENDER_INSTALL_UNITS=1
+        shift
+        ;;
+    --render-install-caddyfile)
+        RENDER_INSTALL_CADDYFILE=1
+        shift
+        ;;
+    --render-enable-timer)
+        RENDER_ENABLE_TIMER=1
+        shift
         ;;
     --source)
         [[ $# -ge 2 ]] || die_config "--source 缺少参数"
@@ -162,6 +189,11 @@ print_plan() {
 
 ROLLBACK_COUNT=0
 PRIOR_STATE_PREVIOUS=""
+PREVIOUS_APP_DIR=""
+APP_POINTER_CHANGED=0
+CONFIG_BACKUP_DIR=""
+CONFIG_PATH_LIST=()
+TIMER_WAS_ENABLED=0
 
 perform_health() {
     local release_dir="$1"
@@ -191,6 +223,146 @@ record_rollback() {
     return 0
 }
 
+current_app_path() {
+    if [[ -L "$UPDATER_CURRENT" ]]; then
+        local target=""
+        target="$(readlink -f "$UPDATER_CURRENT" 2>/dev/null || true)"
+        if [[ -n "$target" && -d "$target" ]]; then
+            printf '%s' "$target"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+restore_app_pointer() {
+    ((APP_POINTER_CHANGED == 1)) || return 0
+    APP_POINTER_CHANGED=0
+    if [[ -n "$PREVIOUS_APP_DIR" && -d "$PREVIOUS_APP_DIR" ]]; then
+        if atomic_symlink "$PREVIOUS_APP_DIR" "$UPDATER_CURRENT"; then
+            log "更新器应用指针已恢复：$UPDATER_CURRENT -> $PREVIOUS_APP_DIR"
+        else
+            warn "无法恢复更新器应用指针：$UPDATER_CURRENT -> $PREVIOUS_APP_DIR"
+            return 1
+        fi
+    else
+        if [[ -L "$UPDATER_CURRENT" ]]; then
+            rm -f -- "$UPDATER_CURRENT" 2>/dev/null || true
+            log "首次安装失败：已移除更新器应用指针 $UPDATER_CURRENT"
+        fi
+    fi
+    return 0
+}
+
+# Files written by render-config.sh while the publish lock is held. They are
+# snapshotted before rendering and restored when the transaction rolls back.
+config_snapshot_paths() {
+    CONFIG_PATH_LIST=(
+        "$STASH_UPDATER_ROOT/env"
+        "$STASH_UPDATER_ROOT/systemd/stash-kelee-update.service"
+        "$STASH_UPDATER_ROOT/systemd/stash-kelee-update.timer"
+    )
+    if ((RENDER_INSTALL_UNITS == 1)); then
+        CONFIG_PATH_LIST+=(
+            "/etc/systemd/system/stash-kelee-update.service"
+            "/etc/systemd/system/stash-kelee-update.timer"
+        )
+    fi
+    if ((RENDER_INSTALL_CADDYFILE == 1)); then
+        CONFIG_PATH_LIST+=("$STASH_REMOTE_ROOT/Caddyfile")
+    fi
+}
+
+snapshot_config() {
+    [[ -n "$RENDER_CONFIG_SCRIPT" ]] || return 0
+    mkdir -p "$STATE_DIR" || die "$EX_STATE" "无法创建状态目录：$STATE_DIR"
+    CONFIG_BACKUP_DIR="$(mktemp -d "$STATE_DIR/.config-backup.${RELEASE_ID}.XXXXXX")" ||
+        die "$EX_STATE" "无法创建配置备份目录"
+    config_snapshot_paths
+    local index=0 path existed
+    : >"$CONFIG_BACKUP_DIR/map" || die "$EX_STATE" "无法写入配置备份索引"
+    for path in "${CONFIG_PATH_LIST[@]}"; do
+        if [[ -e "$path" || -L "$path" ]]; then
+            cp -a "$path" "$CONFIG_BACKUP_DIR/$index" || die "$EX_STATE" "无法备份配置：$path"
+            existed=1
+        else
+            existed=0
+        fi
+        printf '%s\t%s\t%s\n' "$index" "$path" "$existed" >>"$CONFIG_BACKUP_DIR/map"
+        index=$((index + 1))
+    done
+    if ((RENDER_ENABLE_TIMER == 1)) && command -v systemctl >/dev/null 2>&1; then
+        if systemctl is-enabled --quiet stash-kelee-update.timer >/dev/null 2>&1; then
+            TIMER_WAS_ENABLED=1
+        fi
+    fi
+    log "已快照发布前配置（${#CONFIG_PATH_LIST[@]} 项）：$CONFIG_BACKUP_DIR"
+}
+
+restore_config_snapshot() {
+    [[ -n "$CONFIG_BACKUP_DIR" && -d "$CONFIG_BACKUP_DIR" && -f "$CONFIG_BACKUP_DIR/map" ]] || return 0
+    local index path existed restored_units=0
+    while IFS=$'\t' read -r index path existed; do
+        [[ -n "$index" && -n "$path" ]] || continue
+        if [[ "$existed" == "1" ]]; then
+            mkdir -p "$(dirname "$path")"
+            if ! cp -a "$CONFIG_BACKUP_DIR/$index" "$path"; then
+                warn "恢复配置失败：$path（备份在 $CONFIG_BACKUP_DIR/$index）"
+                return 1
+            fi
+        else
+            rm -f -- "$path" 2>/dev/null || true
+        fi
+        case "$path" in
+        /etc/systemd/system/*) restored_units=1 ;;
+        esac
+    done <"$CONFIG_BACKUP_DIR/map"
+    if command -v systemctl >/dev/null 2>&1; then
+        if ((restored_units == 1)); then
+            systemctl daemon-reload || warn "配置已恢复，但 systemctl daemon-reload 失败"
+        fi
+        if ((RENDER_ENABLE_TIMER == 1)); then
+            if ((TIMER_WAS_ENABLED == 1)); then
+                systemctl enable --now stash-kelee-update.timer >/dev/null 2>&1 ||
+                    warn "配置已恢复，但重新启用 stash-kelee-update.timer 失败"
+            else
+                systemctl disable --now stash-kelee-update.timer >/dev/null 2>&1 ||
+                    warn "配置已恢复，但停用发布期间启用的 stash-kelee-update.timer 失败"
+            fi
+        fi
+    fi
+    log "发布前配置已恢复（$CONFIG_BACKUP_DIR）"
+    return 0
+}
+
+cleanup_config_backup() {
+    [[ -n "$CONFIG_BACKUP_DIR" && -d "$CONFIG_BACKUP_DIR" ]] || return 0
+    rm -rf -- "$CONFIG_BACKUP_DIR" 2>/dev/null || true
+    CONFIG_BACKUP_DIR=""
+}
+
+render_config_install() {
+    [[ -n "$RENDER_CONFIG_SCRIPT" ]] || return 0
+    local caddy_root="${STASH_CADDY_SITE_ROOT:-/srv}"
+    local args=(
+        --remote-root "$STASH_REMOTE_ROOT"
+        --updater-root "$STASH_UPDATER_ROOT"
+        --public-base "$STASH_PUBLIC_BASE"
+        --public-host "$STASH_PUBLIC_HOST"
+        --mirror-base "$KELEE_MIRROR_BASE"
+        --http-port "$STASH_HTTP_PORT"
+        --container-name "$STASH_CONTAINER_NAME"
+        --keep-releases "$STASH_KEEP_RELEASES"
+        --keep-asset-days "$STASH_KEEP_ASSET_DAYS"
+        --caddy-site-root "$caddy_root"
+    )
+    ((RENDER_INSTALL_UNITS == 1)) && args+=(--install-units)
+    ((RENDER_INSTALL_CADDYFILE == 1)) && args+=(--install-caddyfile)
+    ((RENDER_ENABLE_TIMER == 1)) && args+=(--enable-timer)
+    log "锁内渲染/安装更新器配置：$RENDER_CONFIG_SCRIPT（units=$RENDER_INSTALL_UNITS caddyfile=$RENDER_INSTALL_CADDYFILE enable_timer=$RENDER_ENABLE_TIMER）"
+    bash "$RENDER_CONFIG_SCRIPT" "${args[@]}"
+}
+
 rollback_transaction() {
     local reason="$1"
     local code="$2"
@@ -200,11 +372,17 @@ rollback_transaction() {
 
     if [[ -n "${PREVIOUS_RELEASE:-}" && -d "$PREVIOUS_RELEASE" && -f "$PREVIOUS_RELEASE/index.html" ]]; then
         if restore_previous_release "$PREVIOUS_RELEASE"; then
+            restore_app_pointer || warn "更新器应用指针恢复失败"
+            restore_config_snapshot || warn "发布前配置恢复失败，请检查 $CONFIG_BACKUP_DIR"
+            cleanup_config_backup
             record_rollback "rollback" "$RELEASE_DIR" "$reason" 1 "$PRIOR_STATE_PREVIOUS"
             append_event "rollback_ok" "$RELEASE_ID" "$reason；current=$PREVIOUS_RELEASE"
             log "回滚完成：$CURRENT_LINK -> $PREVIOUS_RELEASE（容器已重建并通过健康检查）"
             exit "$code"
         fi
+        restore_app_pointer || warn "更新器应用指针恢复失败"
+        restore_config_snapshot || warn "发布前配置恢复失败，请检查 $CONFIG_BACKUP_DIR"
+        cleanup_config_backup
         record_rollback "rollback_failed" "$RELEASE_DIR" "$reason" 1 "$PRIOR_STATE_PREVIOUS"
         append_event "rollback_failed" "$RELEASE_ID" "$reason"
         die "$EX_CRITICAL" "回滚失败：上一版本 $PREVIOUS_RELEASE 未能恢复健康，请人工检查 $CURRENT_LINK、Compose 文件与容器日志"
@@ -219,6 +397,9 @@ rollback_transaction() {
             log "首次部署失败：已移除 current 指针（$CURRENT_LINK）"
         fi
     fi
+    restore_app_pointer || warn "首次部署失败后更新器应用指针清理失败"
+    restore_config_snapshot || warn "发布前配置恢复失败，请检查 $CONFIG_BACKUP_DIR"
+    cleanup_config_backup
     record_rollback "first_deploy_failed" "$RELEASE_DIR" "$reason" 1 ""
     append_event "first_deploy_failed" "$RELEASE_ID" "$reason；已移除 current 指针"
     log "发布包保留在 $RELEASE_DIR 便于排查；站点没有指向残缺版本"
@@ -268,10 +449,22 @@ do_rollback_to() {
         die "$EX_HEALTH" "手工回滚失败：目标版本 $target 未通过健康检查"
     fi
 
+    if ((SYNC_STATE == 1)); then
+        if ! sync_state "$target" "$target_id"; then
+            warn "手工回滚后更新状态同步失败，尝试恢复原版本 $previous"
+            if [[ -n "$previous" ]] && restore_previous_release "$previous"; then
+                append_event "manual_rollback_state_failed" "$target_id" "状态同步失败，已恢复 $previous"
+                die "$EX_STATE" "手工回滚状态同步失败；已恢复原版本（current=$previous）"
+            fi
+            append_event "manual_rollback_state_failed" "$target_id" "状态同步失败且原版本恢复失败"
+            die "$EX_CRITICAL" "手工回滚状态同步失败，且原版本恢复失败，请人工检查"
+        fi
+        log "手工回滚后更新状态已同步：$DATA_DIR（对应 release=$target_id）"
+    fi
     update_asset_ledger "$target"
     write_publish_state "publish-release.sh" "manual_rollback" "success" "$target" "rollback-to $target_id" \
         "" "$previous" "$((ROLLBACK_COUNT + 1))"
-    append_event "manual_rollback" "$target_id" "current=$target previous=${previous:-none}"
+    append_event "manual_rollback" "$target_id" "current=$target previous=${previous:-none} state_synced=$SYNC_STATE"
     log "手工回滚完成：$CURRENT_LINK -> $target"
     exit "$EX_OK"
 }
@@ -307,6 +500,21 @@ if [[ -n "$APP_DIR" ]]; then
     *) die_config "--install-app 必须位于 $UPDATER_RELEASES_DIR 之下：$APP_DIR" ;;
     esac
 fi
+if [[ -n "$RENDER_CONFIG_SCRIPT" ]]; then
+    validate_abs_path "$RENDER_CONFIG_SCRIPT" "RENDER_CONFIG_SCRIPT"
+    [[ -f "$RENDER_CONFIG_SCRIPT" ]] || die_config "配置渲染脚本不存在：$RENDER_CONFIG_SCRIPT"
+    case "$RENDER_CONFIG_SCRIPT" in
+    "$UPDATER_RELEASES_DIR"/* | "$STASH_UPDATER_ROOT/current/"*) ;;
+    *) die_config "--render-config-script 必须位于 $UPDATER_RELEASES_DIR 之下：$RENDER_CONFIG_SCRIPT" ;;
+    esac
+    [[ -z "$ROLLBACK_TO" ]] || die_config "--rollback-to 不能与 --render-config-script 同时使用"
+fi
+if ((RENDER_INSTALL_UNITS == 0 && RENDER_INSTALL_CADDYFILE == 1)); then
+    die_config "--render-install-caddyfile 需要同时提供 --render-config-script"
+fi
+if [[ -z "$RENDER_CONFIG_SCRIPT" ]] && ((RENDER_INSTALL_UNITS == 1 || RENDER_INSTALL_CADDYFILE == 1 || RENDER_ENABLE_TIMER == 1)); then
+    die_config "渲染选项必须与 --render-config-script 一起使用"
+fi
 
 if ((DRY_RUN == 1)); then
     print_plan
@@ -325,6 +533,7 @@ PRIOR_STATE_PREVIOUS="$(state_read PREVIOUS_RELEASE || true)"
 ROLLBACK_COUNT="$(state_read ROLLBACK_COUNT || true)"
 [[ "$ROLLBACK_COUNT" =~ ^[0-9]+$ ]] || ROLLBACK_COUNT=0
 FINGERPRINT=""
+PREVIOUS_APP_DIR="$(current_app_path || true)"
 
 RELEASE_DIR="$RELEASES_DIR/$RELEASE_ID"
 [[ -e "$RELEASE_DIR" ]] && die_validation "版本目录已存在，拒绝覆盖：$RELEASE_DIR"
@@ -351,12 +560,21 @@ if [[ -f "$STAGING/.build-manifest.json" ]]; then
 fi
 log "发布包校验通过：fingerprint=${FINGERPRINT:-unknown}"
 
-# Install the new updater application atomically (same helper for timer+manual).
+# Validate the new updater application before snapshotting/mutating anything.
 if [[ -n "$APP_DIR" ]]; then
     validate_app_dir "$APP_DIR"
+fi
+
+# Snapshot the config files render-config.sh may replace; restored on rollback.
+snapshot_config
+
+# Install the new updater application atomically (same helper for timer+manual).
+if [[ -n "$APP_DIR" ]]; then
+    PREVIOUS_APP_DIR="$(current_app_path || true)"
     ensure_pointer_guard "$UPDATER_CURRENT"
     atomic_symlink "$APP_DIR" "$UPDATER_CURRENT" || die_validation "无法原子切换更新器应用指针：$UPDATER_CURRENT"
-    log "更新器应用已切换：$UPDATER_CURRENT -> $APP_DIR"
+    APP_POINTER_CHANGED=1
+    log "更新器应用已切换：$UPDATER_CURRENT -> $APP_DIR（上一应用：${PREVIOUS_APP_DIR:-<无>}）"
 fi
 
 copy_forward_assets "$STAGING"
@@ -386,6 +604,9 @@ fi
 if ! perform_health "$RELEASE_DIR"; then
     rollback_transaction "健康检查失败（HTTP/sha256 内容校验未通过）" "$EX_HEALTH"
 fi
+if ! render_config_install; then
+    rollback_transaction "配置渲染/安装失败（EnvironmentFile/systemd/Caddyfile）" "$EX_CONFIG"
+fi
 
 # ---------------------------------------------------------------------------
 # Commit bookkeeping + retention, then atomically advance the update state.
@@ -411,6 +632,7 @@ if ((SYNC_STATE == 1)); then
     log "更新状态已原子同步：$DATA_DIR"
 fi
 
+cleanup_config_backup
 write_publish_state "publish-release.sh" "publish" "success" "$RELEASE_DIR" "" "$FINGERPRINT" \
     "$PREVIOUS_RELEASE" "$ROLLBACK_COUNT"
 append_event "publish" "$RELEASE_ID" "source=$SOURCE current=$RELEASE_DIR previous=${PREVIOUS_RELEASE:-none}"

@@ -236,5 +236,57 @@ class ValidatorRuleShapeTests(unittest.TestCase):
             self.assertEqual(self._errors(root), [])
 
 
+class MockHeaderMergeScopeTests(unittest.TestCase):
+    """REVIEW round 2: header actions must not be merged across regex branches."""
+
+    def test_header_from_other_alternation_branch_is_not_merged(self) -> None:
+        result, _resolver = convert(
+            fixture(
+                [
+                    r'response if ${url} ~= /^https:\/\/api\.example\.com\/v1\/(public|private)$/i '
+                    r'then response.body.mock("json", "{}", 200)',
+                    r'response if ${url} ~= /^https:\/\/api\.example\.com\/v1\/(admin|internal)$/i '
+                    r'then response.header.add("X-Admin", "true")',
+                ],
+            )
+        )
+        self.assertFalse(result.blocking, [str(d) for d in result.diagnostics])
+        mock = result.stash["http"]["mock"][0]
+        self.assertNotIn("X-Admin", mock.get("headers", {}))
+        header_rules = result.stash["http"].get("header-rewrite") or []
+        self.assertTrue(any("X-Admin" in rule for rule in header_rules), header_rules)
+
+    def test_header_with_broader_path_is_merged(self) -> None:
+        result, _resolver = convert(
+            fixture(
+                [
+                    r'response if ${url} ~= /^https:\/\/grpc\.example\.com\/app\.(Teenagers\/ModeStatus|Search\/DefaultWords)$/i '
+                    r'then response.body.mock("text", "ok", 200)',
+                    r'response if ${url} ~= /^https:\/\/grpc\.example\.com\/app\.(Teenagers\/ModeStatus|Search\/DefaultWords)$/i '
+                    r'then response.header.add("grpc-status", "0")',
+                ],
+            )
+        )
+        self.assertFalse(result.blocking, [str(d) for d in result.diagnostics])
+        mock = result.stash["http"]["mock"][0]
+        self.assertEqual(mock.get("headers", {}).get("grpc-status"), "0")
+        self.assertFalse(result.stash["http"].get("header-rewrite"))
+
+    def test_header_with_other_host_is_not_merged(self) -> None:
+        result, _resolver = convert(
+            fixture(
+                [
+                    r'response if ${url} ~= /^https:\/\/api\.example\.com\/x$/i '
+                    r'then response.body.mock("text", "x", 200)',
+                    r'response if ${url} ~= /^https:\/\/other\.example\.com\/x$/i '
+                    r'then response.header.add("X-Other", "1")',
+                ],
+            )
+        )
+        self.assertFalse(result.blocking, [str(d) for d in result.diagnostics])
+        mock = result.stash["http"]["mock"][0]
+        self.assertNotIn("X-Other", mock.get("headers", {}))
+
+
 if __name__ == "__main__":
     unittest.main()

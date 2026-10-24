@@ -591,6 +591,7 @@ validate_app_dir() {
         health-check.sh
         retention.sh
         render-config.sh
+        normalize-app.sh
         validate.py
         lib/common.sh
         templates/env.in

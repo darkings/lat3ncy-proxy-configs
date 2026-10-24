@@ -1425,20 +1425,165 @@ def _literal_prefix(pattern: str) -> str:
     return "".join(out)
 
 
+def _regex_samples(pattern: str, *, limit: int = 32) -> Optional[list[str]]:
+    """Generate representative full-match URLs for a Loon/Stash URL regex.
+
+    Used only to decide whether a sibling ``response.header.add`` action from a
+    separate Loon rewrite line really matches a mock URL before merging it into
+    the mock headers. The previous implementation compared literal prefixes
+    only, which merged headers from ``(admin|internal)`` into a mock matched by
+    ``(public|private)`` (same host/prefix, different branch). Exact regex
+    intersection is undecidable here, so this conservative sampler returns a
+    set covering the branches; unsupported constructs return None and the
+    header is simply not merged (a separate header-rewrite rule is emitted).
+    """
+
+    try:  # Python <3.13 exposes sre_parse; newer releases use re._parser
+        import sre_parse as _sre_parse  # type: ignore[no-redef]
+    except ImportError:  # pragma: no cover - Python 3.13+
+        from re import _parser as _sre_parse  # type: ignore[no-redef]
+    import warnings
+
+    text = pattern.strip()
+    flags = ""
+    while text.startswith("(?") and ")" in text:
+        end = text.index(")")
+        candidate = text[2:end]
+        if not candidate or any(char not in "ims" for char in candidate):
+            break
+        flags += candidate
+        text = text[end + 1 :].strip()
+    if text.startswith("^"):
+        text = text[1:]
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            parsed = _sre_parse.parse(text, flags=0 if not flags else 0)
+    except Exception:  # noqa: BLE001
+        return None
+
+    def expand_sequence(tokens, prefix: str) -> list[str]:
+        results = [prefix]
+        for op, av in tokens:
+            next_results: list[str] = []
+            if op == _sre_parse.LITERAL:
+                piece = [chr(av)]
+            elif op == _sre_parse.NOT_LITERAL:
+                piece = ["x" if av != ord("x") else "y"]
+            elif op == _sre_parse.ANY:
+                piece = ["x"]
+            elif op == _sre_parse.AT:
+                piece = [""]
+            elif op == _sre_parse.IN:
+                choice = None
+                negate = False
+                for token_op, token_av in av:
+                    if token_op == _sre_parse.NEGATE:
+                        negate = True
+                        continue
+                    if choice is None and token_op == _sre_parse.LITERAL:
+                        choice = chr(token_av)
+                    elif choice is None and token_op == _sre_parse.RANGE:
+                        choice = chr(token_av[0])
+                if choice is None:
+                    if negate:
+                        choice = "x"
+                    else:
+                        return []
+                if negate and choice == "x":
+                    choice = "y"
+                piece = [choice]
+            elif op == _sre_parse.SUBPATTERN:
+                _, sub_tokens = av[1], av[-1]
+                alternatives = expand_sequence(list(sub_tokens), "")
+                if not alternatives:
+                    return []
+                piece = alternatives
+            elif op == _sre_parse.BRANCH:
+                alternatives = []
+                for branch in av[1]:
+                    alternatives.extend(expand_sequence(list(branch), ""))
+                if not alternatives:
+                    return []
+                piece = alternatives
+            elif op in (_sre_parse.MAX_REPEAT, _sre_parse.MIN_REPEAT):
+                minimum, _maximum, sub_tokens = av
+                unit = expand_sequence(list(sub_tokens), "")
+                if not unit:
+                    return []
+                repeats = []
+                for count in sorted({max(1, minimum), max(2, minimum)}):
+                    if count > 4:
+                        continue
+                    combined = [""]
+                    for _ in range(count):
+                        combined = [left + right for left in combined for right in unit]
+                        if len(combined) > limit:
+                            return []
+                    repeats.extend(combined)
+                piece = repeats or [""]
+            elif op == _sre_parse.CATEGORY:
+                category = av
+                if category == _sre_parse.CATEGORY_DIGIT:
+                    piece = ["1"]
+                elif category == _sre_parse.CATEGORY_SPACE:
+                    piece = [" "]
+                else:
+                    piece = ["x"]
+            else:
+                return []
+            for base in results:
+                for suffix in piece:
+                    next_results.append(base + suffix)
+            if len(next_results) > limit:
+                return []
+            results = next_results
+        return results
+
+    try:
+        samples = expand_sequence(list(parsed), "")
+    except Exception:  # noqa: BLE001
+        return None
+    if not samples or len(samples) > limit:
+        return None
+    # Deduplicate, keep deterministic order.
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for sample in samples:
+        if sample not in seen:
+            seen.add(sample)
+            ordered.append(sample)
+    return ordered
+
+
+def _regex_matches_url(pattern: str, url: str) -> bool:
+    try:
+        return re.search(pattern, url) is not None
+    except re.error:
+        return False
+
+
+def _header_covers_mock(header_pattern: str, mock_pattern: str) -> bool:
+    samples = _regex_samples(mock_pattern)
+    if not samples:
+        return False
+    return all(_regex_matches_url(header_pattern, sample) for sample in samples)
+
+
 def _merge_pending_into_mock(mock: dict, pending: list[PendingHeader], ctx: ConversionContext) -> None:
     mock_hosts = _host_tokens(mock["match"])
     if not mock_hosts:
         return
-    mock_prefix = _literal_prefix(mock["match"])
     headers = mock.setdefault("headers", {})
     for header in pending:
         if header.action != "response-add" or not header.value:
             continue
         if not (_host_tokens(header.pattern) & mock_hosts):
             continue
-        header_prefix = _literal_prefix(header.pattern)
-        if not header_prefix or not mock_prefix.startswith(header_prefix):
-            # The header regex may not cover this mock URL; do not over-apply it.
+        if not _header_covers_mock(header.pattern, mock["match"]):
+            # The header action's own regex must match every mock URL it is
+            # merged into; literal-prefix comparison alone over-merged headers
+            # from a different alternation branch (REVIEW round 2).
             continue
         headers[header.name] = header.value
         header.merged = True

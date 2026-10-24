@@ -310,6 +310,9 @@ try {
     Assert-OutputContains "DryRun 输出包含保留策略参数" $dryRun "KeepReleases=3"
     Assert-OutputContains "DryRun 输出包含保留窗口参数" $dryRun "KeepAssetDays=30"
     Assert-OutputContains "DryRun 输出包含真实构建入口" $dryRun "check_kelee_update.py"
+    Assert-OutputContains "DryRun 说明配置渲染在共享发布事务内" $dryRun "锁内完成配置渲染/安装"
+    Assert-OutputContains "DryRun 计划包含 render-config-script" $dryRun "--render-config-script"
+    Assert-OutputContains "DryRun 计划包含 systemd/timer 事务标志" $dryRun "--render-install-units --render-enable-timer"
     Assert-OutputContains "DryRun 输出包含构建参数" $dryRun "--force"
     $markerCount = @(Get-MarkerFiles).Count
     Assert-True "DryRun 未执行任何伪造外部命令（marker=0）" ($markerCount -eq 0) "(marker=$markerCount)"
@@ -378,6 +381,17 @@ try {
     ) -Environment @{ FAKE_BUILD_OUT = $script:Artifacts; FAKE_MARKER_DIR = $script:Markers; FAKE_BUILD_MODE = "corrupt-manifest" }
     Assert-ExitNonZero "构建清单哈希不一致时失败" $corrupt
     Assert-OutputContains "构建清单哈希错误指向 index.html" $corrupt "index.html"
+
+
+    Write-Host "== 场景 5：远端命令与配置事务契约（REVIEW round 2 回归） =="
+    $deployText = Get-Content -LiteralPath $script:DeployScript -Raw -Encoding UTF8
+    Assert-True "部署脚本通过 normalize-app.sh 规范化远端应用" ($deployText -match "normalize-app\.sh")
+    Assert-True "部署脚本不再使用会中断远端的 find 转义" (-not $deployText.Contains("-print0 |"))
+    Assert-True "部署脚本不再使用 xargs+sed 远端绕行" (-not ($deployText -match "xargs -0 -r sed"))
+    Assert-True "配置安装作为发布事务参数传入（不在锁外单独执行）" ($deployText -match "--render-config-script")
+    Assert-True "发布事务携带 units/timer 渲染标志" ($deployText -match "--render-install-units --render-enable-timer")
+    Assert-True "手工回滚提示先加载 EnvironmentFile" ($deployText -match 'set -a; \. \$script:RemoteUpdaterRoot/env; set \+a;')
+    Assert-True "远端配置渲染不再出现在 DryRun 的独立步骤" (-not ($dryRun.Output -match "步骤 6：渲染远端配置"))
 
     Write-Host ""
     Write-Host "== 汇总 =="
