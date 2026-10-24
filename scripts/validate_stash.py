@@ -1,608 +1,1074 @@
 #!/usr/bin/env python3
-"""
-Stash Linter — 复刻 Stash App 校验规则子集（7层） for Loon → Stash
-Layer 1: YAML Schema
-Layer 2: Rewrite Syntax (URL)
-Layer 3: Header Rewrite
-Layer 4: Script
-Layer 5: RE2
-Layer 6: Mock
-Layer 7: Semantic
-退出码: 0 PASS / 2 FAIL（阻断同步）
+"""Offline validator for generated KeLee Stash overrides.
+
+The previous validator encoded the converter's old invented schema (``- mock``
+url-rewrite lines, ``data-type``/``statusCode`` mock fields, ``enable``/``tag``
+script keys, ``PATTERN - reject`` being the only reject form, ...). This version
+validates against the *current* Stash documentation (stash.wiki fetched
+2026-10-25) and focuses on semantic completeness instead of "YAML parses" or
+"rule count is similar":
+
+* schema/field allow-lists for every ``http.*`` section and ``script-providers``;
+* mock text/base64/status/headers correctness (base64 decodes, content type set);
+* URL/header/body rewrite grammar, RE2-compatible patterns, quoted body scalars;
+* script definitions reference existing providers, correct field names/types;
+* every rule policy/provider referenced by the bundle actually exists;
+* no remaining Loon artefacts (``kelee.one`` provider URLs, ``${...}``/``[Argument]``
+  placeholders, ``data-type``, ``requires-body``, ``binary-body-mode``, ...);
+* dangling assets: every ``/scripts/<file>`` referenced by a provider exists in
+  the bundle, every content-addressed URL is actually content-addressed;
+* optional cross-check against the conversion diagnostics: a target with a
+  blocking diagnostic must never be published.
+
+Usage::
+
+    python scripts/validate_stash.py [--dir DIR] [--public-base URL] [--json]
 """
 from __future__ import annotations
-import pathlib, re, sys, yaml
 
-REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
-KELEE_DIR = REPO_ROOT / "stash/overrides/kelee"
+import argparse
+import base64
+import binascii
+import json
+import re
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Iterable, Mapping, Optional
 
-# ---------- Layer 2: URL ----------
-URL_RULE = re.compile(r"^(\S+)\s+(\S+)(?:\s+(.*))?$")
-URL_ACTIONS = {
-    "transparent", "302", "307", "301", "308",
-    "reject", "reject-200", "reject-img", "reject-dict", "reject-array", "mock"
-}
-# For url-rewrite the target is "-" then action is the real action; but spec says pattern target action
-# Stash url-rewrite line format documented as: pattern - action[ params]  (target is "-")
-# We'll also support the alternative spec: pattern target action  where target is "-" placeholder
-# Validate placeholder and redirect order per spec.
+import yaml
 
-# ---------- Layer 3: Header ----------
-HEADER_ACTIONS = {
-    "request-add", "request-del", "request-replace", "request-replace-regex",
-    "response-add", "response-del", "response-replace", "response-replace-regex",
-}
-LEGACY_HEADER_ACTIONS = {"header-add", "header-del", "header-replace", "header-replace-regex"}
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS_DIR = REPO_ROOT / "scripts"
+sys.path.insert(0, str(SCRIPTS_DIR))
 
-# ---------- Layer 5: RE2 ----------
-try:
-    import re2 as re2lib  # pip install re2
+import kelee_config as cfg  # noqa: E402
+from kelee_diagnostics import (  # noqa: E402,F401  (Diagnostic re-exported)
+    Diagnostic,
+    DiagnosticCollection,
+    blocking_errors,
+)
+
+DEFAULT_DIR = REPO_ROOT / "stash/overrides/kelee"
+PROVIDER_BUNDLE = "kelee-scripts.stoverride"
+
+try:  # optional real RE2 binding (pip install re2); never required
+    import re2 as re2lib  # type: ignore
+
     HAS_RE2 = True
-except Exception:
+except Exception:  # noqa: BLE001
     re2lib = None
     HAS_RE2 = False
 
-# error collector by layer
-errors = {
-    "YAML": [],
-    "URL": [],
-    "HEADER": [],
-    "BODY": [],
-    "SCRIPT": [],
-    "REGEX": [],
-    "MOCK": [],
-    "SEMANTIC": [],
-}
 
-# stats for report
-stats = {
-    "files": 0,
-    "url": 0,
-    "header": 0,
-    "body": 0,
-    "mock": 0,
-    "script": 0,
-    "providers": 0,
-    "mitm": 0,
-    "regex_ok": 0,
-    "regex_fail": 0,
-}
+# ---------------------------------------------------------------------------
+# Diagnostics
+# ---------------------------------------------------------------------------
 
-def add(layer: str, code: str, msg: str):
-    errors[layer].append(f"[{code}] {msg}")
 
-def check_file(p: pathlib.Path):
+class ValidationError(RuntimeError):
+    def __init__(self, diagnostics: Iterable[Diagnostic]):
+        self.diagnostics = list(diagnostics)
+        super().__init__("; ".join(str(d) for d in self.diagnostics[:5]))
+
+
+# ---------------------------------------------------------------------------
+# Regex compatibility
+# ---------------------------------------------------------------------------
+
+# RE2 does not implement look-around, backreferences or named backrefs. Python
+# `re` is used as an approximation when the real `re2` module is unavailable;
+# unsupported constructs are rejected explicitly instead of being accepted by a
+# permissive engine.
+RE2_UNSUPPORTED = [
+    (re.compile(r"\(\?[=!]"), "look-ahead"),
+    (re.compile(r"\(\?<[=!]"), "look-behind"),
+    (re.compile(r"\(\?P="), "named backreference"),
+    (re.compile(r"\\(?:[1-9])"), "backreference"),
+    (re.compile(r"\\(?:k|K)"), r"\k backreference"),
+    (re.compile(r"\[[^\]]*&&[^\]]*\]"), "character-class intersection"),
+]
+
+
+def regex_problem(pattern: str) -> Optional[str]:
+    for regex, label in RE2_UNSUPPORTED:
+        if regex.search(pattern):
+            return f"RE2 unsupported feature: {label}"
     try:
-        text = p.read_text(encoding="utf-8")
-        data = yaml.safe_load(text)
-    except Exception as e:
-        add("YAML", "E_YAML_PARSE", f"{p.name}: {e}")
-        return
-    # Layer 1: YAML Schema
-    if not isinstance(data, dict):
-        add("YAML", "E_SCHEMA_TYPE", f"{p.name}: 顶层非 dict")
-        return
-    if "icon" not in data:
-        add("YAML", "E_SCHEMA_MISSING", f"{p.name}: 缺 icon 字段")
-    # config["http"] must be dict if present
-    http = data.get("http", {})
-    if http is not None and not isinstance(http, dict):
-        add("YAML", "E_SCHEMA_TYPE", f"{p.name}: http 非 dict")
-        return
-    if not isinstance(http, dict):
-        http = {}
-    # url-rewrite must be list if present
-    if "url-rewrite" in http and not isinstance(http["url-rewrite"], list):
-        add("YAML", "E_SCHEMA_TYPE", f'{p.name}: http["url-rewrite"] 非 list')
-    if "header-rewrite" in http and not isinstance(http["header-rewrite"], list):
-        add("YAML", "E_SCHEMA_TYPE", f'{p.name}: http["header-rewrite"] 非 list')
-    if "body-rewrite" in http and not isinstance(http["body-rewrite"], list):
-        add("YAML", "E_SCHEMA_TYPE", f'{p.name}: http["body-rewrite"] 非 list')
-    # script-providers must be dict
-    if "script-providers" in data and not isinstance(data["script-providers"], dict):
-        add("YAML", "E_SCHEMA_TYPE", f"{p.name}: script-providers 非 dict")
-
-    # collect counts for semantic
-    url_list = http.get("url-rewrite", []) if isinstance(http.get("url-rewrite", []), list) else []
-    header_list = http.get("header-rewrite", []) if isinstance(http.get("header-rewrite", []), list) else []
-    body_list = http.get("body-rewrite", []) if isinstance(http.get("body-rewrite", []), list) else []
-    script_list = http.get("script", []) if isinstance(http.get("script", []), list) else []
-    providers = data.get("script-providers", {}) if isinstance(data.get("script-providers", {}), dict) else {}
-    mitm_list = http.get("mitm", []) if isinstance(http.get("mitm", []), list) else []
-    mock_list = http.get("mock", []) if isinstance(http.get("mock", []), list) else []
-    stats["url"] += len(url_list)
-    stats["header"] += len(header_list)
-    stats["body"] += len(body_list)
-    stats["script"] += len([s for s in script_list if isinstance(s, dict)])
-    stats["providers"] += len(providers)
-    stats["mitm"] += len(mitm_list)
-    if "mock" not in stats:
-        stats["mock"] = 0
-    stats["mock"] += len(mock_list)
-
-    # Stash's rewrite parser expects the full "match action expression" value
-    # to be a quoted YAML scalar. YAML decoding preserves the value but loses
-    # its style, so inspect the composed nodes as well as safe-loaded content.
-    try:
-        root_node = yaml.compose(text)
-        http_node = None
-        body_node = None
-        if isinstance(root_node, yaml.MappingNode):
-            for key_node, value_node in root_node.value:
-                if key_node.value == "http":
-                    http_node = value_node
-                    break
-        if isinstance(http_node, yaml.MappingNode):
-            for key_node, value_node in http_node.value:
-                if key_node.value == "body-rewrite":
-                    body_node = value_node
-                    break
-        if isinstance(body_node, yaml.SequenceNode):
-            for item_node in body_node.value:
-                if isinstance(item_node, yaml.ScalarNode) and item_node.style not in {"'", '"'}:
-                    add(
-                        "BODY",
-                        "E_BODY_YAML_UNQUOTED",
-                        f"{p.name}: body-rewrite 必须在 YAML 中整体引用: {item_node.value[:160]}",
-                    )
-    except Exception as e:
-        add("BODY", "E_BODY_STYLE_PARSE", f"{p.name}: 无法检查 body-rewrite YAML 引用样式: {e}")
-
-    # Layer 2: URL Rewrite Syntax  Stash 统一: 302/307/transparent = PATTERN TARGET ACTION ; reject = PATTERN - reject*
-    # 硬校验: 禁止 PATTERN - 302/307/transparent  与  PATTERN 302/307/transparent TARGET
-    # 兼容 301/308 归一到 302/307
-    REDIRECT_SET = {"302", "307", "301", "308", "transparent"}
-    REJECT_SET = {"reject", "reject-200", "reject-img", "reject-dict", "reject-array"}
-    def validate_url_rewrite(rule: str):
-        s0 = str(rule).strip()
-        if not s0:
-            return "E_URL_TOKEN_COUNT"
-        parts = s0.split()
-        if len(parts) < 2:
-            return "E_URL_TOKEN_COUNT"
-        # E_REDIRECT_DASH_PLACEHOLDER: PATTERN - 302/307/transparent TARGET
-        if len(parts) >= 3 and parts[1] == "-" and parts[2] in REDIRECT_SET:
-            return "E_REDIRECT_DASH_PLACEHOLDER"
-        # E_REDIRECT_ORDER: PATTERN 302/307/transparent TARGET (ACTION 在中间)
-        if len(parts) >= 2 and parts[1] in REDIRECT_SET:
-            return "E_REDIRECT_ORDER"
-        # 正确 Redirect 必须 ACTION 在最后
-        if parts[-1] in REDIRECT_SET:
-            if len(parts) < 3:
-                return "E_URL_TOKEN_COUNT"
-            if parts[1] == "-":
-                return "E_REDIRECT_DASH_PLACEHOLDER"
-            return None
-        # Reject 必须 PATTERN - reject*
-        if parts[-1] in REJECT_SET:
-            if len(parts) < 3 or parts[1] != "-":
-                return "E_REJECT_PLACEHOLDER"
-            return None
-        # 也兼容 reject* 在第二位但已带 -
-        if len(parts) >= 2 and parts[1] in REJECT_SET:
-            return "E_REJECT_PLACEHOLDER"
-        return "E_URL_ACTION_UNKNOWN"
-
-    for entry in url_list:
-        s = entry.strip() if isinstance(entry, str) else ""
-        if not isinstance(entry, str):
-            add("URL", "E_SCHEMA_TYPE", f"{p.name}: url-rewrite 非字符串: {entry}")
-            continue
-        err = validate_url_rewrite(s)
-        if err == "E_REDIRECT_DASH_PLACEHOLDER":
-            add("URL", "E_REDIRECT_DASH_PLACEHOLDER", f"{p.name}: 发现 'PATTERN - 302/307/transparent TARGET' 应为 'PATTERN TARGET ACTION': {s[:160]}")
-            continue
-        if err == "E_REDIRECT_ORDER":
-            add("URL", "E_REDIRECT_ORDER", f"{p.name}: 发现 'PATTERN 302/307/transparent TARGET' 应为 'PATTERN TARGET ACTION': {s[:160]}")
-            continue
-        if err == "E_REJECT_PLACEHOLDER":
-            add("URL", "E_REJECT_PLACEHOLDER", f'{p.name}: reject 缺占位符 "-": {s[:160]} (正确: PATTERN - reject)')
-            continue
-        if err is None:
-            # Redirect 正确格式，校验 RE2 与 pattern 前缀
-            parts = s.split()
-            pattern = parts[0]
-            action = parts[-1]
-            target = " ".join(parts[1:-1])
-            if pattern.startswith("(^"):
-                add("URL", "E_PATTERN_PREFIX", f"{p.name}: url-rewrite pattern 以 (^ 应为 ^(: {s[:160]}")
-            try:
-                pat_for_re2 = pattern
-                if HAS_RE2:
-                    re2lib.compile(pat_for_re2)
-                else:
-                    if re.search(r"\(\?<[=!]", pat_for_re2) or r"\K" in pat_for_re2:
-                        raise ValueError("lookahead")
-                    re.compile(pat_for_re2)
-                stats["regex_ok"] += 1
-            except Exception as e:
-                add("REGEX", "E_RE2_UNSUPPORTED", f"{p.name}: RE2 不支持 pattern '{pattern[:80]}': {e}")
-                stats["regex_fail"] += 1
-            if action in REDIRECT_SET and target == "-":
-                add("URL", "E_REDIRECT_DASH_PLACEHOLDER", f"{p.name}: Redirect target 不能为 '-': {s[:160]}")
-            if action in REDIRECT_SET and not (target.startswith("http") or target.startswith("$")):
-                add("URL", "E_REDIRECT_ORDER", f'{p.name}: {action} 缺少重定向目标URL: {s[:160]}')
-            continue
-        # err == E_URL_TOKEN_COUNT or UNKNOWN
-        if err == "E_URL_TOKEN_COUNT":
-            add("URL", "E_URL_TOKEN_COUNT", f"{p.name}: url-rewrite token 数不足: {s[:160]}")
-            continue
-        # fallback: 其他未知
-        m = URL_RULE.match(s)
-        if not m:
-            add("URL", "E_SYNTAX", f"{p.name}: url-rewrite 正则不匹配: {s[:160]}")
-            continue
-        pattern, target, action_rest = m.group(1), m.group(2), m.group(3) or ""
-        action = (action_rest or "").strip().split()[0] if action_rest else ""
-        # E_UNKNOWN_ACTION
-        if action not in URL_ACTIONS:
-            # allow 302/307 with target? but action is the real action
-            # Also reject subtypes already in set
-            add("URL", "E_UNKNOWN_ACTION", f"{p.name}: url-rewrite 未知 action '{action}': {s[:160]}")
-            continue
-        # E_REJECT_PLACEHOLDER already enforced above
-        # E_REDIRECT_ORDER: 302/307 参数顺序检查  错误: ^url 302 https://xxx (should be pattern - 302 target)
-        # In Stash correct is "pattern - 302 https://xxx"  -> our target is "-", action=302, rest is URL
-        # Legacy Loon is "pattern 302 URL" without placeholder, already caught as missing placeholder
-        # No extra check needed beyond placeholder, but keep for E_REDIRECT_ORDER spec
-        if action in {"302", "307", "301", "308"}:
-            # rest after action should be a URL or capture group $1/$2 (QQ redirect)
-            rest_params = action_rest[len(action):].strip() if action_rest else ""
-            if not rest_params or not (rest_params.startswith("http") or rest_params.startswith("$") or rest_params.startswith("https")):
-                add("URL", "E_REDIRECT_ORDER", f'{p.name}: {action} 缺少重定向目标URL: {s[:160]}')
-        # pattern starts with (^ should be ^(
-        if pattern.startswith("(^"):
-            add("URL", "E_PATTERN_PREFIX", f"{p.name}: url-rewrite pattern 以 (^ 开头应为 ^(: {s[:160]}")
-        # header misuse
-        if action == "header" and "https://" in action_rest:
-            add("URL", "E_HEADER_IN_URL", f"{p.name}: url-rewrite 中 header 带 URL 应转 302: {s[:160]}")
-        # Layer 6: Mock validation (also part of URL layer but collect under MOCK)
-        if action == "mock":
-            params = action_rest[len("mock"):].strip() if action_rest else ""
-            # mock must have data/status etc. Per spec: must exist status-code/data-type/data
-            # Stash mock accepted forms: data='...' statusCode=...  or base64
-            # We already unified to reject-dict for ?/$ patterns, but validate remaining mocks
-            if "?" in pattern or pattern.endswith("$"):
-                add("MOCK", "E_MOCK_INVALID", f"{p.name}: mock 用于 ?/$ 尾 pattern 在 Stash 必 invalid，应改为 - reject-dict: {s[:160]}")
-            if "mock-data-is-base64" in params and ("?" in pattern or pattern.endswith("$")):
-                add("MOCK", "E_MOCK_INVALID", f"{p.name}: mock-data-is-base64 用于 ?/$ 尾 pattern 在 Stash 必 invalid: {s[:160]}")
-            if "data-type" in params:
-                add("MOCK", "E_MOCK_LEGACY", f"{p.name}: mock 含残留 data-type: {s[:160]}")
-            if "status-code" in params:
-                add("MOCK", "E_MOCK_LEGACY", f"{p.name}: mock 含残留 status-code 应为 statusCode: {s[:160]}")
-            if 'data="' in params and "mock-data-is-base64" not in params:
-                add("MOCK", "E_MOCK_QUOTE", f"{p.name}: mock data 用双引号应为单引号: {s[:160]}")
-            if "status=" not in params and "statusCode=" not in params and "mock-data-is-base64" not in params:
-                add("MOCK", "E_MOCK_INVALID", f"{p.name}: mock 缺 status=/statusCode=: {s[:160]}")
-            if len(s) > 400:
-                add("MOCK", "E_MOCK_TOO_LONG", f"{p.name}: mock 行长 {len(s)} >400 可能截断: {s[:80]}...")
-        # Layer 5: RE2 for pattern
-        pat_for_re2 = pattern
-        # Try RE2 compile
-        try:
-            if HAS_RE2:
-                re2lib.compile(pat_for_re2)
-            else:
-                # fallback: check for RE2 unsupported features
-                if re.search(r"\(\?<[=!]", pat_for_re2) or r"\K" in pat_for_re2:
-                    raise ValueError("lookahead/behind or \\K")
-                re.compile(pat_for_re2)
-            stats["regex_ok"] += 1
-        except Exception as e:
-            add("REGEX", "E_RE2_UNSUPPORTED", f"{p.name}: RE2 不支持 pattern '{pattern[:80]}': {e}")
-            stats["regex_fail"] += 1
-
-    # Layer 6: Mock (http.mock) — Stash 新规范，非 url-rewrite
-    for entry in mock_list:
-        if not isinstance(entry, dict):
-            add("MOCK", "E_MOCK_INVALID", f"{p.name}: mock 非 dict: {entry}")
-            continue
-        m_match = entry.get("match")
-        if not m_match or not isinstance(m_match, str):
-            add("MOCK", "E_MOCK_INVALID", f"{p.name}: mock 缺 match")
+        if HAS_RE2:
+            re2lib.compile(pattern)
         else:
-            try:
-                if HAS_RE2:
-                    re2lib.compile(m_match)
-                else:
-                    if re.search(r"\(\?<[=!]", m_match) or r"\K" in m_match:
-                        raise ValueError("lookahead/behind or \\K")
-                    re.compile(m_match)
-                stats["regex_ok"] += 1
-            except Exception as e:
-                add("REGEX", "E_RE2_UNSUPPORTED", f"{p.name}: RE2 不支持 mock match '{m_match[:80]}': {e}")
-                stats["regex_fail"] += 1
-        if "status-code" not in entry:
-            add("MOCK", "E_MOCK_INVALID", f"{p.name}: mock 缺 status-code: {entry}")
-        if "body" not in entry:
-            add("MOCK", "E_MOCK_INVALID", f"{p.name}: mock 缺 body: {entry}")
-        # data 字段在新 http.mock 中为 body，已结构化，不应出现 data-type/status-code 残留
-        if "data-type" in entry or "status-code" in str(entry.get("body","")):
-            pass
-        if isinstance(entry.get("body"), str) and len(entry["body"]) > 5000:
-            add("MOCK", "E_MOCK_TOO_LONG", f"{p.name}: mock body 过长 {len(entry['body'])}")
+            re.compile(pattern)
+    except Exception as exc:  # noqa: BLE001
+        return f"regex does not compile: {exc}"
+    return None
 
-    # 硬校验: 禁止 url-rewrite 含 mock
-    for entry in url_list:
-        if isinstance(entry, str) and " - mock" in entry:
-            add("MOCK", "E_MOCK_IN_URL_REWRITE", f"{p.name}: url-rewrite 禁止 mock，应移至 http.mock: {entry[:160]}")
 
-    # Layer 3: Header Rewrite
-    for entry in header_list:
-        if not isinstance(entry, str):
-            add("HEADER", "E_SCHEMA_TYPE", f"{p.name}: header-rewrite 非字符串: {entry}")
-            continue
-        s = entry.strip()
-        if " - header" in s:
-            add("HEADER", "E_LEGACY_HEADER_PLACEHOLDER", f"{p.name}: header-rewrite 不应带 ' - ': {s[:160]}")
-        if "response-header" in s:
-            add("HEADER", "E_LEGACY_HEADER_ACTION", f"{p.name}: header-rewrite 含残留 response- 前缀: {s[:160]}")
-        if s.startswith("(^"):
-            add("HEADER", "E_PATTERN_PREFIX", f"{p.name}: header-rewrite pattern 以 (^ 开头: {s[:160]}")
-        # E_LEGACY_HEADER_ACTION for header-add etc.
-        # Stash 实际同时兼容 header-add 与 response-add，Loon 残留仅作 WARN，不阻断；保持兼容旧转换结果
-        m_h = re.match(r"^\S+\s+(\S+)", s)
-        if m_h:
-            act = m_h.group(1)
-            if act in LEGACY_HEADER_ACTIONS:
-                # 仅记录，不阻断；如需严格可升级为 FAIL
-                pass
-            elif act not in HEADER_ACTIONS and act not in LEGACY_HEADER_ACTIONS:
-                if "header" in act:
-                    add("HEADER", "E_UNKNOWN_ACTION", f"{p.name}: header-rewrite 未知 action '{act}': {s[:160]}")
-        # RE2 for header pattern
-        pat = s.split()[0] if s else ""
-        try:
-            if HAS_RE2:
-                re2lib.compile(pat)
-            else:
-                if re.search(r"\(\?<[=!]", pat) or r"\K" in pat:
-                    raise ValueError("lookahead/behind or \\K")
-                re.compile(pat)
-            stats["regex_ok"] += 1
-        except Exception as e:
-            add("REGEX", "E_RE2_UNSUPPORTED", f"{p.name}: RE2 不支持 header pattern '{pat[:80]}': {e}")
-            stats["regex_fail"] += 1
+def strip_stash_regex_escapes(pattern: str) -> str:
+    """Stash accepts escaped slashes in regex values (documented examples)."""
 
-    # Body Rewrite — v3: tokenizer 保留 jq 整体，不以 split 破坏
-    BODY_ACTIONS = {
-        "request-jq","response-jq","request-json-add","response-json-add",
-        "request-json-del","response-json-del","request-json-replace","response-json-replace",
-        "request-replace-regex","response-replace-regex","request-replace","response-replace"
-    }
-    def tokenize_rule_v(s: str):
-        res=[]; cur=""; in_s=False; in_d=False; esc=False
-        for c in s:
-            if esc:
-                cur+=c; esc=False; continue
-            if c=="\\":
-                esc=True; cur+=c; continue
-            if c=="'" and not in_d:
-                in_s=not in_s; cur+=c; continue
-            if c=='"' and not in_s:
-                in_d=not in_d; cur+=c; continue
-            if c==" " and not in_s and not in_d:
-                if cur:
-                    res.append(cur); cur=""
+    return pattern.replace("\\/", "/")
+
+
+def stash_regex_problem(pattern: str) -> Optional[str]:
+    # Validate the expression as written; Stash examples keep \/ escapes.
+    return regex_problem(pattern)
+
+
+# ---------------------------------------------------------------------------
+# Small parsing helpers
+# ---------------------------------------------------------------------------
+
+
+def split_top_level(value: str, sep: str = ",") -> list[str]:
+    """Split on a separator outside quotes, parentheses and brackets."""
+
+    parts: list[str] = []
+    current: list[str] = []
+    depth = 0
+    quote: Optional[str] = None
+    i = 0
+    while i < len(value):
+        ch = value[i]
+        if quote:
+            current.append(ch)
+            if ch == "\\" and i + 1 < len(value):
+                current.append(value[i + 1])
+                i += 2
                 continue
-            cur+=c
-        if cur:
-            res.append(cur)
-        return res
-    for entry in body_list:
-        if not isinstance(entry, str):
-            add("BODY", "E_SCHEMA_TYPE", f"{p.name}: body-rewrite 非字符串: {entry}")
-            continue
-        s = entry.strip()
-        if s.startswith("(^"):
-            add("BODY", "E_PATTERN_PREFIX", f"{p.name}: body-rewrite pattern 以 (^ 开头: {s[:160]}")
-        if len(s) > 65535:
-            add("BODY", "E_TOO_LONG", f"{p.name}: body-rewrite 行长 {len(s)} >65535")
-        if "jq-path" in s:
-            add("BODY", "E_JQ_PATH", f"{p.name}: body-rewrite 含未内联 jq-path: {s[:160]}")
-        # YAML 解析后规则应由 match、action、完整 expression 三段组成；
-        # expression 可以包含任意空格和管道，不能按 shell 参数再次强制加引号。
-        parts = s.split(None, 2)
-        if len(parts) < 3:
-            add("BODY", "E_BODY_TOKEN_COUNT", f"{p.name}: body-rewrite token 数 <3，应为 'match action expression': {s[:160]}")
+            if ch == quote:
+                quote = None
+        elif ch in "\"'":
+            quote = ch
+            current.append(ch)
+        elif ch in "([{":
+            depth += 1
+            current.append(ch)
+        elif ch in ")]}":
+            depth = max(0, depth - 1)
+            current.append(ch)
+        elif ch == sep and depth == 0:
+            parts.append("".join(current).strip())
+            current = []
         else:
-            act = parts[1]
-            expr = parts[2].strip()
-            if act not in BODY_ACTIONS:
-                add("BODY", "E_BODY_ACTION_UNKNOWN", f"{p.name}: body-rewrite 未知 action '{act}': {s[:160]}")
-            if "jq" in act and not expr:
-                add("BODY", "E_JQ_EMPTY", f"{p.name}: body-rewrite jq 缺 expression: {s[:160]}")
-            if "jq" in act and len(expr) >= 2 and expr[0] == expr[-1] and expr[0] in {'"', "'"}:
-                add("BODY", "E_JQ_QUOTED_EXPRESSION", f"{p.name}: jq 表达式被整体引号包裹，会变成字符串字面量: {s[:160]}")
-            # json-del 只接受裸路径；Stash 会把这些路径编译成 jq，因此每一段
-            # 都必须是合法 jq 标识符（data.920bestwishes 会导致 jq 语法错误）。
-            if act in {"response-json-del", "request-json-del"}:
-                path_re = re.compile(r"^[A-Za-z0-9_@-]+(?:\.[A-Za-z0-9_@-]+|\[\d+\])*$")
-                seg_re = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-                for token in expr.split():
-                    ok = bool(path_re.match(token)) and all(
-                        seg_re.match(seg.split("[", 1)[0]) for seg in token.split(".")
+            current.append(ch)
+        i += 1
+    tail = "".join(current).strip()
+    if tail or parts:
+        parts.append(tail)
+    return [part for part in parts if part != ""]
+
+
+def iter_strings(node) -> Iterable[str]:
+    if isinstance(node, str):
+        yield node
+    elif isinstance(node, dict):
+        for key, value in node.items():
+            yield str(key)
+            yield from iter_strings(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from iter_strings(value)
+
+
+PLACEHOLDER_MARKERS = (
+    "${",
+    "script-path=",
+    "requires_body",
+    "binary_body_mode",
+    "data-type",
+    "statusCode",
+    "mock-data-is-base64",
+    "[Argument]",
+    "未转换",
+    "E_UNSUPPORTED",
+)
+
+
+# ---------------------------------------------------------------------------
+# Validator
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class BundleContext:
+    root: Path
+    public_base: str = ""
+    known_policies: set[str] = field(
+        default_factory=lambda: set(cfg.STASH_BUILTIN_POLICIES) | {"Proxy"}
+    )
+    known_rule_types: set[str] = field(
+        default_factory=lambda: {
+            "DOMAIN",
+            "DOMAIN-SUFFIX",
+            "DOMAIN-KEYWORD",
+            "DOMAIN-REGEX",
+            "DOMAIN-WILDCARD",
+            "USER-AGENT",
+            "URL-REGEX",
+            "IP-CIDR",
+            "IP-CIDR6",
+            "IP-ASN",
+            "GEOIP",
+            "DST-PORT",
+            "SRC-PORT",
+            "SRC-IP",
+            "NETWORK",
+            "PROTOCOL",
+            "PROCESS-NAME",
+            "PROCESS-PATH",
+            "SCRIPT",
+            "AND",
+            "OR",
+            "NOT",
+            "MATCH",
+        }
+    )
+    providers: dict[str, dict] = field(default_factory=dict)
+    provider_file: dict[str, str] = field(default_factory=dict)
+    assets: dict[str, str] = field(default_factory=dict)  # relpath -> sha256
+    diagnostics: list[Diagnostic] = field(default_factory=list)
+
+    def error(self, code: str, message: str, path: str = "") -> None:
+        self.diagnostics.append(Diagnostic(code, message, path))
+
+    def warn(self, code: str, message: str, path: str = "") -> None:
+        self.diagnostics.append(
+            Diagnostic(code, message, path, blocking=False, severity="warning")
+        )
+
+
+def _expected_mock_headers(content_type: str) -> dict[str, str]:
+    return {"Content-Type": content_type}
+
+
+def validate_mock(entry, ctx: BundleContext, path: str) -> None:
+    if not isinstance(entry, dict):
+        ctx.error("E_MOCK_NOT_MAPPING", f"mock item is {type(entry).__name__}", path)
+        return
+    extra = set(entry) - cfg.MOCK_FIELDS
+    if extra:
+        ctx.error("E_MOCK_UNKNOWN_FIELD", f"mock has unsupported fields: {sorted(extra)}", path)
+    missing = cfg.MOCK_FIELDS - set(entry)
+    for required in ("match", "status-code"):
+        if required in missing:
+            ctx.error("E_MOCK_MISSING_FIELD", f"mock is missing {required!r}", path)
+    if "text" in entry and "base64" in entry:
+        ctx.error("E_MOCK_TEXT_AND_BASE64", "mock must use exactly one of text/base64", path)
+    if "text" not in entry and "base64" not in entry:
+        ctx.error("E_MOCK_BODY_MISSING", "mock must define text or base64", path)
+    if isinstance(entry.get("match"), str):
+        problem = stash_regex_problem(strip_stash_regex_escapes(entry["match"]))
+        if problem:
+            ctx.error("E_MOCK_REGEX", f"mock match {problem}: {entry['match'][:120]}", path)
+    status = entry.get("status-code")
+    if not isinstance(status, int) or isinstance(status, bool):
+        ctx.error("E_MOCK_STATUS_TYPE", f"mock status-code must be an integer, got {status!r}", path)
+    elif not 100 <= status <= 599:
+        ctx.error("E_MOCK_STATUS_RANGE", f"mock status-code out of range: {status}", path)
+    headers = entry.get("headers")
+    if headers is not None:
+        if not isinstance(headers, dict):
+            ctx.error("E_MOCK_HEADERS_TYPE", "mock headers must be a mapping", path)
+        else:
+            for name, value in headers.items():
+                if not isinstance(name, str) or not name:
+                    ctx.error("E_MOCK_HEADER_NAME", f"invalid mock header name {name!r}", path)
+                if not isinstance(value, (str, int, float)):
+                    ctx.error(
+                        "E_MOCK_HEADER_VALUE_TYPE",
+                        f"mock header {name!r} value must be scalar, got {type(value).__name__}",
+                        path,
                     )
-                    if not ok:
-                        add("BODY", "E_JSON_PATH_INVALID", f"{p.name}: json-del 路径非法 '{token[:60]}'（Stash 会用 jq 编译，需合法标识符）: {s[:120]}")
-                        break
-            # json-add/json-replace：path value 成对出现，路径位必须合法，
-            # 值位不允许残留 JSON 数组（Stash 只接受单个 jq 字面量）。
-            if act in {"response-json-add", "request-json-add",
-                       "response-json-replace", "request-json-replace"}:
-                path_re = re.compile(r"^[A-Za-z0-9_@-]+(?:\.[A-Za-z0-9_@-]+|\[\d+\])*$")
-                seg_re = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-                toks = expr.split()
-                if len(toks) % 2:
-                    add("BODY", "E_JSON_PAIR_ODD", f"{p.name}: json-add/json-replace 需要成对 path value: {s[:160]}")
-                else:
-                    for index in range(0, len(toks), 2):
-                        path_token = toks[index]
-                        ok = bool(path_re.match(path_token)) and all(
-                            seg_re.match(seg.split("[", 1)[0]) for seg in path_token.split(".")
-                        )
-                        if not ok:
-                            add("BODY", "E_JSON_PATH_INVALID", f"{p.name}: json-add/json-replace 路径非法 '{path_token[:60]}': {s[:120]}")
-                            break
-                    for value_token in toks[1::2]:
-                        if "[" in value_token or "]" in value_token:
-                            add("BODY", "E_JSON_VALUE_ARRAY", f"{p.name}: json-add/json-replace 值不得为数组 '{value_token[:60]}': {s[:120]}")
-                            break
-        # RE2 for match pattern (first token)
-        pat = parts[0].strip("'\"") if parts else ""
-        try:
-            if HAS_RE2:
-                re2lib.compile(pat)
+    content_type = ""
+    if isinstance(headers, dict):
+        for key, value in headers.items():
+            if str(key).lower() == "content-type":
+                content_type = str(value)
+    if "base64" in entry:
+        body = entry["base64"]
+        if not isinstance(body, str):
+            ctx.error("E_MOCK_BASE64_TYPE", "mock base64 body must be a string", path)
+        else:
+            try:
+                base64.b64decode(body, validate=True)
+            except (binascii.Error, ValueError) as exc:
+                ctx.error("E_MOCK_BASE64_INVALID", f"mock base64 does not decode: {exc}", path)
+    if "text" in entry and not isinstance(entry["text"], str):
+        ctx.error("E_MOCK_TEXT_TYPE", "mock text body must be a string", path)
+    if not content_type:
+        ctx.warn("E_MOCK_NO_CONTENT_TYPE", "mock does not set Content-Type", path)
+
+
+def validate_url_rewrite(rule, ctx: BundleContext, path: str) -> None:
+    if not isinstance(rule, str):
+        ctx.error("E_URL_NOT_STRING", f"url-rewrite item is {type(rule).__name__}", path)
+        return
+    text = rule.strip()
+    if "mock" in text.lower():
+        ctx.error("E_URL_MOCK", f"mock must live in http.mock, not url-rewrite: {text[:120]}", path)
+        return
+    parts = text.split()
+    if len(parts) < 2:
+        ctx.error("E_URL_TOKENS", f"url-rewrite needs at least pattern+action: {text[:120]}", path)
+        return
+    pattern = parts[0]
+    problem = stash_regex_problem(strip_stash_regex_escapes(pattern))
+    if problem:
+        ctx.error("E_URL_REGEX", f"url pattern {problem}: {pattern[:120]}", path)
+    action = parts[-1].lower()
+    if action in cfg.URL_REJECT_ACTIONS:
+        if len(parts) != 3 or parts[1] != "-":
+            ctx.error(
+                "E_URL_REJECT_SHAPE",
+                f'reject rule must be "pattern - reject": {text[:140]}',
+                path,
+            )
+        return
+    if action in cfg.URL_REDIRECT_ACTIONS:
+        if len(parts) < 3:
+            ctx.error("E_URL_REDIRECT_TARGET", f"redirect rule has no target: {text[:140]}", path)
+            return
+        target = " ".join(parts[1:-1])
+        if target == "-":
+            ctx.error("E_URL_REDIRECT_PLACEHOLDER", f"redirect target is '-': {text[:140]}", path)
+        if action in {"302", "307"} and not target.lower().startswith(("http://", "https://")):
+            ctx.error(
+                "E_URL_REDIRECT_TARGET",
+                f"{action} target must be an absolute URL: {target[:120]}",
+                path,
+            )
+        if "${" in target or "$1" in target or "$2" in target:
+            ctx.error(
+                "E_URL_UNDOCUMENTED_CAPTURE",
+                "capture substitution in url-rewrite targets is not documented by Stash; "
+                f"generate a request script instead: {text[:140]}",
+                path,
+            )
+        return
+    ctx.error("E_URL_ACTION_UNKNOWN", f"unsupported url-rewrite action {action!r}", path)
+
+
+def validate_header_rewrite(rule, ctx: BundleContext, path: str) -> None:
+    if not isinstance(rule, str):
+        ctx.error("E_HEADER_NOT_STRING", f"header-rewrite item is {type(rule).__name__}", path)
+        return
+    parts = rule.split()
+    if len(parts) < 2:
+        ctx.error("E_HEADER_TOKENS", f"header-rewrite needs pattern+action: {rule[:120]}", path)
+        return
+    pattern = parts[0]
+    problem = stash_regex_problem(strip_stash_regex_escapes(pattern))
+    if problem:
+        ctx.error("E_HEADER_REGEX", f"header pattern {problem}: {pattern[:120]}", path)
+    action = parts[1].lower()
+    if action not in cfg.HEADER_ACTIONS:
+        ctx.error("E_HEADER_ACTION", f"unsupported header action {action!r}", path)
+        return
+    for legacy in ("- header", "header-add", "header-del", "response-header"):
+        if legacy in rule:
+            ctx.error("E_HEADER_LEGACY", f"legacy header syntax detected: {rule[:120]}", path)
+            break
+    name = parts[2] if len(parts) > 2 else ""
+    if not name:
+        ctx.error("E_HEADER_NAME", f"header action {action} needs a header name", path)
+        return
+    value = " ".join(parts[3:])
+    if action.endswith("-del"):
+        if value:
+            ctx.error("E_HEADER_DEL_VALUE", f"header del must not carry a value: {rule[:120]}", path)
+    elif not value:
+        ctx.error("E_HEADER_VALUE_MISSING", f"header action {action} needs a value", path)
+    elif "${" in value:
+        ctx.error("E_HEADER_PLACEHOLDER", f"unexpanded placeholder in header value: {value[:80]}", path)
+
+
+def validate_body_rewrite(rule, ctx: BundleContext, path: str) -> None:
+    if not isinstance(rule, str):
+        ctx.error("E_BODY_NOT_STRING", f"body-rewrite item is {type(rule).__name__}", path)
+        return
+    text = rule.strip()
+    if not text:
+        ctx.error("E_BODY_EMPTY", "empty body-rewrite rule", path)
+        return
+    parts = text.split(None, 2)
+    if len(parts) < 3:
+        ctx.error("E_BODY_TOKENS", f"body-rewrite needs match+action+expression: {text[:120]}", path)
+        return
+    pattern, action, expression = parts
+    problem = stash_regex_problem(strip_stash_regex_escapes(pattern))
+    if problem:
+        ctx.error("E_BODY_REGEX", f"body pattern {problem}: {pattern[:120]}", path)
+    action = action.lower()
+    if action not in cfg.BODY_ACTIONS:
+        ctx.error("E_BODY_ACTION", f"unsupported body action {action!r}", path)
+        return
+    if "jq-path" in expression or "jq_file" in expression:
+        ctx.error("E_BODY_JQ_NOT_INLINED", "remote jq must be inlined before publishing", path)
+        return
+    if action in cfg.BODY_JQ_ACTIONS:
+        if not expression:
+            ctx.error("E_BODY_JQ_EMPTY", f"{action} needs a jq program", path)
+            return
+        if len(expression) >= 2 and expression[0] == expression[-1] and expression[0] in "\"'":
+            ctx.error(
+                "E_BODY_JQ_QUOTED",
+                f"jq program must not be a quoted string literal: {expression[:120]}",
+                path,
+            )
+        if not jq_structurally_balanced(expression):
+            ctx.error("E_BODY_JQ_UNBALANCED", f"unbalanced jq program: {expression[:160]}", path)
+        if expression.lstrip().startswith("#"):
+            ctx.error("E_BODY_JQ_COMMENT_ONLY", "jq program starts with a comment (no-op)", path)
+        if "${" in expression:
+            ctx.error("E_BODY_PLACEHOLDER", "unexpanded placeholder in jq program", path)
+        return
+    if action in cfg.BODY_JSON_ACTIONS:
+        tokens = expression.split()
+        if not tokens:
+            ctx.error("E_BODY_JSON_EMPTY", f"{action} needs a path", path)
+            return
+        if action.endswith("-del"):
+            bad = [token for token in tokens if not is_valid_json_path(token)]
+            if bad:
+                ctx.error("E_BODY_JSON_PATH", f"invalid json-del path(s): {bad[:3]}", path)
+        else:
+            if len(tokens) % 2:
+                ctx.error(
+                    "E_BODY_JSON_PAIRS",
+                    f"{action} needs path/value pairs, got {tokens[:6]}",
+                    path,
+                )
             else:
-                if re.search(r"\(\?<[=!]", pat) or r"\K" in pat:
-                    raise ValueError("lookahead/behind or \\K")
-                re.compile(pat)
-            stats["regex_ok"] += 1
-        except Exception as e:
-            add("REGEX", "E_RE2_UNSUPPORTED", f"{p.name}: RE2 不支持 body pattern '{pat[:80]}': {e}")
-            stats["regex_fail"] += 1
+                bad = [tokens[i] for i in range(0, len(tokens), 2) if not is_valid_json_path(tokens[i])]
+                if bad:
+                    ctx.error("E_BODY_JSON_PATH", f"invalid json path(s): {bad[:3]}", path)
+        return
+    if action in cfg.BODY_REGEX_ACTIONS:
+        match = re.match(r"^(\S+)\s+(\S+)$", expression, re.S)
+        if not match and expression.count(" ") == 0:
+            ctx.error("E_BODY_REPLACE_SHAPE", "replace-regex needs regex and replacement", path)
+            return
+        # Stash documents space-separated <regex> <replacement> pairs; an odd
+        # token count or a raw space inside either field would be ambiguous and
+        # is rejected instead of being silently truncated.
+        bits = expression.split()
+        if len(bits) < 2 or len(bits) % 2:
+            ctx.error(
+                "E_BODY_REPLACE_TOKENS",
+                "replace-regex expects <regex> <replacement> pairs without spaces: "
+                f"{expression[:160]}",
+                path,
+            )
+            return
+        for index in range(0, len(bits), 2):
+            regex, replacement = bits[index], bits[index + 1]
+            problem = stash_regex_problem(regex)
+            if problem:
+                ctx.error("E_BODY_REPLACE_REGEX", f"replacement regex {problem}: {regex[:120]}", path)
+            if "${" in replacement:
+                ctx.error("E_BODY_PLACEHOLDER", "unexpanded placeholder in replacement", path)
+        return
+    ctx.error("E_BODY_UNHANDLED", f"no validation for body action {action!r}", path)
 
-    # Layer 4: Script  全局 providers（kelee-scripts 聚合）视为可用，避免拆分后单文件误报
-    global_providers = getattr(check_file, "global_providers", None)
-    if global_providers is None:
+
+def jq_structurally_balanced(expression: str) -> bool:
+    pairs = {")": "(", "]": "[", "}": "{"}
+    stack: list[str] = []
+    in_string = False
+    i = 0
+    while i < len(expression):
+        ch = expression[i]
+        if in_string:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+        elif ch in "([{":
+            stack.append(ch)
+        elif ch in ")]}":
+            if not stack or stack.pop() != pairs[ch]:
+                return False
+        i += 1
+    return not stack and not in_string
+
+
+JSON_PATH_RE = re.compile(r"^[A-Za-z0-9_@-]+(?:\.[A-Za-z0-9_@-]+|\[\d+\])*$")
+JQ_SEGMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def is_valid_json_path(path: str) -> bool:
+    if not JSON_PATH_RE.match(path):
+        return False
+    return all(JQ_SEGMENT_RE.match(seg.split("[", 1)[0]) for seg in path.split("."))
+
+
+def validate_script(entry, ctx: BundleContext, path: str) -> None:
+    if not isinstance(entry, dict):
+        ctx.error("E_SCRIPT_NOT_MAPPING", f"script item is {type(entry).__name__}", path)
+        return
+    extra = set(entry) - cfg.SCRIPT_FIELDS
+    if extra:
+        ctx.error("E_SCRIPT_UNKNOWN_FIELD", f"script has unsupported fields: {sorted(extra)}", path)
+    name = entry.get("name")
+    if not isinstance(name, str) or not name:
+        ctx.error("E_SCRIPT_NAME", "script is missing a provider name", path)
+    elif name not in ctx.providers:
+        ctx.error("E_SCRIPT_PROVIDER_MISSING", f"script references unknown provider {name!r}", path)
+    match = entry.get("match")
+    if not isinstance(match, str) or not match:
+        ctx.error("E_SCRIPT_MATCH", "script is missing a match regex", path)
+    else:
+        problem = stash_regex_problem(strip_stash_regex_escapes(match))
+        if problem:
+            ctx.error("E_SCRIPT_REGEX", f"script match {problem}: {match[:120]}", path)
+    script_type = entry.get("type")
+    if script_type not in ("request", "response"):
+        ctx.error("E_SCRIPT_TYPE", f"script type must be request/response, got {script_type!r}", path)
+    for key in ("require-body", "binary-mode"):
+        if key in entry and not isinstance(entry[key], bool):
+            ctx.error("E_SCRIPT_BOOL", f"script {key} must be a boolean", path)
+    for key in ("timeout", "max-size"):
+        if key in entry and (
+            not isinstance(entry[key], (int, float)) or isinstance(entry[key], bool) or entry[key] <= 0
+        ):
+            ctx.error("E_SCRIPT_NUMBER", f"script {key} must be a positive number", path)
+    if "argument" in entry and not isinstance(entry["argument"], str):
+        ctx.error("E_SCRIPT_ARGUMENT_TYPE", "script argument must be a string", path)
+
+
+def validate_script_provider(name: str, info, ctx: BundleContext, path: str) -> None:
+    if not isinstance(info, dict):
+        ctx.error("E_PROVIDER_NOT_MAPPING", f"provider {name!r} is not a mapping", path)
+        return
+    extra = set(info) - cfg.SCRIPT_PROVIDER_FIELDS
+    if extra:
+        ctx.error("E_PROVIDER_UNKNOWN_FIELD", f"provider {name!r} has fields {sorted(extra)}", path)
+    url = info.get("url")
+    payload = info.get("payload")
+    provider_path = info.get("path")
+    if url is None and payload is None and provider_path is None:
+        ctx.error("E_PROVIDER_EMPTY", f"provider {name!r} has no url/payload/path", path)
+    if url is not None:
+        if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+            ctx.error("E_PROVIDER_URL", f"provider {name!r} has invalid url {url!r}", path)
+        else:
+            if "kelee.one" in url:
+                ctx.error(
+                    "E_PROVIDER_KELEE_URL",
+                    f"provider {name!r} still points at the Loon-UA-only kelee.one host: {url}",
+                    path,
+                )
+            if ctx.public_base:
+                validate_asset_reference(url, ctx, path, name=name)
+    if "interval" in info and (
+        not isinstance(info["interval"], (int, float))
+        or isinstance(info["interval"], bool)
+        or info["interval"] < 0
+    ):
+        ctx.error("E_PROVIDER_INTERVAL", f"provider {name!r} interval must be a non-negative number", path)
+    headers = info.get("headers")
+    if headers is not None and not isinstance(headers, dict):
+        ctx.error("E_PROVIDER_HEADERS", f"provider {name!r} headers must be a mapping", path)
+
+
+def validate_asset_reference(url: str, ctx: BundleContext, path: str, *, name: str = "") -> None:
+    base = ctx.public_base.rstrip("/")
+    if not url.startswith(base + "/"):
+        return  # external provider (e.g. GitHub release asset) - checked by build
+    rel = url[len(base) + 1 :]
+    if not rel.startswith("scripts/"):
+        ctx.error("E_ASSET_OUTSIDE_SCRIPTS", f"provider {name!r} URL is not under /scripts/: {url}", path)
+        return
+    filename = rel[len("scripts/") :]
+    if filename not in ctx.assets:
+        candidate = ctx.root / rel
+        if not candidate.is_file():
+            ctx.error(
+                "E_ASSET_DANGLING",
+                f"provider {name!r} references missing asset {rel}",
+                path,
+            )
+            return
+    if not re.match(r"^[0-9a-f]{12}-[^/]+$", filename):
+        ctx.warn(
+            "E_ASSET_LEGACY_URL",
+            f"provider {name!r} uses a non content-addressed script URL: {url}",
+            path,
+        )
+
+
+def validate_rules(rules, ctx: BundleContext, path: str) -> None:
+    if not isinstance(rules, list):
+        ctx.error("E_RULES_TYPE", "rules must be a list", path)
+        return
+    for rule in rules:
+        if not isinstance(rule, str):
+            ctx.error("E_RULE_NOT_STRING", f"rule is {type(rule).__name__}", path)
+            continue
+        validate_rule_line(rule.strip(), ctx, path)
+
+
+def _rule_policy_index(parts: list[str], known_policies: set[str]) -> int:
+    for index in range(len(parts) - 1, -1, -1):
+        if parts[index].strip() in known_policies:
+            return index
+    return -1
+
+
+def validate_rule_line(rule: str, ctx: BundleContext, path: str) -> None:
+    if not rule:
+        ctx.error("E_RULE_EMPTY", "empty rule", path)
+        return
+    if "${" in rule or "{cron}" in rule:
+        ctx.error("E_RULE_PLACEHOLDER", f"unexpanded placeholder in rule: {rule[:120]}", path)
+    match = re.match(r"^([A-Z][A-Z0-9-]*),(.*)$", rule, re.S)
+    if not match:
+        ctx.error("E_RULE_SHAPE", f"rule has no TYPE, payload, POLICY shape: {rule[:140]}", path)
+        return
+    rule_type, rest = match.group(1), match.group(2)
+    if rule_type not in ctx.known_rule_types:
+        ctx.error("E_RULE_TYPE", f"unsupported rule type {rule_type!r}: {rule[:120]}", path)
+        return
+    if rule_type in ("AND", "OR", "NOT"):
+        validate_logical_rule(rule_type, rest, ctx, path, expect_policy=True)
+        return
+    parts = split_top_level(rest)
+    policy_index = _rule_policy_index(parts, ctx.known_policies)
+    if policy_index < 0:
+        ctx.error("E_RULE_POLICY_MISSING", f"rule references no known policy: {rule[:140]}", path)
+        return
+    if policy_index == 0:
+        ctx.error("E_RULE_TOKENS", f"rule has no payload: {rule[:140]}", path)
+        return
+    if rule_type in ("DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD", "USER-AGENT"):
+        if not parts[0]:
+            ctx.error("E_RULE_PAYLOAD", f"{rule_type} rule has empty payload", path)
+    for payload_token in parts[:policy_index]:
+        stripped = payload_token.strip()
+        if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in "\"'":
+            ctx.error(
+                "E_RULE_QUOTED_VALUE",
+                f"rule payload must not keep Loon quoting ({stripped[:80]!r}); "
+                f"Stash treats the quotes literally: {rule[:120]}",
+                path,
+            )
+            break
+    # Anything after the policy is a rule option (no-resolve, no-track, ...).
+    for option in parts[policy_index + 1 :]:
+        if option and option not in {
+            "no-resolve",
+            "no-track",
+            "pre-matching",
+            "src",
+        }:
+            ctx.warn("E_RULE_OPTION", f"unrecognised rule option {option!r}: {rule[:120]}", path)
+
+
+def _logical_body_parts(rest: str, ctx: BundleContext, path: str, *, expect_policy: bool):
+    parts = split_top_level(rest)
+    policy_index = _rule_policy_index(parts, ctx.known_policies)
+    if policy_index >= 0:
+        body = ",".join(parts[:policy_index]).strip()
+        options = parts[policy_index + 1 :]
+        if options:
+            ctx.error("E_RULE_LOGICAL_OPTIONS", f"logical rule options are not supported: {options}", path)
+        return body, True
+    if expect_policy:
+        ctx.error("E_RULE_POLICY_MISSING", f"logical rule is missing its policy: {rest[:140]}", path)
+        return rest, False
+    return rest, False
+
+
+def validate_logical_rule(
+    rule_type: str, rest: str, ctx: BundleContext, path: str, *, expect_policy: bool
+) -> None:
+    body, _has_policy = _logical_body_parts(rest, ctx, path, expect_policy=expect_policy)
+    match = re.match(r"^\((.*)\)$", body.strip(), re.S)
+    if not match:
+        ctx.error(
+            "E_RULE_LOGICAL_GROUP",
+            f"{rule_type} sub-rules must be parenthesised: {body[:120]}",
+            path,
+        )
+        return
+    inner_parts = split_top_level(match.group(1))
+    if not inner_parts:
+        ctx.error("E_RULE_LOGICAL", f"{rule_type} rule has no sub-rules: {rest[:120]}", path)
+        return
+    for inner in inner_parts:
+        inner = inner.strip()
+        while inner.startswith("(") and inner.endswith(")"):
+            inner = inner[1:-1].strip()
+        if not inner:
+            continue
+        nested = re.match(r"^(AND|OR|NOT)\s*,(.*)$", inner, re.I | re.S)
+        if nested:
+            validate_logical_rule(
+                nested.group(1).upper(), nested.group(2), ctx, path, expect_policy=False
+            )
+            continue
+        if "," not in inner:
+            ctx.error("E_RULE_LOGICAL_ITEM", f"invalid nested rule {inner[:80]!r}", path)
+            continue
+        head = re.match(r"^([A-Z][A-Z0-9-]*),(.*)$", inner, re.S)
+        if not head:
+            ctx.error("E_RULE_LOGICAL_ITEM", f"invalid nested rule {inner[:80]!r}", path)
+            continue
+        if head.group(1) not in ctx.known_rule_types:
+            ctx.error("E_RULE_TYPE", f"unsupported nested rule type {head.group(1)!r}", path)
+
+
+def validate_http_section(http: dict, ctx: BundleContext, path: str) -> None:
+    allowed = {
+        "url-rewrite",
+        "header-rewrite",
+        "body-rewrite",
+        "mock",
+        "script",
+        "mitm",
+        "force-http-engine",
+        "hosts",
+    }
+    extra = set(http) - allowed
+    if extra:
+        ctx.error("E_HTTP_UNKNOWN_SECTION", f"http has unsupported sections: {sorted(extra)}", path)
+    for key in ("url-rewrite", "header-rewrite", "body-rewrite", "mock", "script", "mitm", "force-http-engine"):
+        if key in http and not isinstance(http[key], list):
+            ctx.error("E_HTTP_SECTION_TYPE", f"http.{key} must be a list", path)
+    for item in http.get("url-rewrite") or []:
+        validate_url_rewrite(item, ctx, path)
+    for item in http.get("header-rewrite") or []:
+        validate_header_rewrite(item, ctx, path)
+    for item in http.get("body-rewrite") or []:
+        validate_body_rewrite(item, ctx, path)
+    for item in http.get("mock") or []:
+        validate_mock(item, ctx, path)
+    for item in http.get("script") or []:
+        validate_script(item, ctx, path)
+    for host in http.get("mitm") or []:
+        if not isinstance(host, str) or not host:
+            ctx.error("E_MITM_ENTRY", f"invalid mitm host {host!r}", path)
+    for engine in http.get("force-http-engine") or []:
+        if not isinstance(engine, str) or not re.match(
+            r"^(\*|[A-Za-z0-9*][A-Za-z0-9.*-]*):\d+$", engine
+        ):
+            ctx.error("E_FORCE_ENGINE_ENTRY", f"invalid force-http-engine entry {engine!r}", path)
+
+
+def validate_override(data: dict, ctx: BundleContext, path: str) -> None:
+    if not isinstance(data, dict):
+        ctx.error("E_ROOT_TYPE", "override root must be a mapping", path)
+        return
+    if not data:
+        ctx.error("E_EMPTY_OVERRIDE", "override is empty", path)
+        return
+    name = data.get("name")
+    if not isinstance(name, str) or not name.strip():
+        ctx.error("E_NAME_MISSING", "override is missing a name", path)
+    if "icon" in data and not isinstance(data["icon"], str):
+        ctx.error("E_ICON_TYPE", "icon must be a string", path)
+    providers = data.get("script-providers")
+    if providers is not None:
+        if not isinstance(providers, dict):
+            ctx.error("E_PROVIDERS_TYPE", "script-providers must be a mapping", path)
+            providers = {}
+        for provider_name, info in providers.items():
+            validate_script_provider(str(provider_name), info, ctx, path)
+            # A .stoverride may declare its own providers (the build hoists them
+            # into kelee-scripts.stoverride, but the Stash override schema allows
+            # both). Keep the bundle provider precedence if the same name exists.
+            ctx.providers.setdefault(str(provider_name), info)
+            ctx.provider_file.setdefault(str(provider_name), path)
+    http = data.get("http")
+    if http is not None:
+        if not isinstance(http, dict):
+            ctx.error("E_HTTP_TYPE", "http must be a mapping", path)
+        else:
+            validate_http_section(http, ctx, path)
+    else:
+        http = {}
+    if "rules" in data:
+        validate_rules(data["rules"], ctx, path)
+    # Unknown top-level keys are a schema problem.
+    allowed_top = {
+        "name",
+        "desc",
+        "icon",
+        "author",
+        "homepage",
+        "date",
+        "version",
+        "category",
+        "openUrl",
+        "rules",
+        "http",
+        "hosts",
+        "script-providers",
+    }
+    extra = set(data) - allowed_top
+    if extra:
+        ctx.error("E_TOP_UNKNOWN_FIELD", f"override has unsupported top-level fields: {sorted(extra)}", path)
+    # Completeness: a converted override must carry at least one operative section.
+    operative = bool(data.get("rules")) or any(
+        http.get(key) for key in ("url-rewrite", "header-rewrite", "body-rewrite", "mock", "script")
+    ) or bool(data.get("hosts")) or bool(providers)
+    if not operative:
+        ctx.error("E_NO_OPERATIVE_CONTENT", "override has no rules/rewrites/scripts/hosts", path)
+    # Forbidden legacy keys / Loon leftovers anywhere in the file.
+    for text in iter_strings(data):
+        for marker in PLACEHOLDER_MARKERS:
+            if marker in text:
+                ctx.error("E_LEGACY_MARKER", f"legacy/leftover marker {marker!r} in {text[:120]}", path)
+                break
+    validate_body_rewrite_yaml_style(ctx.root / path, path, ctx)
+
+
+def validate_body_rewrite_yaml_style(file_path: Path, path: str, ctx: BundleContext) -> None:
+    try:
+        composed = yaml.compose(file_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 - main parse already reported
+        return
+    if not isinstance(composed, yaml.MappingNode):
+        return
+    http_node = None
+    for key_node, value_node in composed.value:
+        if key_node.value == "http":
+            http_node = value_node
+            break
+    if not isinstance(http_node, yaml.MappingNode):
+        return
+    body_node = None
+    for key_node, value_node in http_node.value:
+        if key_node.value == "body-rewrite":
+            body_node = value_node
+            break
+    if not isinstance(body_node, yaml.SequenceNode):
+        return
+    for item in body_node.value:
+        if isinstance(item, yaml.ScalarNode) and item.style not in {"'", '"'}:
+            ctx.error(
+                "E_BODY_YAML_UNQUOTED",
+                f"body-rewrite must stay one quoted scalar: {item.value[:120]}",
+                path,
+            )
+
+
+def load_provider_bundle(root: Path, ctx: BundleContext) -> None:
+    bundle_path = root / PROVIDER_BUNDLE
+    if not bundle_path.is_file():
+        return
+    try:
+        data = yaml.safe_load(bundle_path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:  # noqa: BLE001
+        ctx.error("E_PROVIDER_BUNDLE_YAML", f"provider bundle does not parse: {exc}", PROVIDER_BUNDLE)
+        return
+    providers = data.get("script-providers")
+    if not isinstance(providers, dict):
+        ctx.error("E_PROVIDER_BUNDLE_TYPE", "provider bundle has no script-providers mapping", PROVIDER_BUNDLE)
+        return
+    for name, info in providers.items():
+        ctx.providers.setdefault(str(name), info)
+        ctx.provider_file.setdefault(str(name), PROVIDER_BUNDLE)
+        validate_script_provider(str(name), info, ctx, PROVIDER_BUNDLE)
+    # Provider bundle itself must not reference Loon-UA hosts.
+    for name, info in providers.items():
+        url = info.get("url") if isinstance(info, dict) else None
+        if isinstance(url, str) and "kelee.one" in url:
+            ctx.error(
+                "E_PROVIDER_KELEE_URL",
+                f"provider bundle entry {name!r} points at kelee.one: {url}",
+                PROVIDER_BUNDLE,
+            )
+
+
+def validate_targets_file(root: Path, ctx: BundleContext, expected_targets: Optional[Iterable[str]]) -> None:
+    targets_path = root / "targets.json"
+    if not targets_path.is_file():
+        ctx.error("E_TARGETS_MISSING", "targets.json is missing", "targets.json")
+        return
+    try:
+        targets = json.loads(targets_path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        ctx.error("E_TARGETS_JSON", f"targets.json does not parse: {exc}", "targets.json")
+        return
+    if not isinstance(targets, list) or not targets:
+        ctx.error("E_TARGETS_EMPTY", "targets.json must be a non-empty list", "targets.json")
+        return
+    filenames = []
+    for item in targets:
+        filename = item.get("filename") if isinstance(item, dict) else None
+        if not filename:
+            ctx.error("E_TARGETS_ITEM", f"target item has no filename: {item!r}", "targets.json")
+            continue
+        filenames.append(filename)
+        output = root / str(filename).replace(".lpx", ".stoverride")
+        if not output.is_file():
+            ctx.error("E_TARGET_OUTPUT_MISSING", f"missing generated override {output.name}", str(output.name))
+    if expected_targets is not None:
+        expected = {str(name).replace(".lpx", ".stoverride") for name in expected_targets}
+        actual = {name.replace(".lpx", ".stoverride") for name in filenames}
+        missing = expected - actual
+        extra = actual - expected
+        if missing:
+            ctx.error("E_TARGETS_INCOMPLETE", f"targets.json is missing: {sorted(missing)}", "targets.json")
+        if extra:
+            ctx.error("E_TARGETS_EXTRA", f"targets.json has unexpected targets: {sorted(extra)}", "targets.json")
+
+
+def validate_assets(root: Path, ctx: BundleContext, assets: Optional[Mapping[str, str]]) -> None:
+    scripts_dir = root / "scripts"
+    if scripts_dir.is_dir():
+        for path in scripts_dir.glob("*.js"):
+            import hashlib
+
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            rel = path.relative_to(root).as_posix()
+            ctx.assets[rel] = digest
+    if assets:
+        for rel, expected in assets.items():
+            path = root / rel
+            if not path.is_file():
+                ctx.error("E_ASSET_MISSING", f"manifest asset {rel} is missing", rel)
+                continue
+            import hashlib
+
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            if expected and digest != expected:
+                ctx.error("E_ASSET_CORRUPT", f"manifest asset {rel} hash mismatch", rel)
+
+
+def validate_bundle(
+    root: Path | str,
+    *,
+    expected_targets: Optional[Iterable[str]] = None,
+    public_base: str = "",
+    known_policies: Optional[Iterable[str]] = None,
+    assets: Optional[Mapping[str, str]] = None,
+) -> DiagnosticCollection:
+    """Validate a generated bundle directory. Returns all diagnostics."""
+
+    root = Path(root)
+    ctx = BundleContext(root=root, public_base=(public_base or "").rstrip("/"))
+    if known_policies:
+        ctx.known_policies |= {str(p) for p in known_policies}
+    load_provider_bundle(root, ctx)
+    validate_assets(root, ctx, assets)
+    validate_targets_file(root, ctx, expected_targets)
+    for file_path in sorted(root.glob("*.stoverride")):
+        path = file_path.name
         try:
-            all_prov = {}
-            for q in p.parent.glob("*.stoverride"):
-                try:
-                    qd = yaml.safe_load(q.read_text(encoding="utf-8"))
-                    if isinstance(qd, dict) and isinstance(qd.get("script-providers"), dict):
-                        all_prov.update(qd["script-providers"])
-                except:
-                    pass
-            check_file.global_providers = all_prov
-            global_providers = all_prov
-        except:
-            global_providers = providers
-    check_providers = global_providers if global_providers else providers
-    for item in script_list:
-        if not isinstance(item, dict):
-            add("SCRIPT", "E_SCHEMA_TYPE", f"{p.name}: script 非 dict: {item}")
+            data = yaml.safe_load(file_path.read_text(encoding="utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            ctx.error("E_YAML_PARSE", f"{path} does not parse: {exc}", path)
             continue
-        name = item.get("name")
-        if not name:
-            add("SCRIPT", "E_SCHEMA_MISSING", f"{p.name}: script 缺 name")
+        validate_override(data, ctx, path)
+    if not list(root.glob("*.stoverride")):
+        ctx.error("E_BUNDLE_EMPTY", f"no .stoverride files in {root}")
+    # Every provider's URL that points at our host must resolve to a real asset.
+    for name in sorted(ctx.providers):
+        info = ctx.providers[name]
+        if not isinstance(info, dict):
             continue
-        if name not in providers and name not in check_providers:
-            add("SCRIPT", "E_SCRIPT_PROVIDER_MISSING", f"{p.name}: script {name} 无对应 provider")
-        # E_WRONG_REQUIRE_BODY
-        if "requires-body" in item:
-            add("SCRIPT", "E_WRONG_REQUIRE_BODY", f'{p.name}: script {name} 含 Loon 的 requires-body，应为 require-body')
-        if "binary-body-mode" in item:
-            add("SCRIPT", "E_WRONG_BINARY_MODE", f'{p.name}: script {name} 含 Loon 的 binary-body-mode，应为 binary-mode')
-        # also check wrong key requires-body in provider?
-        if "require-body" in item and not isinstance(item["require-body"], bool):
-            add("SCRIPT", "E_SCHEMA_TYPE", f'{p.name}: script {name} 的 require-body 应为 bool')
-        if "binary-mode" in item and not isinstance(item["binary-mode"], bool):
-            add("SCRIPT", "E_SCHEMA_TYPE", f'{p.name}: script {name} 的 binary-mode 应为 bool')
-    for pname, pinfo in providers.items():
-        if not isinstance(pinfo, dict) or "url" not in pinfo:
-            add("SCRIPT", "E_SCHEMA_MISSING", f"{p.name}: provider {pname} 缺 url")
-            continue
-        url = str(pinfo.get("url", ""))
-        if "kelee.one" in url and "headers" not in pinfo:
-            add("SCRIPT", "E_SCRIPT_HEADERS", f"{p.name}: provider {pname} 为 kelee.one 但缺 headers UA")
-        if "requires-body" in pinfo:
-            add("SCRIPT", "E_WRONG_REQUIRE_BODY", f"{p.name}: provider {pname} 含 requires-body，应为 require-body")
+        url = info.get("url")
+        if isinstance(url, str) and url.startswith((ctx.public_base + "/") if ctx.public_base else ()):
+            validate_asset_reference(url, ctx, ctx.provider_file.get(name, PROVIDER_BUNDLE), name=name)
+    return DiagnosticCollection(ctx.diagnostics)
 
-def main():
-    if not KELEE_DIR.exists():
-        print(f"目录不存在: {KELEE_DIR}", file=sys.stderr)
-        sys.exit(2)
-    for f in sorted(KELEE_DIR.glob("*.stoverride")):
-        stats["files"] += 1
-        check_file(f)
 
-    # Layer 7: Semantic — compare total counts vs previous? For now report counts
-    # If we have .hashes.json with previous rule counts, could compare but we just report
-    has_err = any(len(v) > 0 for v in errors.values())
+def validate_bundle_or_raise(
+    root: Path | str,
+    *,
+    expected_targets: Optional[Iterable[str]] = None,
+    public_base: str = "",
+    known_policies: Optional[Iterable[str]] = None,
+    assets: Optional[Mapping[str, str]] = None,
+) -> DiagnosticCollection:
+    """Validate and raise :class:`ValidationError` when anything blocks publish."""
 
-    # Report
-    print("Stash Validate Report")
-    print("======================")
-    print("")
-    def layer_status(name):
-        err = errors.get(name, [])
-        # For display names: map
-        return "PASS" if not err else "FAIL"
-    # YAML
-    print("YAML:")
-    print(f" {layer_status('YAML')}")
-    if errors["YAML"]:
-        for e in errors["YAML"]:
-            print(f"  - {e}")
-    print("")
-    print("URL Rewrite:")
-    print(f" {layer_status('URL')}")
-    print(f"  {stats['url']} rules")
-    if errors["URL"]:
-        for e in errors["URL"]:
-            print(f"  - {e}")
-    print("")
-    print("Header Rewrite:")
-    print(f" {layer_status('HEADER')}")
-    print(f"  {stats['header']} rules")
-    if errors["HEADER"]:
-        for e in errors["HEADER"]:
-            print(f"  - {e}")
-    print("")
-    print("Body Rewrite:")
-    print(f" {layer_status('BODY')}")
-    print(f"  {stats['body']} rules")
-    if errors["BODY"]:
-        for e in errors["BODY"]:
-            print(f"  - {e}")
-    print("")
-    print("Script:")
-    print(f" {layer_status('SCRIPT')}")
-    print(f"  {stats['script']} scripts")
-    print(f"  {stats['providers']} providers")
-    if errors["SCRIPT"]:
-        for e in errors["SCRIPT"]:
-            print(f"  - {e}")
-    print("")
-    print("MITM:")
-    # MITM currently not validated beyond presence, treat as WARN if uncertain
-    mitm_warn = []
-    # Could add check for hosts uncertain: e.g., missing 443?
-    print(f" {'PASS' if not mitm_warn else 'WARN'}")
-    print(f"  {stats['mitm']} hosts")
-    if mitm_warn:
-        for e in mitm_warn:
-            print(f"  - {e}")
-    print("")
-    print("Regex:")
-    re_status = "PASS" if not errors["REGEX"] else "FAIL"
-    print(f" {re_status}")
-    print(f"  RE2 {'with re2' if HAS_RE2 else 'fallback re'} compatible")
-    print(f"  {stats['regex_ok']} ok, {stats['regex_fail']} fail")
-    if errors["REGEX"]:
-        for e in errors["REGEX"]:
-            print(f"  - {e}")
-    print("")
-    print("Mock:")
-    print(f" {layer_status('MOCK')}")
-    print(f"  {stats.get('mock',0)} mocks")
-    if errors["MOCK"]:
-        for e in errors["MOCK"]:
-            print(f"  - {e}")
-    print("")
-    print("Semantic:")
-    print(f" {layer_status('SEMANTIC')}")
-    print(f"  Source rules: (not compared, target only)")
-    print(f"  Target rules: url {stats['url']}, header {stats['header']}, body {stats['body']}, script {stats['script']}")
-    if errors["SEMANTIC"]:
-        for e in errors["SEMANTIC"]:
-            print(f"  - {e}")
-    print("")
-    print("Result:")
-    print("")
-    print("PASS" if not has_err else "FAIL")
-    sys.exit(0 if not has_err else 2)
+    diagnostics = validate_bundle(
+        root,
+        expected_targets=expected_targets,
+        public_base=public_base,
+        known_policies=known_policies,
+        assets=assets,
+    )
+    errors = blocking_errors(diagnostics)
+    if errors:
+        raise ValidationError(errors)
+    return diagnostics
+
+
+def load_main_config_policies(path: Path) -> set[str]:
+    try:
+        data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001
+        return set()
+    names = set(cfg.STASH_BUILTIN_POLICIES)
+    for group in data.get("proxy-groups") or []:
+        if isinstance(group, dict) and isinstance(group.get("name"), str):
+            names.add(group["name"])
+    for proxy in data.get("proxies") or []:
+        if isinstance(proxy, dict) and isinstance(proxy.get("name"), str):
+            names.add(proxy["name"])
+    return names
+
+
+def format_report(diagnostics: list[Diagnostic], *, stream=sys.stdout) -> None:
+    blocking = [d for d in diagnostics if d.blocking]
+    warnings = [d for d in diagnostics if not d.blocking]
+    print("Stash bundle validation", file=stream)
+    print("=" * 40, file=stream)
+    for diagnostic in blocking:
+        print(f"  ERROR {diagnostic}", file=stream)
+    for diagnostic in warnings:
+        print(f"  WARN  {diagnostic}", file=stream)
+    print("", file=stream)
+    print(
+        f"Result: {'PASS' if not blocking else 'FAIL'} "
+        f"({len(blocking)} errors, {len(warnings)} warnings)",
+        file=stream,
+    )
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    parser = argparse.ArgumentParser(description="Validate generated KeLee Stash bundle")
+    parser.add_argument("--dir", type=Path, default=DEFAULT_DIR)
+    parser.add_argument("--public-base", default="")
+    parser.add_argument("--targets", type=Path, default=DEFAULT_DIR / "targets.json")
+    parser.add_argument("--main-config", type=Path, default=REPO_ROOT / "stash-ios.yaml")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+
+    if not args.dir.exists():
+        print(f"bundle directory does not exist: {args.dir}", file=sys.stderr)
+        return 2
+    expected = None
+    if args.targets.is_file():
+        try:
+            expected = [
+                item["filename"]
+                for item in json.loads(args.targets.read_text(encoding="utf-8"))
+                if isinstance(item, dict) and item.get("filename")
+            ]
+        except Exception:  # noqa: BLE001
+            expected = None
+    policies = load_main_config_policies(args.main_config) if args.main_config.is_file() else None
+    diagnostics = validate_bundle(
+        args.dir,
+        expected_targets=expected,
+        public_base=args.public_base,
+        known_policies=policies,
+    )
+    if args.json:
+        print(json.dumps([d.as_dict() for d in diagnostics], ensure_ascii=False, indent=2))
+    else:
+        format_report(diagnostics)
+    return 0 if not any(d.blocking for d in diagnostics) else 2
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -1,0 +1,7 @@
+{
+  "description": "Synthetic minimal protobuf body for Spotify's user-customization-service (ucsResponseV0 schema). Used only by the Node Stash-API shim in tests/test_spotify_argument_repro.py so the REAL upstream Spotify_remove_ads.js snapshot can run offline without network access or committed upstream code.",
+  "schema": "success{ resolveSuccess{ configuration{ assignedValues[ propertyId{scope,name} ] } } } + success{ accountAttributesSuccess{ accountAttributes{ x: boolValue(true) } } }",
+  "requestUrl": "https://spclient.wg.spotify.com/user-customization-service/v1/customization",
+  "base64": "Cj8KMQovGi0KKwoWaW9zLWZlYXR1cmUtbmF2aWdhdGlvbhIRdGFiX2NvbmZpZ3VyYXRpb24aCgoICgF4EgMSAQE=",
+  "length": 65
+}

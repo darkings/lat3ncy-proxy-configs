@@ -1,0 +1,5 @@
+#!name=Rules Unknown Type Contract
+#!desc=A rule type Stash does not understand must block the target
+
+[Rule]
+FOOBAR,x.example.com,REJECT

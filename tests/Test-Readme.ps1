@@ -85,4 +85,31 @@ if ($readme -notmatch 'Zed 流量进入 Proxy' -or $readme -notmatch 'Apple（�
 }
 if ($readme -notmatch 'KeLee.+403/503') { throw 'README must document KeLee remote-audit warning policy' }
 
+# KeLee conversion/build/publish contract: docs must match the implemented
+# behaviour and explicitly list what is NOT supported/verified.
+foreach ($conversionGuidance in @(
+    'KELEE_PUBLIC_BASE',
+    '内容哈希',
+    '重新验证',
+    '构建时固化',
+    '可编辑参数',
+    '真实客户端验收清单',
+    '-DryRun',
+    '-BuildOnly',
+    '同一把 `flock`',
+    'publish-release.sh',
+    'STASH_KEEP_RELEASES',
+    'tests/test_validate_stash.py',
+    'tests/test_publish_transaction.sh',
+    '不发布站点',
+    '不擅自改成'
+)) {
+    if ($readme -notmatch [regex]::Escape($conversionGuidance)) {
+        throw "Missing KeLee conversion/publish guidance: $conversionGuidance"
+    }
+}
+if ($readme -notmatch '未在真实 Stash 客户端') {
+    throw 'README must state that device/client verification is still pending'
+}
+
 Write-Output 'PASS: Loon, Stash, and Stelliberty README validation'

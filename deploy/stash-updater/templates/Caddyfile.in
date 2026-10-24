@@ -1,0 +1,37 @@
+# Rendered by deploy/stash-updater/render-config.sh (only with --install-caddyfile).
+#
+# Cache semantics expected by the publisher health check (order matters!):
+#   * `header` handlers are applied in config order and later Set() wins, so the
+#     legacy rule MUST come before the immutable hashed rule.
+#   * content-addressed files are anchored on the 12-hex sha prefix inside
+#     /scripts/ (e.g. /scripts/0123456789ab-foo.js, .jq); a loose `*-*.js` glob
+#     would also match legacy dashed aliases like bilibili-json-kokoryh.js.
+#   * /scripts/<sha12>-<slug>.(js|jq) -> immutable, long cache
+#   * /scripts/<slug>.js              -> no-cache, must revalidate
+#   * *.stoverride                    -> revalidated (small text)
+#   * / and /index.html               -> revalidated
+#
+# @@SITE_ROOT@@ defaults to the path mounted inside the Caddy container (/srv).
+:80 {
+	@stash host @@PUBLIC_HOST@@
+	handle @stash {
+		root * @@SITE_ROOT@@
+
+		encode zstd gzip
+
+		@legacy_scripts path_regexp ^/scripts/[^/]+\.js$
+		header @legacy_scripts Cache-Control "no-cache, must-revalidate"
+
+		@hashed_scripts path_regexp ^/scripts/[0-9a-f]{12}-[A-Za-z0-9._-]+\.(js|jq)$
+		header @hashed_scripts Cache-Control "public, max-age=31536000, immutable"
+
+		@overrides path *.stoverride
+		header @overrides Cache-Control "public, max-age=120, must-revalidate"
+
+		@entry path / /index.html
+		header @entry Cache-Control "no-cache, must-revalidate"
+
+		file_server
+	}
+	respond 404
+}

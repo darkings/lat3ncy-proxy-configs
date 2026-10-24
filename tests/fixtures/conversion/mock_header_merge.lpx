@@ -1,0 +1,12 @@
+#!name=Mock Header Merge Contract
+#!desc=A sibling response.header.add may only be merged into mocks whose request it matches
+
+[Rewrite]
+response if ${url} ~= /^https:\/\/grpc\.example\.com\/svc\/A$/i then response.body.mock("text", "AAAA", 200, true)
+response if ${url} ~= /^https:\/\/grpc\.example\.com\/svc\/B$/i then response.body.mock("text", "BBBB", 200, true)
+response if ${url} ~= /^https:\/\/grpc\.example\.com\/svc\/(A|B)$/i then response.header.add("grpc-status", "0")
+response if ${url} ~= /^https:\/\/api\.example\.com\/json\?/i then response.body.mock("json", "{\"ok\":true}")
+response if ${url} ~= /^https:\/\/api\.example\.com\/other$/i then response.header.add("x-leak", "no")
+
+[MitM]
+hostname=grpc.example.com, api.example.com

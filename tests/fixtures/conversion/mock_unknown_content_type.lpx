@@ -1,0 +1,5 @@
+#!name=Mock Unknown Content Type
+#!desc=Only Loon-documented mock content type names are accepted
+
+[Rewrite]
+response if ${url} ~= /^https:\/\/api\.example\.com\/bad$/i then response.body.mock("yaml", "a: 1")

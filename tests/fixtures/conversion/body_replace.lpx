@@ -1,0 +1,9 @@
+#!name=Body Replace Contract
+#!desc=response.body.replace becomes a native Stash response-replace-regex body-rewrite
+
+[Rewrite]
+response if ${url} ~= /^https?:\/\/cmds\.omesoft\.com\/HypnotistWS\.asmx/i then response.body.replace(/<GetADResult>\.\*\?<\/GetADResult>/, "<GetADResult>{\"ret\":0,\"msg\":\"正常\",\"err_code\":0,\"data\":{\"ad\":[]}}</GetADResult>")
+response if ${url} ~= /^https:\/\/api\.example\.com\/plain/i then response.body.replace(/foo\/bar/, "baz")
+
+[MitM]
+hostname=cmds.omesoft.com, api.example.com

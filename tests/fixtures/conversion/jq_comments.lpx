@@ -1,0 +1,9 @@
+#!name=JQ Comment Order Contract
+#!desc=Comments must be stripped before flattening so unbalanced brackets inside comments cannot swallow the program
+
+[Rewrite]
+response if ${url} ~= /^https:\/\/api\.example\.com\/feed\?/i then response.json.jq("# first ( unbalanced\n.data.items |= map(select(.ad == null)) # trailing [ unbalanced\n")
+response if ${url} ~= /^https:\/\/api\.example\.com\/remote\?/i then response.json.jq_file("https://jq.example.test/clean.jq")
+
+[MitM]
+hostname=api.example.com

@@ -1,0 +1,8 @@
+{
+  "https://kelee.one/Resource/JavaScript/Demo/clean.js": {
+    "file": "scripts/clean.js"
+  },
+  "https://kelee.one/Resource/JavaScript/Demo/ParentScript.js": {
+    "file": "scripts/parent.js"
+  }
+}

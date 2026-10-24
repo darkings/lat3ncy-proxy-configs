@@ -1,0 +1,7 @@
+#!name=Mock Bad Status
+#!desc=Mock status code must be a 100..599 integer literal
+
+[Rewrite]
+response if ${url} ~= /^https:\/\/api\.example\.com\/bad1$/i then response.body.mock("text", "x", 999)
+response if ${url} ~= /^https:\/\/api\.example\.com\/bad2$/i then response.body.mock("text", "x", 42)
+response if ${url} ~= /^https:\/\/api\.example\.com\/missing$/i then response.body.mock("text")

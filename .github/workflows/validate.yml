@@ -18,7 +18,7 @@ concurrency:
 jobs:
   configuration:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -39,12 +39,108 @@ jobs:
           ./tests/Test-StellibertyConfig.ps1
           ./tests/Test-PinduoduoCleanup.ps1
           ./tests/Test-DocumentPolicy.ps1
+          ./tests/Test-DeployDryRun.ps1
 
-      - name: Validate Python tooling
-        run: python -m py_compile scripts/generate_loon_configs.py scripts/generate_microsoft_cn.py scripts/check_remote_resources.py scripts/convert_kelee_lpx.py scripts/check_kelee_update.py scripts/generate_kelee_html.py scripts/validate_stash.py scripts/generate_stash_countries.py tests/test_kelee_conversion.py tests/test_stash_countries.py
+      - name: Validate publish transaction/rollback/retention logic
+        shell: bash
+        run: bash tests/test_publish_transaction.sh
+
+      - name: Byte-compile Python tooling, converter stack and tests
+        # scripts/*.py covers the converter orchestrator, kelee_config,
+        # kelee_assets, kelee_diagnostics, kelee_enhancements, kelee_semantics,
+        # loon_expr (Loon expression parser), the validator and the generators.
+        run: python -m py_compile scripts/*.py tests/*.py
+
+      - name: Validate Loon expression parser
+        run: python tests/test_loon_expr.py
 
       - name: Validate KeLee conversion semantics
         run: python tests/test_kelee_conversion.py
+
+      - name: Loon action variables / rule quoting
+        run: python tests/test_kelee_variables.py
+
+      - name: Validate KeLee build orchestrator (content-addressed assets, fingerprint, page)
+        run: python tests/test_kelee_build.py
+
+      - name: Validate KeLee update state / retry semantics
+        run: python tests/test_kelee_update_state.py
+
+      - name: Validate verifier suites (skip cleanly until/unless they land)
+        # The conversion verifier adds schema/audit/spotify repro tests over
+        # time; run them when present. The audit/spotify repros skip themselves
+        # when `.local/upstream-audit` is absent (never required in CI).
+        run: |
+          set -euo pipefail
+          for test in \
+            tests/test_validate_stash.py \
+            tests/test_audit_conversion.py \
+            tests/test_spotify_argument_repro.py \
+            tests/test_loon_expr.py; do
+            if [ -f "$test" ]; then
+              echo "::group::python $test"
+              python "$test"
+              echo "::endgroup::"
+            else
+              echo "not present yet (skipped): $test"
+            fi
+          done
+
+      - name: Build + validate a fixture bundle offline (structure and completeness)
+        # Real parse + structure + completeness validation of generated output:
+        # build the committed fixture bundle with the real converter/resolver/
+        # validator (no network) and validate it independently.
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/kelee-validate-bundle"
+          set +e
+          python scripts/check_kelee_update.py \
+            --out-dir "$out" \
+            --snapshot-dir tests/fixtures/build \
+            --public-base https://validate.invalid \
+            --json-report "$RUNNER_TEMP/kelee-validate-report.json" \
+            --quiet
+          code=$?
+          set -e
+          # 0 = already up to date, 2 = built; anything else is a failure.
+          if [ "$code" -ne 0 ] && [ "$code" -ne 2 ]; then
+            echo "KeLee fixture build failed with exit code $code"
+            exit "$code"
+          fi
+          python scripts/validate_stash.py \
+            --dir "$out" \
+            --targets "$out/targets.json" \
+            --public-base https://validate.invalid
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP']) / 'kelee-validate-bundle'
+          manifest = json.loads((root / '.build-manifest.json').read_text(encoding='utf-8'))
+          required = {'schema', 'public_base', 'fingerprint', 'sources', 'resources', 'outputs',
+                      'target_results', 'totals', 'errors', 'warnings'}
+          missing = required - set(manifest)
+          assert not missing, f'manifest missing fields: {sorted(missing)}'
+          assert manifest['public_base'] == 'https://validate.invalid'
+          assert not manifest['errors'], manifest['errors']
+          for relpath, meta in manifest['outputs'].items():
+              assert (root / relpath).is_file(), f'missing output: {relpath}'
+          providers = (root / 'kelee-scripts.stoverride').read_text(encoding='utf-8')
+          assert 'script-providers:' in providers, 'provider bundle has no providers'
+          html = (root / 'index.html').read_text(encoding='utf-8')
+          assert 'https://validate.invalid' in html
+          # No stale default host may survive anywhere in the generated bundle
+          # (overrides, provider bundle, page, targets.json, manifest, assets).
+          stale_host = 'stash.invalid'
+          for path in sorted(root.rglob('*')):
+              if not path.is_file():
+                  continue
+              text = path.read_text(encoding='utf-8', errors='ignore')
+              assert stale_host not in text, f'stale default host in generated file: {path}'
+          print(f'PASS: fixture bundle validated ({len(manifest["outputs"])} outputs, '
+                f'{len(manifest["providers"])} providers)')
+          PY
 
       - name: Validate Stash routing when remote rules are unavailable
         run: python tests/test_stash_routing.py

@@ -1,0 +1,5 @@
+#!name=Mock Invalid Base64
+#!desc=Mock base64 body must decode or the build is blocked
+
+[Rewrite]
+response if ${url} ~= /^https:\/\/api\.example\.com\/bad$/i then response.body.mock("png", "not-base64!!!", 200, true)

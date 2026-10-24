@@ -1,0 +1,5 @@
+#!name=Rules Unknown Policy Contract
+#!desc=A rule policy outside the explicit POLICY_MAP must block the target
+
+[Rule]
+DOMAIN,x.example.com,UNKNOWN-POLICY

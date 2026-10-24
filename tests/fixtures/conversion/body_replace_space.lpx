@@ -1,0 +1,5 @@
+#!name=Body Replace Space Contract
+#!desc=Stash body-rewrite cannot quote spaces; a space in regex/replacement must block
+
+[Rewrite]
+response if ${url} ~= /^https:\/\/api\.example\.com\/spaced/i then response.body.replace(/a b/, "c d")

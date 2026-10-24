@@ -28,7 +28,8 @@
     "stash.wiki",
     "sub-store-org.github.io",
     "t.me",
-    "www.gstatic.com"
+    "www.gstatic.com",
+    "sub-store.vercel.app"
   ],
   "local_first_prefixes": [
     "https://raw.githubusercontent.com/darkings/lat3ncy-proxy-configs/main/",

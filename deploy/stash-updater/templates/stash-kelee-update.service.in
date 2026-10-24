@@ -1,0 +1,14 @@
+[Unit]
+Description=Update and publish KeLee Stash overrides
+Wants=network-online.target
+After=network-online.target docker.service
+ConditionPathIsSymbolicLink=@@UPDATER_ROOT@@/current
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=-@@UPDATER_ROOT@@/env
+ExecStart=/usr/bin/env bash @@UPDATER_ROOT@@/current/run-updater.sh
+TimeoutStartSec=30min
+UMask=0022
+Nice=10

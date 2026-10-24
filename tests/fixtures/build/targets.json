@@ -1,0 +1,15 @@
+[
+  {
+    "filename": "DemoAds.lpx",
+    "name": "演示去广告",
+    "dependency": true
+  },
+  {
+    "filename": "DemoScript.lpx",
+    "name": "演示托管脚本"
+  },
+  {
+    "filename": "DemoNested.lpx",
+    "name": "演示嵌套运行时资源"
+  }
+]

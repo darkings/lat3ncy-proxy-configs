@@ -1,0 +1,17 @@
+#!name=演示去广告
+#!desc=构建测试用最小 Loon 插件：规则、MITM 与远程 jq 文件。
+#!author=fixture
+#!homepage=https://example.test/home
+#!icon=https://example.test/icon.png
+#!date=2026-01-02 03:04:05
+
+[Rule]
+DOMAIN,ads.example.test,REJECT
+DOMAIN-SUFFIX,metrics.example.test,REJECT
+
+[Rewrite]
+response if ${url} ~= /^https:\/\/api\.example\.test\/feed$/i then response.json.jq_file("https://kelee.one/Resource/JQLang/Demo/clean.jq")
+request if ${url} ~= /^https:\/\/api\.example\.test\/gone$/i then reject_dict(200)
+
+[MitM]
+hostname=api.example.test

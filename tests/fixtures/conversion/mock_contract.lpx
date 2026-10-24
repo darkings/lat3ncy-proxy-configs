@@ -1,0 +1,17 @@
+#!name=Mock Contract
+#!desc=Mock conversion fixture: content types, status codes, base64, header merge
+#!author=conversion-verifier
+#!homepage=https://example.test/mock
+#!date=2026-10-25 00:00:00
+
+[Rewrite]
+response if ${url} ~= /^https:\/\/api\.example\.com\/json\?/i then response.body.mock("json", "{\"ok\":true,\"items\":[1,2,3],\"nested\":{\"quote\":\"\\\"\"}}")
+response if ${url} ~= /^https:\/\/api\.example\.com\/teapot$/i then response.body.mock("text", "short and stout", 418)
+response if ${url} ~= /^https:\/\/api\.example\.com\/pixel\.png$/i then response.body.mock("png", "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==", 200, true)
+response if ${url} ~= /^https:\/\/other\.example\.com\/payload$/i then response.body.mock("html", "<div class=\"ad\">x</div>")
+response if ${url} ~= /^https:\/\/other\.example\.com\/payload$/i then response.header.add("x-other", "1")
+response if ${url} ~= /^https:\/\/api\.example\.com\/plain$/i then response.body.mock("plain", "ok")
+response if ${url} ~= /^https:\/\/headers\.example\.com\/x$/i then response.header.add("x-only", "v")
+
+[MitM]
+hostname=api.example.com, other.example.com, headers.example.com

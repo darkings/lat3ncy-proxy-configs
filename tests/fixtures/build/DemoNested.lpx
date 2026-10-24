@@ -1,0 +1,11 @@
+#!name=演示嵌套运行时资源
+#!desc=构建测试用最小 Loon 插件：父脚本在运行时引用动态加载的 chunk（模拟拼多多场景）。
+#!author=fixture
+#!icon=https://example.test/icon-nested.png
+#!date=2026-03-04 05:06:07
+
+[Script]
+http-response ^https:\/\/api\.example\.test\/nested script-path=https://kelee.one/Resource/JavaScript/Demo/ParentScript.js, requires-body=false
+
+[MitM]
+hostname=api.example.test

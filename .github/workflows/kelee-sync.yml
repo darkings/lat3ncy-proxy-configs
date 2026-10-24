@@ -1,75 +1,264 @@
-name: KeLee 19精选 · 每日同步与转换
+name: KeLee bundle build (offline checks + artifact)
+
+# This workflow only *reads* upstream resources and uploads the generated bundle
+# as a workflow artifact: it never commits, never pushes and never deploys.
+# Publishing is handled by the deploy tooling (deploy-stash.ps1 / the cloud
+# updater), which consumes the artifact/manifest produced here.
+#
+# Two jobs on purpose:
+#   * offline-checks — no network at all; conversion/build/parser/state logic.
+#     A flaky upstream/CDN can never mask a logic regression here.
+#   * build-bundle   — network reads (kelee.one LPX + mirrored scripts) and the
+#     actual publishable bundle build; it needs the repository variable
+#     KELEE_PUBLIC_BASE (no production host is hard-coded in CI or scripts).
 
 on:
   schedule:
-    - cron: '0 2 * * *'  # 每天 02:00 UTC
+    - cron: '0 2 * * *'  # daily 02:00 UTC: check upstream and build if changed
   workflow_dispatch:
   push:
     branches: [main]
     paths:
       - 'stash/overrides/kelee/targets.json'
-      - 'scripts/convert_kelee_lpx.py'
-      - 'scripts/check_kelee_update.py'
-      - 'scripts/generate_kelee_html.py'
+      - 'scripts/**'
+      - 'tests/fixtures/build/**'
+      - '.github/workflows/kelee-sync.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: kelee-sync
   cancel-in-progress: false
 
+env:
+  PYTHON_VERSION: '3.13'
+  PYTHONUNBUFFERED: '1'
+
 jobs:
-  sync:
+  offline-checks:
+    name: Offline conversion/build logic (no network)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
         run: python -m pip install --disable-pip-version-check --no-cache-dir PyYAML==6.0.2
 
-      - name: Check KeLee updates & reconvert
-        id: check
+      - name: Byte-compile converters, validator, parser and tests
+        run: python -m py_compile scripts/*.py tests/*.py
+
+      - name: Loon expression parser tests
+        run: python tests/test_loon_expr.py
+
+      - name: Conversion semantics tests
+        run: python tests/test_kelee_conversion.py
+
+      - name: Loon action variables / rule quoting
+        run: python tests/test_kelee_variables.py
+
+      - name: Build orchestrator tests (offline, deterministic)
+        run: python tests/test_kelee_build.py
+
+      - name: Update-state/fingerprint tests
+        run: python tests/test_kelee_update_state.py
+
+      - name: Verifier suites (skip cleanly until/unless they land)
+        # Schema/audit/spotify repro tests added by the conversion verifier;
+        # the audit/spotify repros skip themselves when `.local/upstream-audit`
+        # is absent, so this job stays network-free and CI-safe.
         run: |
+          set -euo pipefail
+          for test in \
+            tests/test_validate_stash.py \
+            tests/test_audit_conversion.py \
+            tests/test_spotify_argument_repro.py \
+            tests/test_loon_expr.py; do
+            if [ -f "$test" ]; then
+              echo "::group::python $test"
+              python "$test"
+              echo "::endgroup::"
+            else
+              echo "not present yet (skipped): $test"
+            fi
+          done
+
+      - name: Build a fixture bundle offline and validate it structurally
+        # Committed fixtures only: no kelee.one / CDN access. This replaces the
+        # previous `yaml ok / file count` placeholder with a real parse +
+        # structure + completeness validation of generated output.
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/kelee-fixture-bundle"
           set +e
-          python scripts/check_kelee_update.py
+          python scripts/check_kelee_update.py \
+            --out-dir "$out" \
+            --snapshot-dir tests/fixtures/build \
+            --public-base https://ci.invalid \
+            --json-report "$RUNNER_TEMP/kelee-fixture-report.json" \
+            --quiet
           code=$?
-          echo "exit_code=$code" >> $GITHUB_OUTPUT
-          if [ $code -eq 2 ]; then
-            echo "changed=true" >> $GITHUB_OUTPUT
-          elif [ $code -eq 0 ]; then
-            echo "changed=false" >> $GITHUB_OUTPUT
-          else
-            echo "changed=false" >> $GITHUB_OUTPUT
-            exit $code
+          set -e
+          # 0 = already up to date, 2 = built; anything else is a failure.
+          if [ "$code" -ne 0 ] && [ "$code" -ne 2 ]; then
+            echo "KeLee fixture build failed with exit code $code"
+            exit "$code"
           fi
-        shell: bash
+          python scripts/validate_stash.py \
+            --dir "$out" \
+            --targets "$out/targets.json" \
+            --public-base https://ci.invalid
+          test -f "$out/.build-manifest.json"
+          test -f "$out/index.html"
+          test -f "$out/kelee-scripts.stoverride"
 
-      - name: Verify generated artifacts
-        if: steps.check.outputs.changed == 'true'
-        run: |
-          ls -lh stash/overrides/kelee/*.stoverride | head -n 30
-          ls -lh stash/overrides/kelee/index.html stash/overrides/kelee/.hashes.json
-          python -c "import yaml, pathlib; print('yaml ok', len(list(pathlib.Path('stash/overrides/kelee').glob('*.stoverride'))))"
+  build-bundle:
+    name: Build publishable KeLee bundle
+    needs: offline-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Commit & push if changed
-        if: steps.check.outputs.changed == 'true'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check --no-cache-dir PyYAML==6.0.2
+
+      - name: Require KELEE_PUBLIC_BASE repository variable
+        env:
+          KELEE_PUBLIC_BASE: ${{ vars.KELEE_PUBLIC_BASE }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          # 生成物（.stoverride / index.html / .hashes.json / scripts/）不回写公有仓库，由云端任务按需发布
-          # 仅提交 targets.json / list.json（若被脚本更新）
-          git add stash/overrides/kelee/targets.json stash/overrides/kelee/list.json 2>/dev/null || true
-          if git diff --cached --quiet; then
-            echo "no diff to commit"
-            exit 0
+          set -euo pipefail
+          if [ -z "${KELEE_PUBLIC_BASE:-}" ]; then
+            echo "::error::Repository variable KELEE_PUBLIC_BASE is not set." \
+                 "Set it to the public https base of the published bundle (e.g. https://your-host.example)." \
+                 "This workflow refuses to build with an implicit/hard-coded host."
+            exit 1
           fi
-          git commit -m "chore(kelee): sync targets/list $(date -u +%Y-%m-%d)"
-          git push
+          echo "Building for public base: $KELEE_PUBLIC_BASE"
+
+      - name: Build bundle (upstream reads only)
+        env:
+          KELEE_PUBLIC_BASE: ${{ vars.KELEE_PUBLIC_BASE }}
+          KELEE_MIRROR_BASE: ${{ vars.KELEE_MIRROR_BASE }}
+        run: |
+          set -uo pipefail
+          # Exit code 2 means "bundle changed/built"; with GitHub's implicit
+          # `-e` that would abort the step, so disable errexit around the build
+          # and re-enable it after capturing the code.
+          set +e
+          python scripts/check_kelee_update.py \
+            --out-dir build/kelee \
+            --json-report build/kelee-build-report.json
+          code=$?
+          set -e
+          # 0 = up to date, 2 = built/changed; anything else is a failure.
+          if [ "$code" -ne 0 ] && [ "$code" -ne 2 ]; then
+            echo "::error::KeLee build failed with exit code $code"
+            exit "$code"
+          fi
+          echo "build_exit_code=$code" >> "$GITHUB_ENV"
+
+      - name: Validate generated bundle (independent pass)
+        env:
+          KELEE_PUBLIC_BASE: ${{ vars.KELEE_PUBLIC_BASE }}
+        run: |
+          set -euo pipefail
+          python scripts/validate_stash.py \
+            --dir build/kelee \
+            --targets build/kelee/targets.json \
+            --public-base "$KELEE_PUBLIC_BASE"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path('build/kelee')
+          manifest = json.loads((root / '.build-manifest.json').read_text(encoding='utf-8'))
+          assert manifest['schema'] >= 1
+          assert manifest['public_base'], 'manifest has no public base'
+          assert manifest['fingerprint'], 'manifest has no build fingerprint'
+          for relpath, meta in manifest['outputs'].items():
+              assert (root / relpath).is_file(), f'missing manifest output: {relpath}'
+              import hashlib
+              digest = hashlib.sha256((root / relpath).read_bytes()).hexdigest()
+              assert digest == meta['sha256'], f'output hash mismatch: {relpath}'
+          html = (root / 'index.html').read_text(encoding='utf-8')
+          assert manifest['public_base'] in html, 'index.html does not use the public base'
+          assert 'stash.invalid' not in html.replace(manifest['public_base'], '')
+          print(f"manifest OK: {len(manifest['outputs'])} outputs, "
+                f"{len(manifest['resources'])} resources, {len(manifest['providers'])} providers")
+          PY
+
+      - name: Verify build step exit-code handling
+        # Quick self-check for the `set -uo pipefail` + `$?` capture in the
+        # previous step: only 0 (up to date) and 2 (built) are acceptable.
+        run: |
+          set -euo pipefail
+          if [ -z "${build_exit_code:-}" ]; then
+            echo "::error::build step did not record build_exit_code"
+            exit 1
+          fi
+          case "$build_exit_code" in
+            0|2) echo "build_exit_code=$build_exit_code (accepted: 0=up-to-date, 2=built)" ;;
+            *) echo "::error::unexpected build exit code $build_exit_code"; exit 1 ;;
+          esac
+
+      - name: Verify generated bundle contents (manifest + hidden files)
+        # The artifact must contain the manifest (a dotfile: upload-artifact
+        # needs include-hidden-files) so deploy tooling can verify outputs.
+        run: |
+          set -euo pipefail
+          test -f build/kelee/.build-manifest.json
+          test -f build/kelee/index.html
+          test -f build/kelee/kelee-scripts.stoverride
+          test -f build/kelee/targets.json
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          root = Path('build/kelee')
+          manifest = json.loads((root / '.build-manifest.json').read_text(encoding='utf-8'))
+          assert manifest['schema'] >= 1
+          assert manifest['public_base'], 'manifest has no public base'
+          assert manifest['fingerprint'], 'manifest has no build fingerprint'
+          for relpath, meta in manifest['outputs'].items():
+              path = root / relpath
+              assert path.is_file(), f'missing manifest output: {relpath}'
+              assert hashlib.sha256(path.read_bytes()).hexdigest() == meta['sha256'], relpath
+          for relpath in manifest['resources'].values():
+              if relpath['relpath']:
+                  assert (root / relpath['relpath']).is_file(), relpath['relpath']
+              if relpath['legacy_alias']:
+                  assert (root / relpath['legacy_alias']).is_file(), relpath['legacy_alias']
+          html = (root / 'index.html').read_text(encoding='utf-8')
+          assert manifest['public_base'] in html, 'index.html does not use the public base'
+          assert manifest['fingerprint'][:12] in html, 'index.html does not show the fingerprint'
+          print(f"artefact OK: {len(manifest['outputs'])} outputs, "
+                f"{len(manifest['resources'])} resources, {len(manifest['providers'])} providers")
+          PY
+
+      - name: Upload generated bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: kelee-bundle
+          path: build/kelee
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+
+      - name: Upload build report
+        uses: actions/upload-artifact@v4
+        with:
+          name: kelee-build-report
+          path: build/kelee-build-report.json
+          if-no-files-found: error
+          retention-days: 14

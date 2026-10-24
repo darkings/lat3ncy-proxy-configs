@@ -1,0 +1,11 @@
+#!name=Script Unknown Protocol Contract
+#!desc=A script that consumes $argument but has no registered wire protocol must block
+
+[Argument]
+logLevel=select, "off", "debug"
+
+[Script]
+response if ${url} ~= /^https:\/\/unknown\.example\.com\/x\?/i then script("https://kelee.one/Resource/JavaScript/Test/argument_consumer.js", {${logLevel}}) with tag="Unknown"
+
+[MitM]
+hostname=unknown.example.com

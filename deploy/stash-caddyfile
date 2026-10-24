@@ -1,19 +1,58 @@
+# Caddy 2 site config for the published KeLee bundle.
+#
+# Ownership: the cloud updater renders its own copy from
+# deploy/stash-updater/templates/Caddyfile.in (render-config.sh); this tracked
+# file is the reference/default for self-managed sites and may be mounted
+# directly. The Host value below is the *rendered production value*; deploy
+# tooling substitutes the configured PublicHost for other domains and the
+# optional KELEE_PUBLIC_HOST environment variable overrides it here.
+#
+# Cache contract:
+#   /scripts/<sha12>-<slug>.js  content-addressed -> immutable, long cache
+#   /scripts/<slug>.js          legacy alias      -> must revalidate
+#   *.stoverride                revalidated (small text, may change in place)
+#   / and /index.html           revalidated
+#   targets.json / .build-manifest.json -> revalidated
+#
+# Matcher notes (Caddy 2.x, RE2):
+#   * `header` directives are applied in config order and a later `Set()` wins,
+#     so the legacy rule is declared first and the content-addressed rule last:
+#     a hashed filename matches both globs, and only this order leaves the
+#     immutable Cache-Control in place for it.
+#   * `path_regexp` is used instead of `/scripts/*-*.js` so legacy aliases that
+#     legitimately contain a dash (e.g. `bilibili-json-kokoryh.js`,
+#     `9410-b8806e870a26db7d.js`) are not misclassified as content-addressed.
+
 :80 {
-	@stash host stash.invalid
+	@stash host {$KELEE_PUBLIC_HOST:stash.invalid}
 	handle @stash {
-		root * /srv
+		root * {$KELEE_SITE_ROOT:/srv}
 
 		# 覆写文件是小型 YAML/文本，脚本是 MB 级 JS；不压缩时每次都要跨洋传输。
 		encode zstd gzip
 
-		@scripts path /scripts/*
-		header @scripts Cache-Control "public, max-age=31536000, immutable"
+		# Legacy (pre-migration) script aliases: installed overrides still point at
+		# /scripts/<slug>.js, and those bytes may change, so they must revalidate.
+		@legacy_scripts path_regexp ^/scripts/[^/]+\.js$
+		header @legacy_scripts Cache-Control "no-cache, must-revalidate"
 
+		# Content-addressed assets: the filename contains sha256[:12], so the bytes
+		# can never change under the same URL. Immutable is safe and required so
+		# Stash does not re-download the multi-MB mirrored scripts.
+		@hashed_scripts path_regexp ^/scripts/[0-9a-f]{12}-[A-Za-z0-9._-]+\.(js|jq)$
+		header @hashed_scripts Cache-Control "public, max-age=31536000, immutable"
+
+		# Overrides change in place when upstream changes; keep the revalidation
+		# window short so devices pick up a new bundle soon after publishing.
 		@overrides path *.stoverride
-		header @overrides Cache-Control "public, max-age=600"
+		header @overrides Cache-Control "public, max-age=120, must-revalidate"
+
+		# Build metadata used by the landing page / deployment verification.
+		@metadata path /targets.json /.build-manifest.json
+		header @metadata Cache-Control "public, max-age=60, must-revalidate"
 
 		@entry path / /index.html
-		header @entry Cache-Control "public, max-age=60"
+		header @entry Cache-Control "no-cache, must-revalidate"
 
 		file_server
 	}

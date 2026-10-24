@@ -1,0 +1,11 @@
+#!name=Capture Rewrite Contract
+#!desc=redirect(urlMatch.n) and url.replace templates become minimal request scripts
+#!author=conversion-verifier
+
+[Rewrite]
+request if ${url} ~= /(^https:\/\/c\.example\.com\/go\?u=)(https?.*)(&sig=.*)/i as urlMatch then redirect(307, "${urlMatch.2}")
+request if ${url} ~= /^https:\/\/t\.example\.com\/go\/(.*)\/end/i as urlMatch then redirect(307, "https://target.example.com/${urlMatch.1}/done")
+request if ${url} ~= /^https:\/\/api\.example\.com\/artist\/(.*)&platform=iphone/i as urlMatch then url.replace("https://api.example.com/artist/${urlMatch.1}&platform=ipad")
+
+[MitM]
+hostname=c.example.com, t.example.com, api.example.com

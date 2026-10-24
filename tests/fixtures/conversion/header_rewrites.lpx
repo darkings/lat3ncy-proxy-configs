@@ -1,0 +1,11 @@
+#!name=Header Rewrite Contract
+#!desc=request/response header add/set/del/replace map to http.header-rewrite
+
+[Rewrite]
+request if ${url} ~= /^https:\/\/api\.example\.com\/req\//i then request.header.add("x-req", "1")
+request if ${url} ~= /^https:\/\/api\.example\.com\/req\//i then request.header.set("user-agent", "test")
+request if ${url} ~= /^https:\/\/api\.example\.com\/req\//i then request.header.del("x-drop")
+response if ${url} ~= /^https:\/\/api\.example\.com\/resp\//i then response.header.add("cache-control", "no-store")
+
+[MitM]
+hostname=api.example.com

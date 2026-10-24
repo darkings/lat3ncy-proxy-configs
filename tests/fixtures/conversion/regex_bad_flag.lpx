@@ -1,0 +1,5 @@
+#!name=Regex Bad Flag Contract
+#!desc=Only i/m/s are supported by Loon and RE2; other flags must block
+
+[Rewrite]
+response if ${url} ~= /^https:\/\/api\.example\.com\/x/x then reject(404)

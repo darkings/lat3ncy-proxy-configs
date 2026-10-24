@@ -1,0 +1,13 @@
+#!name=Regex Flags Contract
+#!desc=Loon /i and /mis flags become RE2 inline modifiers; \/ is unescaped
+
+[Rewrite]
+request if ${url} ~= /^https:\/\/api\.example\.com\/CaseSensitive\?/i then reject(404)
+request if ${url} ~= /^https:\/\/api\.example\.com\/MultiFlag\//mis then reject(404)
+request if ${url} ~= /^https?:\/\/api\.example\.com\/escaped\/path/i then reject(404)
+
+[Script]
+response if ${url} ~= /^https:\/\/api\.example\.com\/script\/Case\//i then script("https://kelee.one/Resource/JavaScript/Spotify/Spotify_response.js")
+
+[MitM]
+hostname=api.example.com

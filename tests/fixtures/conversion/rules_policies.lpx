@@ -1,0 +1,18 @@
+#!name=Rules Policies Contract
+#!desc=Explicit policy mapping, option order and nested AND/OR preservation
+
+[Rule]
+DOMAIN,proxy.example.com,PROXY
+DOMAIN,direct.example.com,DIRECT
+DOMAIN,reject.example.com,REJECT
+DOMAIN-SUFFIX,drop.example.com,REJECT-DROP
+IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+AND, ((DOMAIN-SUFFIX, ads.example.com), (OR, ((DOMAIN-KEYWORD, stun), (DOMAIN-KEYWORD, tracker), (DOMAIN-KEYWORD, p2p)))), REJECT
+DOMAIN,img.example.com,REJECT-IMG
+DOMAIN,arr.example.com,REJECT-ARRAY
+DOMAIN,code.example.com,REJECT-200
+DOMAIN,img.example.com,REJECT-DICT
+DOMAIN-SUFFIX,normal.example.com,Proxy
+
+[MitM]
+hostname=api.example.com

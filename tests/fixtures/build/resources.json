@@ -1,0 +1,8 @@
+{
+  "https://kelee.one/Resource/JQLang/Demo/clean.jq": {
+    "file": "jq/clean.jq"
+  },
+  "https://kelee.one/Resource/JavaScript/Demo/chunk-abc123def456.js": {
+    "file": "scripts/chunk.js"
+  }
+}
