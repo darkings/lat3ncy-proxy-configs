@@ -105,7 +105,7 @@ DNS 使用两个国内 UDP 服务器并发解析，避免四路重复查询；�
 - **Script 参数**：`script(path, {${a}, ${b}})` 的第二参数按脚本真实解析协议编码：Spotify/Bilibili 为 JSON 字符串，WeatherKit 为 `&` 分隔键值串；`enable=${switch}` 按默认状态决定是否生成脚本（默认关闭的脚本不会启用，也不会伪造 `enable` 字段）。
 - **捕获改写**：`redirect(307, "${urlMatch.2}")` 生成最小 request 脚本返回 307 + Location；`url.replace` 生成 request URL 修改脚本；两者都只替换正则命中范围并保留未命中部分、编码与查询参数。Stash 官方文档未支持在 `url-rewrite` target 中做捕获替换，因此不猜语法。
 - **jq**：远程 jq 与内联 jq 先按行去除 `#` 注释（保留换行），再压平输出；无法获取或括号不配平时阻断发布并给出诊断。真实 jq 语法验证只在本地有 jq 可执行文件时执行，否则明确记为未验证。
-- **Header/Body**：`response.header.add` 使用 `http.header-rewrite`；只有当能**证明** header 正则覆盖某个 Mock 的全部 URL（完全相同的正则；或每条顶层分支都完整锚定且可完整枚举有限语言后逐个验证）时才合并进该 Mock 响应头；无法证明时保留独立 header-rewrite 规则，header 仍作用于其匹配的非 Mock 响应，绝不靠有限采样猜测。可证明全覆盖时不再重复输出 header 规则，部分覆盖时两者并存（Mock 内合并 + 普通响应规则）。`response.body.replace` 使用 `response-replace-regex` 并原样保留正则/替换/转义。
+- **Header/Body**：`response.header.add` 使用 `http.header-rewrite`；只有当能**证明** header 正则覆盖某个 Mock 的全部 URL（完全相同的正则；或每条顶层分支都完整锚定且可完整枚举有限语言后逐个验证）时才合并进该 Mock 响应头；无法证明时保留独立 header-rewrite 规则，header 仍作用于其匹配的非 Mock 响应，绝不靠有限采样猜测。可证明全覆盖时不再重复输出 header 规则，部分覆盖时两者并存（Mock 内合并 + 普通响应规则）。有限语言证明不接受前导或内联的 `(?m)`/`(?s)` 等无法安全枚举的 flags；`(?i)` 仅在能安全推导大小写语义时参与证明。`response.body.replace` 使用 `response-replace-regex` 并原样保留正则/替换/转义。
 - **动态值**：Action 值中的 `${参数}` 按 `[Argument]` 的构建时默认值展开（数字/布尔保留类型）；捕获变量 `${name.n}` 只用于 `url.replace`/`redirect` 模板；未知变量或捕获变量出现在不支持的位置会阻断该目标发布，不会被静默写进生成的 JavaScript 或 Stash 规则。
 - **规则与策略**：上游 `PROXY` 显式映射为主线配置的 `Proxy`，`DIRECT`/`REJECT`/`REJECT-DROP` 原样；`AND`/`OR`/`NOT` 保持嵌套结构，策略后的 `no-resolve` 等选项保留。未知策略或语法阻断该目标发布，不静默丢弃。
 - **冲突补丁与增强分开记录**：淘宝 `poplayer` 的额外 `reject-dict` 会让上游响应脚本失效，默认丢弃该增强并保留上游脚本；`Block_HTTPDNS` 的三个微信 HTTPDNS REJECT 与主配置 `DIRECT` 例外冲突，生成物改为显式 DIRECT 并记录冲突；QUIC UDP 回退、扩展到广告域名等属于本地增强，构建清单单独标注。

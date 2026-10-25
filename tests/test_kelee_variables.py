@@ -486,6 +486,9 @@ class HeaderCoverageProofTests(unittest.TestCase):
         self.assertIsNone(_finite_language(r"(?i)^a(^b)$"))
         self.assertIsNone(_finite_language(r"(?i)^a$|(?:^b)$"))
         self.assertIsNone(_finite_language(r"(?i)^a$|^b$|"))
+        self.assertIsNone(_finite_language(r"^(?i)b$"))
+        self.assertIsNone(_finite_language(r"^(?m)b$"))
+        self.assertIsNone(_finite_language(r"(?i)^(?i)b$"))
         self.assertEqual(_finite_language(r"(?i)^a$|^b$"), ["a", "b"])
         self.assertEqual(_finite_language(r"(?i)^(a|b)$"), ["a", "b"])
         self.assertEqual(_finite_language(r"(?i)^a$|^b?$"), ["", "a", "b"])
@@ -536,6 +539,25 @@ class HeaderCoverageProofTests(unittest.TestCase):
         mock = result.stash["http"]["mock"][0]
         self.assertEqual(mock["headers"].get("X-Safe"), "true")
         self.assertFalse(result.stash["http"].get("header-rewrite"))
+
+
+    def test_inline_case_flag_is_not_proven(self) -> None:
+        """REVIEW round 4 N1: ^(?i)b$ is case-insensitive inside the branch."""
+
+        result, _resolver = convert(
+            fixture(
+                [
+                    r'response if ${url} ~= /^(?i)b$/ '
+                    r'then response.body.mock("json", "{}", 200)',
+                    r'response if ${url} ~= /^b$/ '
+                    r'then response.header.add("X-Case", "1")',
+                ],
+            )
+        )
+        self.assertFalse(result.blocking, [str(d) for d in result.diagnostics])
+        mock = result.stash["http"]["mock"][0]
+        self.assertNotIn("X-Case", mock.get("headers", {}))
+        self.assertTrue(result.stash["http"].get("header-rewrite"))
 
 
 

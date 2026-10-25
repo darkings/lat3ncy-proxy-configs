@@ -1592,6 +1592,15 @@ def _finite_language(pattern: str, *, limit: int = FINITE_LANGUAGE_LIMIT) -> lis
             parsed = sre.parse(inner, flags=0)
         except Exception:  # noqa: BLE001
             return None
+        # Leading flags were stripped above and are handled by the caller's
+        # flag reasoning. Any remaining effective flags come from inline
+        # (?i)/(?m)/(?s) inside the branch: enumerating its literals would not
+        # represent the real language, so this is not provable here.
+        effective_flags = getattr(getattr(parsed, "state", None), "flags", 0) & (
+            re.IGNORECASE | re.MULTILINE | re.DOTALL | re.VERBOSE | re.ASCII
+        )
+        if effective_flags:
+            return None
         expanded = _expand_finite_tokens(list(parsed), limit)
         if expanded is None:
             return None
