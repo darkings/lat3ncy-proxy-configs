@@ -391,6 +391,7 @@ try {
     Assert-True "配置安装作为发布事务参数传入（不在锁外单独执行）" ($deployText -match "--render-config-script")
     Assert-True "发布事务携带 units/timer 渲染标志" ($deployText -match "--render-install-units --render-enable-timer")
     Assert-True "手工回滚提示先加载 EnvironmentFile" ($deployText -match 'set -a; \. \$script:RemoteUpdaterRoot/env; set \+a;')
+    Assert-True "New-RemoteEnvironmentPrefix 允许空 ExtraPairs（默认部署无严格缓存标志）" ($deployText -match '\[string\[\]\]\$ExtraPairs\s*=\s*@\(\)')
     Assert-True "远端配置渲染不再出现在 DryRun 的独立步骤" (-not ($dryRun.Output -match "步骤 6：渲染远端配置"))
 
     Write-Host ""

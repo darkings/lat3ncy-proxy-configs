@@ -484,7 +484,7 @@ function New-TarArchive {
 }
 
 function New-RemoteEnvironmentPrefix {
-    param([Parameter(Mandatory)]$Configuration, [Parameter(Mandatory)][string[]]$ExtraPairs)
+    param([Parameter(Mandatory)]$Configuration, [string[]]$ExtraPairs = @())
 
     $pairs = @(
         "STASH_REMOTE_ROOT='$script:RemoteRoot'",
