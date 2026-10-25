@@ -288,5 +288,137 @@ class MockHeaderMergeScopeTests(unittest.TestCase):
         self.assertNotIn("X-Other", mock.get("headers", {}))
 
 
+class HeaderCoverageProofTests(unittest.TestCase):
+    """REVIEW round 3: finite sampling is not a proof of regex coverage."""
+
+    def _header_rewrite_patterns(self, result) -> list[str]:
+        return [rule.split()[0] for rule in (result.stash["http"].get("header-rewrite") or [])]
+
+    def test_character_class_branch_is_not_merged(self) -> None:
+        result, _resolver = convert(
+            fixture(
+                [
+                    r'response if ${url} ~= /^https:\/\/api\.example\.com\/v1\/[ab]$/i '
+                    r'then response.body.mock("json", "{}", 200)',
+                    r'response if ${url} ~= /^https:\/\/api\.example\.com\/v1\/a$/i '
+                    r'then response.header.add("X-Only-A", "true")',
+                ],
+            )
+        )
+        self.assertFalse(result.blocking, [str(d) for d in result.diagnostics])
+        mock = result.stash["http"]["mock"][0]
+        self.assertNotIn("X-Only-A", mock.get("headers", {}))
+        header_patterns = self._header_rewrite_patterns(result)
+        self.assertTrue(header_patterns, "unproven header must stay a normal header-rewrite rule")
+
+        # URL-level semantics: /v1/a matches both; /v1/b only the mock.
+        import re
+
+        self.assertTrue(re.search(mock["match"], "https://api.example.com/v1/a"))
+        self.assertTrue(re.search(mock["match"], "https://api.example.com/v1/b"))
+        self.assertTrue(re.search(header_patterns[0], "https://api.example.com/v1/a"))
+        self.assertFalse(re.search(header_patterns[0], "https://api.example.com/v1/b"))
+
+    def test_unbounded_repetition_is_not_merged(self) -> None:
+        result, _resolver = convert(
+            fixture(
+                [
+                    r'response if ${url} ~= /^https:\/\/api\.example\.com\/v1\/a+$/i '
+                    r'then response.body.mock("json", "{}", 200)',
+                    r'response if ${url} ~= /^https:\/\/api\.example\.com\/v1\/a{1,2}$/i '
+                    r'then response.header.add("X-Limited", "true")',
+                ],
+            )
+        )
+        self.assertFalse(result.blocking, [str(d) for d in result.diagnostics])
+        mock = result.stash["http"]["mock"][0]
+        self.assertNotIn("X-Limited", mock.get("headers", {}))
+        self.assertTrue(self._header_rewrite_patterns(result))
+
+        import re
+
+        # /v1/aaa is matched by the mock but not by the header regex.
+        self.assertTrue(re.search(mock["match"], "https://api.example.com/v1/aaa"))
+        self.assertFalse(
+            re.search(self._header_rewrite_patterns(result)[0], "https://api.example.com/v1/aaa")
+        )
+
+    def test_identical_pattern_is_proven_and_merged(self) -> None:
+        result, _resolver = convert(
+            fixture(
+                [
+                    r'response if ${url} ~= /^https:\/\/api\.example\.com\/same$/i '
+                    r'then response.body.mock("json", "{}", 200)',
+                    r'response if ${url} ~= /^https:\/\/api\.example\.com\/same$/i '
+                    r'then response.header.add("X-Same", "1")',
+                ],
+            )
+        )
+        self.assertFalse(result.blocking, [str(d) for d in result.diagnostics])
+        self.assertEqual(
+            result.stash["http"]["mock"][0]["headers"].get("X-Same"), "1"
+        )
+        # Fully covered by the mock: no duplicate standalone rule needed.
+        self.assertFalse(result.stash["http"].get("header-rewrite"))
+
+    def test_partial_coverage_merges_and_keeps_standalone_rule(self) -> None:
+        result, _resolver = convert(
+            fixture(
+                [
+                    r'response if ${url} ~= /^https:\/\/api\.example\.com\/(a)$/i '
+                    r'then response.body.mock("json", "{}", 200)',
+                    r'response if ${url} ~= /^https:\/\/api\.example\.com\/(b)$/i '
+                    r'then response.body.mock("json", "{}", 301)',
+                    r'response if ${url} ~= /^https:\/\/api\.example\.com\/(a|c)$/i '
+                    r'then response.header.add("X-Partial", "yes")',
+                ],
+            )
+        )
+        self.assertFalse(result.blocking, [str(d) for d in result.diagnostics])
+        mocks = result.stash["http"]["mock"]
+        mock_a = next(entry for entry in mocks if entry["match"].endswith("(a)$"))
+        mock_b = next(entry for entry in mocks if entry["match"].endswith("(b)$"))
+        self.assertEqual(mock_a["headers"].get("X-Partial"), "yes")
+        self.assertNotIn("X-Partial", mock_b["headers"])
+        # /c is only covered by the header rule, so it must remain as a normal
+        # header-rewrite (merging into the mock must not drop it).
+        header_patterns = self._header_rewrite_patterns(result)
+        self.assertEqual(len(header_patterns), 1)
+        import re
+
+        self.assertTrue(re.search(header_patterns[0], "https://api.example.com/c"))
+        self.assertFalse(re.search(header_patterns[0], "https://api.example.com/b"))
+
+    def test_case_insensitive_mock_vs_sensitive_header_is_not_proven(self) -> None:
+        result, _resolver = convert(
+            fixture(
+                [
+                    r'response if ${url} ~= /^https:\/\/api\.example\.com\/ABC$/i '
+                    r'then response.body.mock("json", "{}", 200)',
+                    r'response if ${url} ~= /^https:\/\/api\.example\.com\/ABC$/ '
+                    r'then response.header.add("X-Case", "1")',
+                ],
+            )
+        )
+        self.assertFalse(result.blocking, [str(d) for d in result.diagnostics])
+        self.assertNotIn("X-Case", result.stash["http"]["mock"][0]["headers"])
+        self.assertTrue(result.stash["http"].get("header-rewrite"))
+
+    def test_unbounded_mock_language_is_not_proven(self) -> None:
+        result, _resolver = convert(
+            fixture(
+                [
+                    r'response if ${url} ~= /^https:\/\/api\.example\.com\/.*\/tail$/i '
+                    r'then response.body.mock("json", "{}", 200)',
+                    r'response if ${url} ~= /^https:\/\/api\.example\.com\/x\/tail$/i '
+                    r'then response.header.add("X-Any", "1")',
+                ],
+            )
+        )
+        self.assertFalse(result.blocking, [str(d) for d in result.diagnostics])
+        self.assertNotIn("X-Any", result.stash["http"]["mock"][0]["headers"])
+        self.assertTrue(result.stash["http"].get("header-rewrite"))
+
+
 if __name__ == "__main__":
     unittest.main()

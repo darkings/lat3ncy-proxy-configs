@@ -27,6 +27,7 @@ source "$SCRIPT_DIR/lib/common.sh"
 usage() {
     cat <<'EOF'
 用法：health-check.sh --release <发布目录> [--attempts N] [--delay 秒] [--timeout 秒]
+                     [--public-base URL] [--public-host HOST] [--strict-cache-headers 0|1]
 
 环境变量（通常来自 systemd EnvironmentFile）：
   STASH_PUBLIC_HOST / KELEE_PUBLIC_BASE   公共站点地址（Host 头）
@@ -37,6 +38,9 @@ EOF
 }
 
 RELEASE_DIR=""
+PUBLIC_BASE_ARG=""
+PUBLIC_HOST_ARG=""
+STRICT_CACHE_ARG=""
 while (($#)); do
     case "$1" in
     --release)
@@ -59,6 +63,21 @@ while (($#)); do
         STASH_HEALTH_TIMEOUT="$2"
         shift 2
         ;;
+    --public-base)
+        [[ $# -ge 2 ]] || die_config "--public-base 缺少参数"
+        PUBLIC_BASE_ARG="$2"
+        shift 2
+        ;;
+    --public-host)
+        [[ $# -ge 2 ]] || die_config "--public-host 缺少参数"
+        PUBLIC_HOST_ARG="$2"
+        shift 2
+        ;;
+    --strict-cache-headers)
+        [[ $# -ge 2 ]] || die_config "--strict-cache-headers 缺少参数"
+        STRICT_CACHE_ARG="$2"
+        shift 2
+        ;;
     -h | --help)
         usage
         exit 0
@@ -70,6 +89,17 @@ while (($#)); do
 done
 
 [[ -n "$RELEASE_DIR" ]] || die_config "--release 必填"
+if [[ -n "$PUBLIC_BASE_ARG" || -n "$PUBLIC_HOST_ARG" ]]; then
+    [[ -n "$PUBLIC_BASE_ARG" && -n "$PUBLIC_HOST_ARG" ]] ||
+        die_config "--public-base 与 --public-host 必须同时提供"
+    KELEE_PUBLIC_BASE="$PUBLIC_BASE_ARG"
+    KELEE_MIRROR_BASE="$PUBLIC_BASE_ARG"
+    STASH_PUBLIC_HOST="$PUBLIC_HOST_ARG"
+    export KELEE_PUBLIC_BASE KELEE_MIRROR_BASE STASH_PUBLIC_HOST
+fi
+if [[ -n "$STRICT_CACHE_ARG" ]]; then
+    STASH_STRICT_CACHE_HEADERS="$STRICT_CACHE_ARG"
+fi
 resolve_public_config
 resolve_http_config
 require_cmd curl sha256sum grep sed cut tr mktemp sort head find

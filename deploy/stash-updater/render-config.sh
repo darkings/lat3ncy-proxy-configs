@@ -161,11 +161,25 @@ render_file_to() {
 
 mkdir -p "$STATE_DIR" "$LOG_DIR" "$SYSTEMD_DIR" || die "$EX_STATE" "无法创建状态/日志/systemd 目录"
 
-# 1) EnvironmentFile (single source for the cloud timer).
-render_file_to env.in "$ENV_FILE"
-log "已渲染 EnvironmentFile：$ENV_FILE"
+# ---------------------------------------------------------------------------
+# Stage every rendered file first, validate the staged content, and only then
+# install it over the live files. A render/validation error therefore cannot
+# leave a half-written EnvironmentFile/systemd unit/Caddyfile behind; the
+# publish transaction additionally snapshots and restores the old config.
+# ---------------------------------------------------------------------------
+RENDER_STAGE="$(mktemp -d "$SYSTEMD_DIR/.render.XXXXXX")" ||
+    die "$EX_STATE" "无法创建配置暂存目录：$SYSTEMD_DIR"
+STAGE_ENV="$RENDER_STAGE/env"
+STAGE_SERVICE="$RENDER_STAGE/stash-kelee-update.service"
+STAGE_TIMER="$RENDER_STAGE/stash-kelee-update.timer"
+STAGE_CADDYFILE="$RENDER_STAGE/Caddyfile"
+cleanup_render_stage() {
+    rm -rf -- "$RENDER_STAGE" 2>/dev/null || true
+}
+trap cleanup_render_stage EXIT
 
-# Self-check the rendered env before anything depends on it.
+# 1) EnvironmentFile (single source for the cloud timer).
+render_template env.in "$STAGE_ENV"
 env_expected=(
     "STASH_REMOTE_ROOT=$STASH_REMOTE_ROOT"
     "STASH_UPDATER_ROOT=$STASH_UPDATER_ROOT"
@@ -175,17 +189,49 @@ env_expected=(
     "STASH_HTTP_PORT=$STASH_HTTP_PORT"
 )
 for expected_line in "${env_expected[@]}"; do
-    grep -qxF "$expected_line" "$ENV_FILE" || die_validation "渲染后的 EnvironmentFile 缺少/错误：$expected_line"
+    grep -qxF "$expected_line" "$STAGE_ENV" || die_validation "暂存的 EnvironmentFile 缺少/错误：$expected_line"
 done
 
-# 2) systemd units.
-render_file_to stash-kelee-update.service.in "$SERVICE_OUT"
-render_file_to stash-kelee-update.timer.in "$TIMER_OUT"
-grep -qF "EnvironmentFile=-$STASH_UPDATER_ROOT/env" "$SERVICE_OUT" ||
-    die_validation "service 单元 EnvironmentFile 未指向 $STASH_UPDATER_ROOT/env"
-grep -qF "ExecStart=/usr/bin/env bash $STASH_UPDATER_ROOT/current/run-updater.sh" "$SERVICE_OUT" ||
-    die_validation "service 单元 ExecStart 未指向 $STASH_UPDATER_ROOT/current/run-updater.sh"
-log "已渲染 systemd 单元：$SERVICE_OUT、$TIMER_OUT"
+# 2) systemd units (staged and validated before installation).
+render_template stash-kelee-update.service.in "$STAGE_SERVICE"
+render_template stash-kelee-update.timer.in "$STAGE_TIMER"
+grep -qF "EnvironmentFile=-$STASH_UPDATER_ROOT/env" "$STAGE_SERVICE" ||
+    die_validation "暂存的 service 单元 EnvironmentFile 未指向 $STASH_UPDATER_ROOT/env"
+grep -qF "ExecStart=/usr/bin/env bash $STASH_UPDATER_ROOT/current/run-updater.sh" "$STAGE_SERVICE" ||
+    die_validation "暂存的 service 单元 ExecStart 未指向 $STASH_UPDATER_ROOT/current/run-updater.sh"
+grep -qF "OnCalendar=" "$STAGE_TIMER" || die_validation "暂存的 timer 单元缺少 OnCalendar"
+
+# 3) Optional Caddyfile (host/root/cache policy plumbed through the template).
+if ((INSTALL_CADDYFILE == 1)); then
+    render_template Caddyfile.in "$STAGE_CADDYFILE"
+    grep -qF "@stash host $STASH_PUBLIC_HOST" "$STAGE_CADDYFILE" ||
+        die_validation "暂存的 Caddyfile host 匹配器未使用 $STASH_PUBLIC_HOST"
+    grep -qF "root * $CADDY_SITE_ROOT" "$STAGE_CADDYFILE" ||
+        die_validation "暂存的 Caddyfile 站点根未使用 $CADDY_SITE_ROOT"
+    legacy_line="$(grep -n '@legacy_scripts path_regexp' "$STAGE_CADDYFILE" | head -n 1 | cut -d: -f1)"
+    hashed_line="$(grep -n '@hashed_scripts path_regexp' "$STAGE_CADDYFILE" | head -n 1 | cut -d: -f1)"
+    [[ -n "$legacy_line" && -n "$hashed_line" && "$legacy_line" -lt "$hashed_line" ]] ||
+        die_validation "暂存的 Caddyfile 缓存规则顺序错误：legacy 必须位于 hashed 之前"
+    grep -qF '[0-9a-f]{12}-' "$STAGE_CADDYFILE" ||
+        die_validation "暂存的 Caddyfile 未按 12 位内容寻址前缀匹配 hashed 资产"
+    grep -qF 'immutable' "$STAGE_CADDYFILE" ||
+        die_validation "暂存的 Caddyfile 缺少 hashed 资产的 immutable 缓存策略"
+fi
+
+install_staged_file() {
+    local staged="$1" final="$2"
+    local tmp="${final}.tmp.$$"
+    mkdir -p "$(dirname "$final")" || return 1
+    cp -p "$staged" "$tmp" || { rm -f "$tmp" 2>/dev/null || true; return 1; }
+    mv -f "$tmp" "$final" || { rm -f "$tmp" 2>/dev/null || true; return 1; }
+    return 0
+}
+
+install_staged_file "$STAGE_ENV" "$ENV_FILE" || die "$EX_STATE" "无法安装暂存的 EnvironmentFile：$ENV_FILE"
+install_staged_file "$STAGE_SERVICE" "$SERVICE_OUT" || die "$EX_STATE" "无法安装暂存的 service 单元：$SERVICE_OUT"
+install_staged_file "$STAGE_TIMER" "$TIMER_OUT" || die "$EX_STATE" "无法安装暂存的 timer 单元：$TIMER_OUT"
+log "已安装渲染后的 EnvironmentFile：$ENV_FILE"
+log "已安装渲染后的 systemd 单元：$SERVICE_OUT、$TIMER_OUT"
 
 if ((INSTALL_UNITS == 1)); then
     require_cmd systemctl
@@ -205,30 +251,15 @@ if ((ENABLE_TIMER == 1)); then
     log "systemd timer 已启用：stash-kelee-update.timer（每日 03:20，带随机延迟）"
 fi
 
-# 3) Optional Caddyfile (host/root plumbed through the template).
 if ((INSTALL_CADDYFILE == 1)); then
     if [[ -f "$CADDYFILE_OUT" ]]; then
         backup="${CADDYFILE_OUT}.bak.$(date -u '+%Y%m%d-%H%M%S')"
         cp -p "$CADDYFILE_OUT" "$backup" || die_config "无法备份现有 Caddyfile：$CADDYFILE_OUT"
         log "已备份原 Caddyfile：$backup"
     fi
-    render_file_to Caddyfile.in "$CADDYFILE_OUT"
-    grep -qF "@stash host $STASH_PUBLIC_HOST" "$CADDYFILE_OUT" ||
-        die_validation "渲染后的 Caddyfile host 匹配器未使用 $STASH_PUBLIC_HOST"
-    grep -qF "root * $CADDY_SITE_ROOT" "$CADDYFILE_OUT" ||
-        die_validation "渲染后的 Caddyfile 站点根未使用 $CADDY_SITE_ROOT"
-    # Ordering matters: the legacy no-cache rule must precede the immutable
-    # hashed rule (later header handler wins), and the hashed matcher must be
-    # anchored on the 12-hex content address (not a loose *-* glob).
-    legacy_line="$(grep -n '@legacy_scripts path_regexp' "$CADDYFILE_OUT" | head -n 1 | cut -d: -f1)"
-    hashed_line="$(grep -n '@hashed_scripts path_regexp' "$CADDYFILE_OUT" | head -n 1 | cut -d: -f1)"
-    [[ -n "$legacy_line" && -n "$hashed_line" && "$legacy_line" -lt "$hashed_line" ]] ||
-        die_validation "渲染后的 Caddyfile 缓存规则顺序错误：legacy 必须位于 hashed 之前"
-    grep -qF '[0-9a-f]{12}-' "$CADDYFILE_OUT" ||
-        die_validation "渲染后的 Caddyfile 未按 12 位内容寻址前缀匹配 hashed 资产"
-    grep -qF 'immutable' "$CADDYFILE_OUT" ||
-        die_validation "渲染后的 Caddyfile 缺少 hashed 资产的 immutable 缓存策略"
-    log "已渲染 Caddyfile：$CADDYFILE_OUT（host=$STASH_PUBLIC_HOST site_root=$CADDY_SITE_ROOT）"
+    install_staged_file "$STAGE_CADDYFILE" "$CADDYFILE_OUT" ||
+        die "$EX_STATE" "无法安装暂存的 Caddyfile：$CADDYFILE_OUT"
+    log "已安装渲染后的 Caddyfile：$CADDYFILE_OUT（host=$STASH_PUBLIC_HOST site_root=$CADDY_SITE_ROOT）"
 fi
 
 log "配置渲染完成：remote_root=$STASH_REMOTE_ROOT updater_root=$STASH_UPDATER_ROOT public_base=$STASH_PUBLIC_BASE"

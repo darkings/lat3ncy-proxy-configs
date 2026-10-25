@@ -660,7 +660,7 @@ copy_forward_assets() {
     local name sha last_seen first_seen source
     COPIED_ASSET_NAMES=()
 
-    mkdir -p "$staging/scripts" || die_validation "无法创建暂存 scripts 目录"
+    mkdir -p "$staging/scripts" || { warn "无法创建暂存 scripts 目录：$staging/scripts"; return 1; }
 
     if [[ -f "$LEDGER_FILE" ]]; then
         while IFS=$'\t' read -r name sha last_seen first_seen; do
@@ -669,7 +669,7 @@ copy_forward_assets() {
             ((last_seen >= cutoff)) || continue
             [[ -f "$staging/$name" ]] && continue
             if source="$(find_asset_source "$name" "$sha")"; then
-                cp -p "$source" "$staging/$name" || die_validation "copy-forward 失败：$name"
+                cp -p "$source" "$staging/$name" || { warn "copy-forward 失败：$name"; return 1; }
                 COPIED_ASSET_NAMES+=("$name")
                 copied=$((copied + 1))
             else
@@ -691,7 +691,7 @@ copy_forward_assets() {
                 [[ "$entry" == "$name" ]] && known=1
             done
             ((known == 0)) || continue
-            cp -p "$source" "$staging/$name" || die_validation "copy-forward 失败：$name"
+            cp -p "$source" "$staging/$name" || { warn "copy-forward 失败：$name"; return 1; }
             COPIED_ASSET_NAMES+=("$name")
             copied=$((copied + 1))
         done < <(find "$PREVIOUS_RELEASE/scripts" -maxdepth 1 -type f \( -name '*.js' -o -name '*.jq' \) | sort)

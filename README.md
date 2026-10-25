@@ -105,7 +105,7 @@ DNS 使用两个国内 UDP 服务器并发解析，避免四路重复查询；�
 - **Script 参数**：`script(path, {${a}, ${b}})` 的第二参数按脚本真实解析协议编码：Spotify/Bilibili 为 JSON 字符串，WeatherKit 为 `&` 分隔键值串；`enable=${switch}` 按默认状态决定是否生成脚本（默认关闭的脚本不会启用，也不会伪造 `enable` 字段）。
 - **捕获改写**：`redirect(307, "${urlMatch.2}")` 生成最小 request 脚本返回 307 + Location；`url.replace` 生成 request URL 修改脚本；两者都只替换正则命中范围并保留未命中部分、编码与查询参数。Stash 官方文档未支持在 `url-rewrite` target 中做捕获替换，因此不猜语法。
 - **jq**：远程 jq 与内联 jq 先按行去除 `#` 注释（保留换行），再压平输出；无法获取或括号不配平时阻断发布并给出诊断。真实 jq 语法验证只在本地有 jq 可执行文件时执行，否则明确记为未验证。
-- **Header/Body**：`response.header.add` 使用 `http.header-rewrite`；与 Mock 同 URL 的 header action 合并进 Mock 响应头（Loon 先生成 Mock 再执行 header）；`response.body.replace` 使用 `response-replace-regex` 并原样保留正则/替换/转义。
+- **Header/Body**：`response.header.add` 使用 `http.header-rewrite`；只有当能**证明** header 正则覆盖某个 Mock 的全部 URL（完全相同的正则，或完整枚举有限语言后逐个验证）时才合并进该 Mock 响应头；无法证明时保留独立 header-rewrite 规则，header 仍作用于其匹配的非 Mock 响应，绝不靠有限采样猜测。可证明全覆盖时不再重复输出 header 规则，部分覆盖时两者并存（Mock 内合并 + 普通响应规则）。`response.body.replace` 使用 `response-replace-regex` 并原样保留正则/替换/转义。
 - **动态值**：Action 值中的 `${参数}` 按 `[Argument]` 的构建时默认值展开（数字/布尔保留类型）；捕获变量 `${name.n}` 只用于 `url.replace`/`redirect` 模板；未知变量或捕获变量出现在不支持的位置会阻断该目标发布，不会被静默写进生成的 JavaScript 或 Stash 规则。
 - **规则与策略**：上游 `PROXY` 显式映射为主线配置的 `Proxy`，`DIRECT`/`REJECT`/`REJECT-DROP` 原样；`AND`/`OR`/`NOT` 保持嵌套结构，策略后的 `no-resolve` 等选项保留。未知策略或语法阻断该目标发布，不静默丢弃。
 - **冲突补丁与增强分开记录**：淘宝 `poplayer` 的额外 `reject-dict` 会让上游响应脚本失效，默认丢弃该增强并保留上游脚本；`Block_HTTPDNS` 的三个微信 HTTPDNS REJECT 与主配置 `DIRECT` 例外冲突，生成物改为显式 DIRECT 并记录冲突；QUIC UDP 回退、扩展到广告域名等属于本地增强，构建清单单独标注。
@@ -137,7 +137,7 @@ python scripts/convert_kelee_lpx.py --audit-snapshot
 
 ### 发布事务、回滚与 GitHub 职责
 
-- 本机 `deploy-stash.ps1` 与云端 `stash-kelee-update.timer` 共用同一把 `flock` 和同一个 `publish-release.sh` 事务：上传/暂存 → 校验构建清单与文件哈希 → 快照旧配置 → 原子切换 `current` → 重建容器 → 按真实 HTTP 内容（首页、代表性覆写、provider 合集、内容哈希脚本的字节哈希与内容标记）做健康检查 → **锁内**渲染/安装 EnvironmentFile、systemd 单元与可选 Caddyfile 并启用 timer → 成功后才同步更新状态；失败会切回上一版本、恢复更新器应用指针与发布前配置并复验，首次部署失败则移除指针而不是留下半套站点。
+- 本机 `deploy-stash.ps1` 与云端 `stash-kelee-update.timer` 共用同一把 `flock` 和同一个 `publish-release.sh` 事务：上传/暂存 → 校验构建清单与文件哈希 → 快照旧配置、旧公共地址与 timer 状态 → 切换更新器应用 → copy-forward 内容寻址资产 → 原子移动版本目录 → **锁内暂存/校验/安装** EnvironmentFile、systemd 单元与可选 Caddyfile → 原子切换 `current` → 按实际 Docker/Caddy 重建/重载服务 → 用**新地址与新缓存策略**做健康检查（首页、代表性覆写、provider 合集、内容哈希脚本的字节哈希与内容标记）→ 资产账本/保留策略 → 原子同步权威更新状态（提交点），之后只做非关键记账。失败时恢复旧 `current`、更新器应用指针、旧配置与 timer 状态，重建旧服务并用**旧地址 + 旧配置**复验；任何关键恢复步骤失败返回 `EX_CRITICAL`、记录 `rollback_failed` 并保留配置备份与人工恢复路径，首次部署失败则移除指针而不是留下半套站点。
 - 旧版本按 `STASH_KEEP_RELEASES`（默认 3）与 `STASH_KEEP_ASSET_DAYS`（默认 30 天）清理，始终保护当前版本、回滚版本和仍被旧覆写引用的内容哈希脚本；清理前先确认当前版本引用与本机资产账本。
 - 手工回滚（先加载 EnvironmentFile，否则助手会因缺少公共地址/路径而拒绝）：`set -a; . <updater>/env; set +a; bash <updater>/current/publish-release.sh --rollback-to <版本号>`；`deploy-stash.ps1 -DryRun` 只校验参数并打印计划（不构建、不联网、不写产物、不执行 ssh/scp），`-BuildOnly` 才进行本地构建，去掉开关执行部署。
 - GitHub Actions 只承担**离线验证 + 构建并上传 artifact**：`validate.yml` 做真实 YAML 解析、结构/完整性校验、转换/解析/校验/构建/发布事务测试；`kelee-sync.yml` 分成无网络离线逻辑 job 和上游构建 job，`contents: read`，不上传仓库、不提交生成物、不发布站点。生产发布由本机部署或云端 timer 完成，二者状态一致。

@@ -1375,74 +1375,30 @@ def convert_rewrites(rewrite_lines: list[str], ctx: ConversionContext) -> None:
             _convert_legacy_rewrite(line, ctx, pending_headers)
             continue
         _convert_expression_rewrite(expression, line, ctx, pending_headers)
-    # Loon generates the mock response first, then runs response.header.* actions:
-    # merge matching header actions into the mock entries, then emit the rest.
+    # Loon generates the mock response first, then runs response.header.* actions.
+    # Merge only when coverage is proven; emit a normal header-rewrite for any
+    # header that was not merged OR that can also match non-mock URLs (merging
+    # into a mock must never drop the header's effect elsewhere).
+    mock_patterns = [mock["match"] for mock in ctx.mock if mock.get("match")]
     for mock in ctx.mock:
         if mock.get("match"):
             _merge_pending_into_mock(mock, pending_headers, ctx)
     for header in pending_headers:
-        if header.merged:
+        if header.merged and mock_patterns and _header_fully_covered_by_mocks(
+            header.pattern, mock_patterns
+        ):
             continue
-        ctx.header_rewrite.append(f"{header.pattern} {header.action} {header.name} {header.value}".strip())
+        ctx.header_rewrite.append(
+            f"{header.pattern} {header.action} {header.name} {header.value}".strip()
+        )
         ctx.bump("header_rewrite")
 
 
-def _literal_prefix(pattern: str) -> str:
-    """Longest literal URL prefix of a regex (used to compare match sets).
-
-    Loon header actions apply only where their own regex matches; merging a
-    header into a mock is only safe when the header regex still matches the
-    mock URL. Exact RE2 intersection is undecidable here, but a broader literal
-    prefix (with the same host) is a sound approximation: a header prefix that
-    is itself a prefix of the mock's literal prefix certainly still covers it.
-    """
-
-    text = pattern.strip()
-    # Drop RE2 inline flags emitted by stash_regex (e.g. "(?i)").
-    while text.startswith("(?") and ")" in text:
-        end = text.index(")")
-        flags = text[2:end]
-        if not flags or any(char not in "ims" for char in flags):
-            break
-        text = text[end + 1 :].strip()
-    if text.startswith("^"):
-        text = text[1:]
-    out: list[str] = []
-    index = 0
-    while index < len(text):
-        char = text[index]
-        if char == "\\" and index + 1 < len(text):
-            nxt = text[index + 1]
-            if nxt in "\\./_-?":
-                out.append({"/": "/", ".": ".", "?": "?", "_": "_", "-": "-"}.get(nxt, nxt))
-                index += 2
-                continue
-            break
-        if char in "()[]{}|*+?$^":
-            break
-        out.append(char)
-        index += 1
-    return "".join(out)
+FINITE_LANGUAGE_LIMIT = 4096
 
 
-def _regex_samples(pattern: str, *, limit: int = 32) -> Optional[list[str]]:
-    """Generate representative full-match URLs for a Loon/Stash URL regex.
-
-    Used only to decide whether a sibling ``response.header.add`` action from a
-    separate Loon rewrite line really matches a mock URL before merging it into
-    the mock headers. The previous implementation compared literal prefixes
-    only, which merged headers from ``(admin|internal)`` into a mock matched by
-    ``(public|private)`` (same host/prefix, different branch). Exact regex
-    intersection is undecidable here, so this conservative sampler returns a
-    set covering the branches; unsupported constructs return None and the
-    header is simply not merged (a separate header-rewrite rule is emitted).
-    """
-
-    try:  # Python <3.13 exposes sre_parse; newer releases use re._parser
-        import sre_parse as _sre_parse  # type: ignore[no-redef]
-    except ImportError:  # pragma: no cover - Python 3.13+
-        from re import _parser as _sre_parse  # type: ignore[no-redef]
-    import warnings
+def _split_inline_flags(pattern: str) -> tuple[str, str]:
+    """Return (body, leading inline flags) for a Stash URL regex."""
 
     text = pattern.strip()
     flags = ""
@@ -1453,121 +1409,184 @@ def _regex_samples(pattern: str, *, limit: int = 32) -> Optional[list[str]]:
             break
         flags += candidate
         text = text[end + 1 :].strip()
-    if text.startswith("^"):
-        text = text[1:]
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            parsed = _sre_parse.parse(text, flags=0 if not flags else 0)
-    except Exception:  # noqa: BLE001
-        return None
+    return text, flags
 
-    def expand_sequence(tokens, prefix: str) -> list[str]:
-        results = [prefix]
-        for op, av in tokens:
-            next_results: list[str] = []
-            if op == _sre_parse.LITERAL:
-                piece = [chr(av)]
-            elif op == _sre_parse.NOT_LITERAL:
-                piece = ["x" if av != ord("x") else "y"]
-            elif op == _sre_parse.ANY:
-                piece = ["x"]
-            elif op == _sre_parse.AT:
-                piece = [""]
-            elif op == _sre_parse.IN:
-                choice = None
-                negate = False
-                for token_op, token_av in av:
-                    if token_op == _sre_parse.NEGATE:
-                        negate = True
-                        continue
-                    if choice is None and token_op == _sre_parse.LITERAL:
-                        choice = chr(token_av)
-                    elif choice is None and token_op == _sre_parse.RANGE:
-                        choice = chr(token_av[0])
-                if choice is None:
-                    if negate:
-                        choice = "x"
-                    else:
-                        return []
-                if negate and choice == "x":
-                    choice = "y"
-                piece = [choice]
-            elif op == _sre_parse.SUBPATTERN:
-                _, sub_tokens = av[1], av[-1]
-                alternatives = expand_sequence(list(sub_tokens), "")
-                if not alternatives:
-                    return []
-                piece = alternatives
-            elif op == _sre_parse.BRANCH:
-                alternatives = []
-                for branch in av[1]:
-                    alternatives.extend(expand_sequence(list(branch), ""))
-                if not alternatives:
-                    return []
-                piece = alternatives
-            elif op in (_sre_parse.MAX_REPEAT, _sre_parse.MIN_REPEAT):
-                minimum, _maximum, sub_tokens = av
-                unit = expand_sequence(list(sub_tokens), "")
-                if not unit:
-                    return []
-                repeats = []
-                for count in sorted({max(1, minimum), max(2, minimum)}):
-                    if count > 4:
-                        continue
-                    combined = [""]
-                    for _ in range(count):
-                        combined = [left + right for left in combined for right in unit]
-                        if len(combined) > limit:
-                            return []
-                    repeats.extend(combined)
-                piece = repeats or [""]
-            elif op == _sre_parse.CATEGORY:
-                category = av
-                if category == _sre_parse.CATEGORY_DIGIT:
-                    piece = ["1"]
-                elif category == _sre_parse.CATEGORY_SPACE:
-                    piece = [" "]
+
+def _regex_compiler():
+    try:  # Python <3.13 exposes sre_parse; newer releases use re._parser
+        import sre_parse as _sre_parse  # type: ignore[no-redef]
+    except ImportError:  # pragma: no cover - Python 3.13+
+        from re import _parser as _sre_parse  # type: ignore[no-redef]
+    return _sre_parse
+
+
+def _expand_finite_tokens(tokens, limit: int) -> list[str] | None:
+    """Expand a parsed regex into its complete finite language, or None.
+
+    Only constructs with a small, fully enumerable language are accepted:
+    literals, escaped literals, character classes/categories with explicit
+    members, groups/alternations and bounded repetitions. Any unbounded
+    quantifier (``*``/``+``/``{m,}``), ``.``, negated class or other construct
+    returns None — the caller must then fall back to leaving the header action
+    as a normal http.header-rewrite rule instead of guessing coverage.
+    """
+
+    sre = _regex_compiler()
+    results = [""]
+    for op, av in tokens:
+        if op == sre.LITERAL:
+            piece = [chr(av)]
+        elif op == sre.AT:
+            piece = [""]
+        elif op == sre.IN:
+            choices: list[str] = []
+            for inner_op, inner_av in av:
+                if inner_op == sre.LITERAL:
+                    choices.append(chr(inner_av))
+                elif inner_op == sre.RANGE:
+                    start_char, end_char = inner_av
+                    if end_char - start_char + 1 > limit:
+                        return None
+                    choices.extend(chr(code) for code in range(start_char, end_char + 1))
+                elif inner_op == sre.CATEGORY and inner_av == sre.CATEGORY_DIGIT:
+                    choices.extend(str(digit) for digit in range(10))
                 else:
-                    piece = ["x"]
+                    return None
+                if len(choices) > limit:
+                    return None
+            if not choices:
+                return None
+            piece = sorted(set(choices))
+        elif op == sre.SUBPATTERN:
+            _group, add_flags, del_flags, sub_tokens = av
+            if add_flags or del_flags:
+                return None
+            expanded = _expand_finite_tokens(list(sub_tokens), limit)
+            if expanded is None:
+                return None
+            piece = expanded
+        elif op == sre.BRANCH:
+            alternatives: list[str] = []
+            for branch in av[1]:
+                expanded = _expand_finite_tokens(list(branch), limit)
+                if expanded is None:
+                    return None
+                alternatives.extend(expanded)
+            if not alternatives:
+                return None
+            piece = alternatives
+        elif op in (sre.MAX_REPEAT, sre.MIN_REPEAT):
+            minimum, maximum, sub_tokens = av
+            if maximum == sre.MAXREPEAT:
+                return None
+            if maximum > 16:
+                return None
+            unit = _expand_finite_tokens(list(sub_tokens), limit)
+            if unit is None:
+                return None
+            piece = []
+            for count in range(minimum, maximum + 1):
+                combined = [""]
+                for _ in range(count):
+                    combined = [left + right for left in combined for right in unit]
+                    if len(combined) > limit:
+                        return None
+                piece.extend(combined)
+            piece = sorted(set(piece))
+        elif op == sre.CATEGORY:
+            if av == sre.CATEGORY_DIGIT:
+                piece = [str(digit) for digit in range(10)]
             else:
-                return []
-            for base in results:
-                for suffix in piece:
-                    next_results.append(base + suffix)
-            if len(next_results) > limit:
-                return []
-            results = next_results
-        return results
+                return None
+        else:
+            return None
 
+        next_results: list[str] = []
+        for prefix in results:
+            for suffix in piece:
+                next_results.append(prefix + suffix)
+        if len(next_results) > limit:
+            return None
+        results = next_results
+    return results
+
+
+def _finite_language(pattern: str, *, limit: int = FINITE_LANGUAGE_LIMIT) -> list[str] | None:
+    """Return the complete URL language of an anchored finite regex, or None.
+
+    Unanchored patterns have an unbounded language (arbitrary prefixes/
+    suffixes), and unbounded repetitions are likewise not enumerable; both
+    return None so callers never treat sampling as proof.
+    """
+
+    body, _flags = _split_inline_flags(pattern)
+    if not (body.startswith("^") and body.endswith("$")):
+        return None
+    inner = body[1:-1]
+    sre = _regex_compiler()
     try:
-        samples = expand_sequence(list(parsed), "")
+        parsed = sre.parse(inner, flags=0)
     except Exception:  # noqa: BLE001
         return None
-    if not samples or len(samples) > limit:
+    expanded = _expand_finite_tokens(list(parsed), limit)
+    if expanded is None:
         return None
-    # Deduplicate, keep deterministic order.
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for sample in samples:
-        if sample not in seen:
-            seen.add(sample)
-            ordered.append(sample)
-    return ordered
+    unique = sorted(set(expanded))
+    if len(unique) > limit:
+        return None
+    return unique
 
 
-def _regex_matches_url(pattern: str, url: str) -> bool:
+def _pattern_matches(pattern: str, value: str) -> bool:
     try:
-        return re.search(pattern, url) is not None
+        return re.search(pattern, value) is not None
     except re.error:
         return False
 
 
-def _header_covers_mock(header_pattern: str, mock_pattern: str) -> bool:
-    samples = _regex_samples(mock_pattern)
-    if not samples:
+def _pattern_covers(header_pattern: str, mock_pattern: str) -> bool:
+    """Prove that every URL matched by ``mock_pattern`` is matched by header.
+
+    Proof rules (no guessing):
+    * identical regex text is an immediate proof;
+    * finite anchored mock languages are enumerated completely and every URL
+      is tested against the header regex;
+    * case-insensitive mock combined with a case-sensitive header cannot be
+      proven (case variants would not be enumerable safely) → False;
+    * unbounded/unsupported mock patterns → False (header stays a normal rule).
+    """
+
+    if header_pattern.strip() == mock_pattern.strip():
+        return True
+    mock_body, mock_flags = _split_inline_flags(mock_pattern)
+    _header_body, header_flags = _split_inline_flags(header_pattern)
+    candidates = _finite_language(mock_pattern)
+    if candidates is None:
         return False
-    return all(_regex_matches_url(header_pattern, sample) for sample in samples)
+    if "i" in mock_flags and "i" not in header_flags:
+        # The mock language includes case variants of every letter; exhaustive
+        # enumeration would need the case-expanded language, which we do not
+        # claim to prove here.
+        return False
+    return all(_pattern_matches(header_pattern, candidate) for candidate in candidates)
+
+
+def _header_fully_covered_by_mocks(header_pattern: str, mock_patterns: list[str]) -> bool:
+    """Prove that every URL the header matches is one of the mock URLs."""
+
+    _header_body, header_flags = _split_inline_flags(header_pattern)
+    candidates = _finite_language(header_pattern)
+    if candidates is None:
+        return False
+    if "i" in header_flags:
+        for mock_pattern in mock_patterns:
+            _mock_body, mock_flags = _split_inline_flags(mock_pattern)
+            if "i" not in mock_flags:
+                return False
+    for candidate in candidates:
+        if not any(_pattern_matches(mock_pattern, candidate) for mock_pattern in mock_patterns):
+            return False
+    return True
 
 
 def _merge_pending_into_mock(mock: dict, pending: list[PendingHeader], ctx: ConversionContext) -> None:
@@ -1580,18 +1599,24 @@ def _merge_pending_into_mock(mock: dict, pending: list[PendingHeader], ctx: Conv
             continue
         if not (_host_tokens(header.pattern) & mock_hosts):
             continue
-        if not _header_covers_mock(header.pattern, mock["match"]):
-            # The header action's own regex must match every mock URL it is
-            # merged into; literal-prefix comparison alone over-merged headers
-            # from a different alternation branch (REVIEW round 2).
+        if not _pattern_covers(header.pattern, mock["match"]):
+            continue
+        if header.name in headers and headers[header.name] != header.value:
+            ctx.warn(
+                "W_MOCK_HEADER_CONFLICT",
+                f"mock {mock['match'][:80]} 已有响应头 {header.name}={headers[header.name]!r}，"
+                f"不覆盖为 {header.value!r}（保留上游/显式 Mock 值）",
+            )
             continue
         headers[header.name] = header.value
         header.merged = True
         ctx.add_patch(
             "mock-header-merge",
-            f"mock 响应头合并 response.header.add({header.name}={header.value})（Loon 先生成 mock 再执行 header action）",
+            f"mock 响应头合并 response.header.add({header.name}={header.value})"
+            "（可证明 header 正则覆盖该 mock 的全部 URL）",
             evidence=header.source[:200],
         )
+        ctx.bump("mock_header_merge")
 
 
 def _convert_expression_rewrite(expression, line: str, ctx: ConversionContext, pending: list[PendingHeader]) -> None:

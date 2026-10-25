@@ -158,6 +158,21 @@ if [[ "${1:-}" == "compose" ]]; then
                 echo 'fake: docker compose up failed' >&2
                 exit 1
             fi
+            if [[ -n "${FAKE_DOCKER_FAIL_AFTER:-}" ]]; then
+                counter_file="${FAKE_DOCKER_COUNTER_FILE:-/dev/null}"
+                count=0
+                [[ -f "$counter_file" ]] && count="$(cat "$counter_file")"
+                [[ "$count" =~ ^[0-9]+$ ]] || count=0
+                count=$((count + 1))
+                echo "$count" >"$counter_file"
+                if ((count > FAKE_DOCKER_FAIL_AFTER)); then
+                    echo 'fake: docker compose up failed after limit' >&2
+                    exit 1
+                fi
+            fi
+            if [[ -n "${FAKE_DOCKER_AFTER_UP_HOOK:-}" && -f "$FAKE_DOCKER_AFTER_UP_HOOK" ]]; then
+                bash "$FAKE_DOCKER_AFTER_UP_HOOK" || true
+            fi
             exit 0
         fi
     done
@@ -177,11 +192,16 @@ printf 'curl %s\n' "$*" >>"${FAKE_CALLS_LOG:-/dev/null}"
 out=""
 hdr=""
 url=""
+req_host=""
 while (($#)); do
     case "$1" in
         --output|-o) out="$2"; shift 2 ;;
         --dump-header|-D) hdr="$2"; shift 2 ;;
-        --write-out|-w|--header|-H|--max-time|-m) shift 2 ;;
+        --header|-H)
+            if [[ "${2:-}" == Host:* ]]; then req_host="${2#Host: }"; fi
+            shift 2
+            ;;
+        --write-out|-w|--max-time|-m) shift 2 ;;
         --silent|--show-error|-s|-S) shift ;;
         http://*|https://*) url="$1"; shift ;;
         *) shift ;;
@@ -193,6 +213,9 @@ if [[ -z "$url" ]]; then
 fi
 rest="${url#*://}"
 path="/${rest#*/}"
+if [[ -n "${FAKE_CURL_TOUCH_FILE:-}" && "$path" == "/" ]]; then
+    : >"$FAKE_CURL_TOUCH_FILE"
+fi
 if [[ "$path" == "/" ]]; then
     path="/index.html"
 fi
@@ -211,11 +234,29 @@ if [[ -f "$file" ]]; then
         cache_header="no-cache, must-revalidate"
     fi
 fi
-if [[ -n "${FAKE_CURL_CACHE_MODE:-}" && "${FAKE_CURL_CACHE_MODE}" == "bad" && -n "$cache_header" ]]; then
+cache_mode="${FAKE_CURL_CACHE_MODE:-}"
+if [[ -n "${FAKE_CURL_CACHE_MODE_REQUIRE_FILE:-}" ]]; then
+    if [[ -f "$FAKE_CURL_CACHE_MODE_REQUIRE_FILE" ]]; then
+        cache_mode=""
+    else
+        cache_mode="bad"
+    fi
+fi
+if [[ "$cache_mode" == "bad" && -n "$cache_header" ]]; then
     if [[ "$cache_header" == *immutable* ]]; then
         cache_header="no-cache, must-revalidate"
     else
         cache_header="public, max-age=31536000, immutable"
+    fi
+fi
+caddyfile_for_host="${FAKE_CURL_LOADED_CADDYFILE:-${FAKE_CURL_CADDYFILE:-}}"
+if [[ -n "${FAKE_CURL_LOADED_MARKER:-}" && ! -f "$FAKE_CURL_LOADED_MARKER" ]]; then
+    status="404"
+fi
+if [[ -n "$caddyfile_for_host" && -f "$caddyfile_for_host" ]]; then
+    required_host="$(sed -n 's/^[[:space:]]*@stash host \([^[:space:]]*\).*/\1/p' "$caddyfile_for_host" | head -n 1)"
+    if [[ -n "$required_host" && "$req_host" != "$required_host" ]]; then
+        status="404"
     fi
 fi
 if [[ -n "$hdr" ]]; then
@@ -920,6 +961,386 @@ fi
 expect_contains "发布日志记录配置失败回滚" "$REMOTE4/updater/logs/publish.log" "配置渲染/安装失败"
 expect_contains "配置回滚时恢复 timer 启用状态" "$CALLS_LOG" "enable --now stash-kelee-update.timer"
 unset FAKE_RENDER_EXIT FAKE_RENDER_LOG
+make_env "$REMOTE"
+
+
+# ===========================================================================
+# Round 3: configuration/service ordering, partial-failure rollback, and
+# commit-point behaviour.
+# ===========================================================================
+
+make_render_script() {
+    local app="$1"
+    cat >"$app/render-config.sh" <<'SH'
+#!/usr/bin/env bash
+set -u
+printf 'RENDER_ENV=%s\n' "$KELEE_PUBLIC_BASE" >"$STASH_UPDATER_ROOT/env"
+printf '@stash host %s\n' "$STASH_PUBLIC_HOST" >"$STASH_REMOTE_ROOT/Caddyfile"
+if [[ -n "${FAKE_RENDER_MARKER:-}" ]]; then touch "$FAKE_RENDER_MARKER"; fi
+exit "${FAKE_RENDER_EXIT:-0}"
+SH
+    chmod +x "$app/render-config.sh"
+}
+
+install_service_load_hook() {
+    local remote="$1"
+    cat >"$TEST_ROOT/reload-hook.sh" <<'SH'
+#!/usr/bin/env bash
+if [[ -n "${FAKE_LOADED_CADDYFILE:-}" && -f "$STASH_REMOTE_ROOT/Caddyfile" ]]; then
+    cp -f "$STASH_REMOTE_ROOT/Caddyfile" "$FAKE_LOADED_CADDYFILE" 2>/dev/null || true
+fi
+if [[ -n "${FAKE_SERVICE_LOADED_MARKER:-}" ]]; then
+    touch "$FAKE_SERVICE_LOADED_MARKER"
+fi
+SH
+    chmod +x "$TEST_ROOT/reload-hook.sh"
+    export FAKE_DOCKER_AFTER_UP_HOOK="$TEST_ROOT/reload-hook.sh"
+    export FAKE_SERVICE_LOADED_MARKER="$TEST_ROOT/service-loaded"
+    export FAKE_CURL_LOADED_MARKER="$FAKE_SERVICE_LOADED_MARKER"
+    export FAKE_CURL_LOADED_CADDYFILE="$TEST_ROOT/loaded-Caddyfile"
+    rm -f "$FAKE_SERVICE_LOADED_MARKER" "$FAKE_CURL_LOADED_CADDYFILE"
+}
+
+prepare_old_domain_remote() {
+    local remote="$1" old_base="$2" old_host="$3"
+    prepare_remote "$remote"
+    local saved_base="$BASE"
+    BASE="$old_base"
+    write_bundle "$remote/releases/legacy" "legacy-domain" 1
+    BASE="$saved_base"
+    ln -sfn "$remote/releases/legacy" "$remote/current"
+    printf 'KELEE_PUBLIC_BASE=%s\nSTASH_PUBLIC_HOST=%s\n' "$old_base" "$old_host" >"$remote/updater/env"
+    printf '@stash host %s\n' "$old_host" >"$remote/Caddyfile"
+    echo "$remote/current" >"$HTTP_STATE_FILE"
+    make_env "$remote"
+    export FAKE_CURL_CADDYFILE="$remote/Caddyfile"
+    unset FAKE_CURL_CACHE_MODE_REQUIRE_FILE
+    install_service_load_hook "$remote"
+}
+
+printf '== 场景 17：旧“全部 immutable”缓存策略迁移，配置安装先于健康检查 ==\n'
+REMOTE6="$TEST_ROOT/remote6"
+prepare_remote "$REMOTE6"
+make_env "$REMOTE6"
+APP6="$REMOTE6/updater/releases/render/app"
+mkdir -p "$APP6"
+make_render_script "$APP6"
+install_service_load_hook "$REMOTE6"
+export FAKE_CURL_CACHE_MODE_REQUIRE_FILE="$FAKE_SERVICE_LOADED_MARKER"
+rm -f "$FAKE_CURL_CACHE_MODE_REQUIRE_FILE"
+export FAKE_RENDER_MARKER="$TEST_ROOT/config-ready"
+rm -f "$FAKE_RENDER_MARKER"
+stage_bundle "$REMOTE6" "r3-cache-migration" "cache-migration" 0
+run_publish --release-id "r3-cache-migration" \
+    --staging "$REMOTE6/releases/.staging-r3-cache-migration" \
+    --expected-sums "$TEST_ROOT/r3-cache-migration.sums" \
+    --render-config-script "$APP6/render-config.sh" --render-install-caddyfile
+expect_rc "旧缓存策略下健康检查在配置安装后通过" 0
+expect_file "缓存迁移：配置渲染已执行" "$FAKE_RENDER_MARKER"
+expect_file "缓存迁移：健康检查只在服务重载后执行" "$FAKE_SERVICE_LOADED_MARKER"
+expect_contains "缓存迁移：新 Caddyfile 已落盘" "$REMOTE6/Caddyfile" "@stash host test.example"
+unset FAKE_CURL_CACHE_MODE_REQUIRE_FILE FAKE_RENDER_MARKER
+unset FAKE_DOCKER_AFTER_UP_HOOK FAKE_SERVICE_LOADED_MARKER FAKE_CURL_LOADED_MARKER FAKE_CURL_LOADED_CADDYFILE
+
+printf '== 场景 18：域名迁移（先安装新 Caddyfile，再健康检查新域名） ==\n'
+REMOTE7="$TEST_ROOT/remote7"
+prepare_old_domain_remote "$REMOTE7" "https://old.example" "old.example"
+make_env "$REMOTE7"
+APP7="$REMOTE7/updater/releases/render/app"
+mkdir -p "$APP7"
+make_render_script "$APP7"
+stage_bundle "$REMOTE7" "r3-domain-migration" "domain-migration" 0
+run_publish --release-id "r3-domain-migration" \
+    --staging "$REMOTE7/releases/.staging-r3-domain-migration" \
+    --expected-sums "$TEST_ROOT/r3-domain-migration.sums" \
+    --render-config-script "$APP7/render-config.sh" --render-install-caddyfile
+expect_rc "域名迁移发布成功（新 Host/Caddyfile 生效后检查）" 0
+expect_contains "域名迁移：新 Caddyfile host" "$REMOTE7/Caddyfile" "@stash host test.example"
+expect_contains "域名迁移：EnvironmentFile 使用新地址" "$REMOTE7/updater/env" "RENDER_ENV=https://test.example"
+expect_contains "域名迁移：新首页使用新地址" "$REMOTE7/current/index.html" "https://test.example"
+
+printf '== 场景 19：配置安装成功但服务重载失败 -> 恢复旧配置/服务/站点 ==\n'
+REMOTE8="$TEST_ROOT/remote8"
+prepare_old_domain_remote "$REMOTE8" "https://old.example" "old.example"
+make_env "$REMOTE8"
+APP8="$REMOTE8/updater/releases/render/app"
+mkdir -p "$APP8"
+make_render_script "$APP8"
+echo 1 >"$DOCKER_UP_FAIL_FILE"
+stage_bundle "$REMOTE8" "r3-reload-fail" "reload-fail" 0
+run_publish --release-id "r3-reload-fail" \
+    --staging "$REMOTE8/releases/.staging-r3-reload-fail" \
+    --expected-sums "$TEST_ROOT/r3-reload-fail.sums" \
+    --render-config-script "$APP8/render-config.sh" --render-install-caddyfile
+expect_rc "配置安装后服务重载失败返回 30" 30
+expect_contains "重载失败后旧 Caddyfile 恢复" "$REMOTE8/Caddyfile" "@stash host old.example"
+expect_contains "重载失败后旧 EnvironmentFile 恢复" "$REMOTE8/updater/env" "KELEE_PUBLIC_BASE=https://old.example"
+expect_link "重载失败后 current 回到旧版本" "$REMOTE8/current" "$REMOTE8/releases/legacy"
+expect_contains "重载失败记录 rollback_ok" "$REMOTE8/updater/logs/publish.log" "|rollback_ok|"
+unset FAKE_CURL_CADDYFILE
+
+printf '== 场景 20：新服务健康失败 -> 恢复旧配置并重新加载旧服务 ==\n'
+REMOTE9="$TEST_ROOT/remote9"
+prepare_old_domain_remote "$REMOTE9" "https://old.example" "old.example"
+make_env "$REMOTE9"
+APP9="$REMOTE9/updater/releases/render/app"
+mkdir -p "$APP9"
+make_render_script "$APP9"
+echo "$REMOTE9/releases/legacy" >"$HTTP_STATE_FILE"   # new health sees old bytes -> fails
+stage_bundle "$REMOTE9" "r3-health-fail" "health-fail" 0
+run_publish --release-id "r3-health-fail" \
+    --staging "$REMOTE9/releases/.staging-r3-health-fail" \
+    --expected-sums "$TEST_ROOT/r3-health-fail.sums" \
+    --render-config-script "$APP9/render-config.sh" --render-install-caddyfile
+expect_rc "新域名健康失败返回 40" 40
+expect_link "健康失败后 current 回到旧版本" "$REMOTE9/current" "$REMOTE9/releases/legacy"
+expect_contains "健康失败后旧 Caddyfile 恢复" "$REMOTE9/Caddyfile" "@stash host old.example"
+expect_contains "健康失败后旧 EnvironmentFile 恢复" "$REMOTE9/updater/env" "KELEE_PUBLIC_BASE=https://old.example"
+expect_contains "健康失败后旧服务健康复验通过" "$REMOTE9/updater/logs/publish.log" "|rollback_ok|"
+unset FAKE_CURL_CADDYFILE
+
+printf '== 场景 21：配置恢复 cp 失败 -> EX_CRITICAL、保留备份、回滚失败记录 ==\n'
+REMOTE10="$TEST_ROOT/remote10"
+prepare_old_domain_remote "$REMOTE10" "https://old.example" "old.example"
+make_env "$REMOTE10"
+APP10="$REMOTE10/updater/releases/render/app"
+mkdir -p "$APP10"
+make_render_script "$APP10"
+echo "$REMOTE10/releases/legacy" >"$HTTP_STATE_FILE"   # force new health failure
+cat >"$FAKE_BIN/cp" <<'SH'
+#!/usr/bin/env bash
+source_path=""
+for arg in "$@"; do
+    case "$arg" in
+    -*) ;;
+    *) source_path="$arg"; break ;;
+    esac
+done
+case "$source_path" in
+*"/.config-backup."*) exit 1 ;;
+esac
+exec /usr/bin/cp "$@"
+SH
+chmod +x "$FAKE_BIN/cp"
+stage_bundle "$REMOTE10" "r3-restore-cp-fail" "restore-cp-fail" 0
+run_publish --release-id "r3-restore-cp-fail" \
+    --staging "$REMOTE10/releases/.staging-r3-restore-cp-fail" \
+    --expected-sums "$TEST_ROOT/r3-restore-cp-fail.sums" \
+    --render-config-script "$APP10/render-config.sh" --render-install-caddyfile --skip-retention
+expect_rc "配置恢复失败返回 EX_CRITICAL(60)" 60
+if grep -qF "RENDER_ENV=https://test.example" "$REMOTE10/updater/env"; then
+    pass "配置恢复失败时保留失败发布的新配置以便诊断"
+else
+    fail "配置恢复失败后未保留可诊断的新配置"
+fi
+if find "$REMOTE10/updater/state" -maxdepth 1 -name '.config-backup.*' | grep -q .; then
+    pass "配置恢复失败时保留唯一备份"
+else
+    fail "配置恢复失败后备份被错误删除"
+fi
+expect_contains "配置恢复失败记录 rollback_failed" "$REMOTE10/updater/logs/publish.log" "|rollback_failed|"
+rm -f "$FAKE_BIN/cp"
+unset FAKE_CURL_CADDYFILE
+
+printf '== 场景 22：健康复验失败 -> EX_CRITICAL，站点/配置恢复但服务未通过 ==\n'
+REMOTE11="$TEST_ROOT/remote11"
+prepare_old_domain_remote "$REMOTE11" "https://old.example" "old.example"
+make_env "$REMOTE11"
+APP11="$REMOTE11/updater/releases/render/app"
+mkdir -p "$APP11"
+make_render_script "$APP11"
+mkdir -p "$TEST_ROOT/empty-http-root"
+echo "$TEST_ROOT/empty-http-root" >"$HTTP_STATE_FILE"   # both new and old health fail
+stage_bundle "$REMOTE11" "r3-recheck-fail" "recheck-fail" 0
+run_publish --release-id "r3-recheck-fail" \
+    --staging "$REMOTE11/releases/.staging-r3-recheck-fail" \
+    --expected-sums "$TEST_ROOT/r3-recheck-fail.sums" \
+    --render-config-script "$APP11/render-config.sh" --render-install-caddyfile --skip-retention
+expect_rc "旧服务健康复验失败返回 EX_CRITICAL(60)" 60
+expect_contains "健康复验失败记录 rollback_failed" "$REMOTE11/updater/logs/publish.log" "|rollback_failed|"
+if find "$REMOTE11/updater/state" -maxdepth 1 -name '.config-backup.*' | grep -q .; then
+    pass "健康复验失败时保留配置备份"
+else
+    fail "健康复验失败后备份被错误删除"
+fi
+unset FAKE_CURL_CADDYFILE
+unset FAKE_DOCKER_AFTER_UP_HOOK FAKE_SERVICE_LOADED_MARKER FAKE_CURL_LOADED_MARKER FAKE_CURL_LOADED_CADDYFILE
+
+printf '== 场景 23：暂存目录 mv 失败（站点未切换）也要恢复应用指针/配置 ==\n'
+REMOTE12="$TEST_ROOT/remote12"
+prepare_remote "$REMOTE12"
+make_env "$REMOTE12"
+mkdir -p "$REMOTE12/updater/releases/app-old/app" "$REMOTE12/updater/releases/app-new/app"
+cp -R "$UPDATER/." "$REMOTE12/updater/releases/app-old/app/"
+cp -R "$UPDATER/." "$REMOTE12/updater/releases/app-new/app/"
+for app_dir in "$REMOTE12/updater/releases/app-old/app" "$REMOTE12/updater/releases/app-new/app"; do
+    mkdir -p "$app_dir/scripts"
+    printf 'placeholder\n' >"$app_dir/scripts/check_kelee_update.py"
+done
+ln -sfn "$REMOTE12/updater/releases/app-old/app" "$REMOTE12/updater/current"
+write_bundle "$REMOTE12/releases/legacy" "mv-legacy" 0
+ln -sfn "$REMOTE12/releases/legacy" "$REMOTE12/current"
+echo "$REMOTE12/current" >"$HTTP_STATE_FILE"
+stage_bundle "$REMOTE12" "r3-mv-fail" "mv-fail" 0
+cat >"$FAKE_BIN/mv" <<'SH'
+#!/usr/bin/env bash
+if [[ "${1:-}" == *"/.staging-r3-mv-fail" ]]; then exit 1; fi
+exec /usr/bin/mv "$@"
+SH
+chmod +x "$FAKE_BIN/mv"
+run_publish --release-id "r3-mv-fail" \
+    --staging "$REMOTE12/releases/.staging-r3-mv-fail" \
+    --expected-sums "$TEST_ROOT/r3-mv-fail.sums" \
+    --install-app "$REMOTE12/updater/releases/app-new/app"
+expect_rc "mv 失败返回 20" 20
+expect_link "mv 失败后更新器应用指针恢复旧应用" "$REMOTE12/updater/current" "$REMOTE12/updater/releases/app-old/app"
+expect_contains "mv 失败记录 rollback_ok" "$REMOTE12/updater/logs/publish.log" "|rollback_ok|"
+expect_no_file "mv 失败后不留下版本目录" "$REMOTE12/releases/r3-mv-fail"
+rm -f "$FAKE_BIN/mv"
+
+printf '== 场景 24：copy-forward 失败也要恢复应用指针 ==\n'
+REMOTE13="$TEST_ROOT/remote13"
+prepare_remote "$REMOTE13"
+make_env "$REMOTE13"
+mkdir -p "$REMOTE13/updater/releases/app-old/app" "$REMOTE13/updater/releases/app-new/app"
+cp -R "$UPDATER/." "$REMOTE13/updater/releases/app-old/app/"
+cp -R "$UPDATER/." "$REMOTE13/updater/releases/app-new/app/"
+for app_dir in "$REMOTE13/updater/releases/app-old/app" "$REMOTE13/updater/releases/app-new/app"; do
+    mkdir -p "$app_dir/scripts"
+    printf 'placeholder\n' >"$app_dir/scripts/check_kelee_update.py"
+done
+ln -sfn "$REMOTE13/updater/releases/app-old/app" "$REMOTE13/updater/current"
+BASE_SAVE="$BASE"
+write_bundle "$REMOTE13/releases/legacy" "copy-legacy" 1
+ln -sfn "$REMOTE13/releases/legacy" "$REMOTE13/current"
+mkdir -p "$REMOTE13/updater/state"
+printf 'scripts/111111111111-old.js\t%s\t%s\t%s\n' \
+    "$(sha256sum "$REMOTE13/releases/legacy/scripts/111111111111-old.js" | cut -d' ' -f1)" \
+    "$(date +%s)" "$(date +%s)" >"$REMOTE13/updater/state/asset-ledger.tsv"
+echo "$REMOTE13/current" >"$HTTP_STATE_FILE"
+stage_bundle "$REMOTE13" "r3-copy-fail" "copy-fail" 0
+cat >"$FAKE_BIN/cp" <<'SH'
+#!/usr/bin/env bash
+is_staging_copy=0
+for arg in "$@"; do
+    case "$arg" in
+    *"/.staging-r3-copy-fail/"*) is_staging_copy=1 ;;
+    esac
+done
+if ((is_staging_copy == 1)); then echo "fake cp: staging copy failure" >&2; exit 1; fi
+exec /usr/bin/cp "$@"
+SH
+chmod +x "$FAKE_BIN/cp"
+run_publish --release-id "r3-copy-fail" \
+    --staging "$REMOTE13/releases/.staging-r3-copy-fail" \
+    --expected-sums "$TEST_ROOT/r3-copy-fail.sums" \
+    --install-app "$REMOTE13/updater/releases/app-new/app"
+expect_rc "copy-forward 失败返回 20" 20
+expect_link "copy-forward 失败后应用指针恢复" "$REMOTE13/updater/current" "$REMOTE13/updater/releases/app-old/app"
+expect_link "copy-forward 失败后站点指针不变" "$REMOTE13/current" "$REMOTE13/releases/legacy"
+rm -f "$FAKE_BIN/cp"
+
+printf '== 场景 25：首次部署无旧版本时 mv 失败 -> 清理应用指针且无 current ==\n'
+REMOTE14="$TEST_ROOT/remote14"
+prepare_remote "$REMOTE14"
+make_env "$REMOTE14"
+mkdir -p "$REMOTE14/updater/releases/app-new/app"
+cp -R "$UPDATER/." "$REMOTE14/updater/releases/app-new/app/"
+mkdir -p "$REMOTE14/updater/releases/app-new/app/scripts"
+printf 'placeholder\n' >"$REMOTE14/updater/releases/app-new/app/scripts/check_kelee_update.py"
+echo "$REMOTE14/current" >"$HTTP_STATE_FILE"
+stage_bundle "$REMOTE14" "r3-first-mv-fail" "first-mv-fail" 0
+cat >"$FAKE_BIN/mv" <<'SH'
+#!/usr/bin/env bash
+if [[ "${1:-}" == *"/.staging-r3-first-mv-fail" ]]; then exit 1; fi
+exec /usr/bin/mv "$@"
+SH
+chmod +x "$FAKE_BIN/mv"
+run_publish --release-id "r3-first-mv-fail" \
+    --staging "$REMOTE14/releases/.staging-r3-first-mv-fail" \
+    --expected-sums "$TEST_ROOT/r3-first-mv-fail.sums" \
+    --install-app "$REMOTE14/updater/releases/app-new/app"
+expect_rc "首次部署 mv 失败返回 20" 20
+expect_link_absent "首次部署 mv 失败后无 current 指针" "$REMOTE14/current"
+expect_link_absent "首次部署 mv 失败后无更新器应用指针" "$REMOTE14/updater/current"
+rm -f "$FAKE_BIN/mv"
+make_env "$REMOTE"
+
+
+printf '== 场景 26：更新器应用指针恢复失败 -> EX_CRITICAL、保留备份 ==\n'
+REMOTE15="$TEST_ROOT/remote15"
+prepare_old_domain_remote "$REMOTE15" "https://old.example" "old.example"
+make_env "$REMOTE15"
+mkdir -p "$REMOTE15/updater/releases/app-old/app" "$REMOTE15/updater/releases/app-new/app"
+cp -R "$UPDATER/." "$REMOTE15/updater/releases/app-old/app/"
+cp -R "$UPDATER/." "$REMOTE15/updater/releases/app-new/app/"
+for app_dir in "$REMOTE15/updater/releases/app-old/app" "$REMOTE15/updater/releases/app-new/app"; do
+    mkdir -p "$app_dir/scripts"
+    printf 'placeholder\n' >"$app_dir/scripts/check_kelee_update.py"
+done
+ln -sfn "$REMOTE15/updater/releases/app-old/app" "$REMOTE15/updater/current"
+APP15="$REMOTE15/updater/releases/render/app"
+mkdir -p "$APP15"
+make_render_script "$APP15"
+mkdir -p "$TEST_ROOT/empty-http-root"
+echo "$TEST_ROOT/empty-http-root" >"$HTTP_STATE_FILE"   # force health failure
+cat >"$FAKE_BIN/mv" <<'SH'
+#!/usr/bin/env bash
+if [[ -n "${FAKE_MV_FAIL_MARKER:-}" && -f "$FAKE_MV_FAIL_MARKER" ]]; then
+    for arg in "$@"; do
+        case "$arg" in
+        *"/updater/current"*) exit 1 ;;
+        esac
+    done
+fi
+exec /usr/bin/mv "$@"
+SH
+chmod +x "$FAKE_BIN/mv"
+export FAKE_MV_FAIL_MARKER="$TEST_ROOT/mv-fail-armed"
+rm -f "$FAKE_MV_FAIL_MARKER"
+export FAKE_CURL_TOUCH_FILE="$FAKE_MV_FAIL_MARKER"
+stage_bundle "$REMOTE15" "r3-app-restore-fail" "app-restore-fail" 0
+run_publish --release-id "r3-app-restore-fail" \
+    --staging "$REMOTE15/releases/.staging-r3-app-restore-fail" \
+    --expected-sums "$TEST_ROOT/r3-app-restore-fail.sums" \
+    --install-app "$REMOTE15/updater/releases/app-new/app" \
+    --render-config-script "$APP15/render-config.sh" --render-install-caddyfile --skip-retention
+expect_rc "更新器应用指针恢复失败返回 EX_CRITICAL(60)" 60
+expect_link "指针恢复失败时仍保留当前(新)应用指针" "$REMOTE15/updater/current" "$REMOTE15/updater/releases/app-new/app"
+expect_contains "指针恢复失败记录 rollback_failed" "$REMOTE15/updater/logs/publish.log" "|rollback_failed|"
+if find "$REMOTE15/updater/state" -maxdepth 1 -name '.config-backup.*' | grep -q .; then
+    pass "指针恢复失败时保留配置备份"
+else
+    fail "指针恢复失败后配置备份被删除"
+fi
+rm -f "$FAKE_BIN/mv"
+unset FAKE_MV_FAIL_MARKER FAKE_CURL_TOUCH_FILE
+
+printf '== 场景 27：回滚时旧服务重建失败 -> EX_CRITICAL、保留备份与状态 ==\n'
+REMOTE16="$TEST_ROOT/remote16"
+prepare_old_domain_remote "$REMOTE16" "https://old.example" "old.example"
+make_env "$REMOTE16"
+APP16="$REMOTE16/updater/releases/render/app"
+mkdir -p "$APP16"
+make_render_script "$APP16"
+mkdir -p "$TEST_ROOT/empty-http-root"
+echo "$TEST_ROOT/empty-http-root" >"$HTTP_STATE_FILE"   # new health fails
+export FAKE_DOCKER_FAIL_AFTER=1
+export FAKE_DOCKER_COUNTER_FILE="$TEST_ROOT/docker-up-count"
+: >"$FAKE_DOCKER_COUNTER_FILE"
+stage_bundle "$REMOTE16" "r3-service-restore-fail" "service-restore-fail" 0
+run_publish --release-id "r3-service-restore-fail" \
+    --staging "$REMOTE16/releases/.staging-r3-service-restore-fail" \
+    --expected-sums "$TEST_ROOT/r3-service-restore-fail.sums" \
+    --render-config-script "$APP16/render-config.sh" --render-install-caddyfile --skip-retention
+expect_rc "回滚服务重建失败返回 EX_CRITICAL(60)" 60
+expect_contains "服务恢复失败记录 rollback_failed" "$REMOTE16/updater/logs/publish.log" "|rollback_failed|"
+if find "$REMOTE16/updater/state" -maxdepth 1 -name '.config-backup.*' | grep -q .; then
+    pass "服务恢复失败时保留配置备份"
+else
+    fail "服务恢复失败后配置备份被删除"
+fi
+unset FAKE_DOCKER_FAIL_AFTER FAKE_DOCKER_COUNTER_FILE
 make_env "$REMOTE"
 
 printf '\n== 汇总 ==\n'

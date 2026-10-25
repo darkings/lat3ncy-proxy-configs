@@ -14,11 +14,15 @@
 #   4. copy forward still-fresh content-addressed scripts from older releases.
 #   5. move staging -> releases/<id> (same filesystem, atomic rename) and switch
 #      `current` with an atomic symlink replace (guard: current absent/symlink).
-#   6. docker compose up -d --force-recreate --no-build, wait for running.
+#   6. install staged/validated config (EnvironmentFile/systemd/Caddyfile),
+#      switch `current`, recreate the compose services so the running Caddy/
+#      systemd side actually loads the new config.
 #   7. health-check real HTTP bytes (homepage, .stoverride, hashed script,
-#      provider bundle) with Host header + sha256 comparison.
-#   8. atomically sync the update state (data dir) only after the site is healthy.
-#   9. update the asset ledger and publish state/log; run retention (best effort).
+#      provider bundle) with the new Host header + actual Cache-Control policy.
+#   8. update the asset ledger and run retention (bookkeeping, warnings only).
+#   9. atomically sync the authoritative update state (data dir).
+#  10. commit point: only bookkeeping follows; a post-commit failure must not
+#      roll back a healthy release.
 #
 # Any failure after the pointer switch restores the previous release, recreates
 # the container and re-verifies the previous version. A first deploy that fails
@@ -194,22 +198,15 @@ APP_POINTER_CHANGED=0
 CONFIG_BACKUP_DIR=""
 CONFIG_PATH_LIST=()
 TIMER_WAS_ENABLED=0
-
-perform_health() {
-    local release_dir="$1"
-    bash "$SCRIPT_DIR/health-check.sh" --release "$release_dir"
-}
-
-restore_previous_release() {
-    local previous="$1"
-    [[ -n "$previous" && -d "$previous" && -f "$previous/index.html" ]] || return 1
-    log "回滚：current -> $previous"
-    atomic_symlink "$previous" "$CURRENT_LINK" || return 1
-    compose_up || return 1
-    wait_container_running || return 1
-    perform_health "$previous" || return 1
-    return 0
-}
+CURRENT_SWITCHED=0
+CONFIG_TOUCHED=0
+SERVICES_TOUCHED=0
+COMMIT_DONE=0
+FAILURE_HANDLER_RUNNING=0
+TRANSACTION_ACTIVE=0
+RESTORE_FAILURES=()
+PREVIOUS_PUBLIC_BASE=""
+PREVIOUS_PUBLIC_HOST=""
 
 record_rollback() {
     local result="$1"
@@ -233,6 +230,17 @@ current_app_path() {
         fi
     fi
     return 1
+}
+
+restore_previous_release() {
+    local previous="$1"
+    [[ -n "$previous" && -d "$previous" && -f "$previous/index.html" ]] || return 1
+    log "回滚：current -> $previous"
+    atomic_symlink "$previous" "$CURRENT_LINK" || return 1
+    compose_up || return 1
+    wait_container_running || return 1
+    perform_health "$previous" || return 1
+    return 0
 }
 
 restore_app_pointer() {
@@ -268,7 +276,7 @@ config_snapshot_paths() {
             "/etc/systemd/system/stash-kelee-update.timer"
         )
     fi
-    if ((RENDER_INSTALL_CADDYFILE == 1)); then
+    if ((RENDER_INSTALL_CADDYFILE == 1)) || [[ -f "$STASH_REMOTE_ROOT/Caddyfile" ]]; then
         CONFIG_PATH_LIST+=("$STASH_REMOTE_ROOT/Caddyfile")
     fi
 }
@@ -291,27 +299,49 @@ snapshot_config() {
         printf '%s\t%s\t%s\n' "$index" "$path" "$existed" >>"$CONFIG_BACKUP_DIR/map"
         index=$((index + 1))
     done
+    # Rollback health checks must use the old release's own address, not the
+    # new domain from the EnvironmentFile being installed by this transaction.
+    PREVIOUS_PUBLIC_BASE=""
+    PREVIOUS_PUBLIC_HOST=""
+    if [[ -f "$STASH_UPDATER_ROOT/env" ]]; then
+        PREVIOUS_PUBLIC_BASE="$(sed -n 's/^KELEE_PUBLIC_BASE=//p' "$STASH_UPDATER_ROOT/env" | tail -n 1)"
+        PREVIOUS_PUBLIC_HOST="$(sed -n 's/^STASH_PUBLIC_HOST=//p' "$STASH_UPDATER_ROOT/env" | tail -n 1)"
+    fi
+    if [[ -z "$PREVIOUS_PUBLIC_BASE" && -n "${PREVIOUS_RELEASE:-}" && -f "$PREVIOUS_RELEASE/.build-manifest.json" ]]; then
+        PREVIOUS_PUBLIC_BASE="$(sed -n 's/.*"public_base"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+            "$PREVIOUS_RELEASE/.build-manifest.json" | head -n 1)"
+        if [[ -n "$PREVIOUS_PUBLIC_BASE" ]]; then
+            PREVIOUS_PUBLIC_HOST="${PREVIOUS_PUBLIC_BASE#*://}"
+        fi
+    fi
+    if [[ -z "$PREVIOUS_PUBLIC_BASE" ]]; then
+        PREVIOUS_PUBLIC_BASE="$STASH_PUBLIC_BASE"
+        PREVIOUS_PUBLIC_HOST="$STASH_PUBLIC_HOST"
+    fi
     if ((RENDER_ENABLE_TIMER == 1)) && command -v systemctl >/dev/null 2>&1; then
         if systemctl is-enabled --quiet stash-kelee-update.timer >/dev/null 2>&1; then
             TIMER_WAS_ENABLED=1
         fi
     fi
-    log "已快照发布前配置（${#CONFIG_PATH_LIST[@]} 项）：$CONFIG_BACKUP_DIR"
+    log "已快照发布前配置（${#CONFIG_PATH_LIST[@]} 项）：$CONFIG_BACKUP_DIR（旧地址 ${PREVIOUS_PUBLIC_BASE}）"
 }
 
+# Restore every config file; keep going if one file fails so the remaining
+# independent restores are still attempted. Returns 1 when any copy failed.
 restore_config_snapshot() {
     [[ -n "$CONFIG_BACKUP_DIR" && -d "$CONFIG_BACKUP_DIR" && -f "$CONFIG_BACKUP_DIR/map" ]] || return 0
-    local index path existed restored_units=0
+    local index path existed restored_units=0 failures=0
     while IFS=$'\t' read -r index path existed; do
         [[ -n "$index" && -n "$path" ]] || continue
         if [[ "$existed" == "1" ]]; then
             mkdir -p "$(dirname "$path")"
             if ! cp -a "$CONFIG_BACKUP_DIR/$index" "$path"; then
                 warn "恢复配置失败：$path（备份在 $CONFIG_BACKUP_DIR/$index）"
-                return 1
+                failures=$((failures + 1))
             fi
-        else
-            rm -f -- "$path" 2>/dev/null || true
+        elif ! rm -f -- "$path" 2>/dev/null; then
+            warn "删除发布期间新增的配置失败：$path"
+            failures=$((failures + 1))
         fi
         case "$path" in
         /etc/systemd/system/*) restored_units=1 ;;
@@ -319,7 +349,8 @@ restore_config_snapshot() {
     done <"$CONFIG_BACKUP_DIR/map"
     if command -v systemctl >/dev/null 2>&1; then
         if ((restored_units == 1)); then
-            systemctl daemon-reload || warn "配置已恢复，但 systemctl daemon-reload 失败"
+            systemctl daemon-reload >/dev/null 2>&1 ||
+                warn "配置已恢复，但 systemctl daemon-reload 失败"
         fi
         if ((RENDER_ENABLE_TIMER == 1)); then
             if ((TIMER_WAS_ENABLED == 1)); then
@@ -330,6 +361,9 @@ restore_config_snapshot() {
                     warn "配置已恢复，但停用发布期间启用的 stash-kelee-update.timer 失败"
             fi
         fi
+    fi
+    if ((failures > 0)); then
+        return 1
     fi
     log "发布前配置已恢复（$CONFIG_BACKUP_DIR）"
     return 0
@@ -363,47 +397,113 @@ render_config_install() {
     bash "$RENDER_CONFIG_SCRIPT" "${args[@]}"
 }
 
-rollback_transaction() {
+# Recreate the compose services so the running Caddy/systemd side actually
+# loads the config installed above (a written file is not a loaded config).
+reload_services() {
+    SERVICES_TOUCHED=1
+    log "重建/重载站点服务以加载新配置：docker compose up --force-recreate"
+    compose_up || return 1
+    wait_container_running || return 1
+    return 0
+}
+
+perform_health() {
+    local release_dir="$1"
+    local public_base="${2:-}"
+    local public_host="${3:-}"
+    local strict_cache="${4:-}"
+    local args=(--release "$release_dir")
+    if [[ -n "$public_base" && -n "$public_host" ]]; then
+        args+=(--public-base "$public_base" --public-host "$public_host")
+    fi
+    if [[ -n "$strict_cache" ]]; then
+        args+=(--strict-cache-headers "$strict_cache")
+    fi
+    bash "$SCRIPT_DIR/health-check.sh" "${args[@]}"
+}
+
+# Restore site pointer, app pointer, config and the actual running service.
+# Every independent step is attempted even if an earlier one fails; the caller
+# decides whether the aggregate result is critical.
+restore_transaction_state() {
+    RESTORE_FAILURES=()
+    if [[ -n "$CONFIG_BACKUP_DIR" ]]; then
+        restore_config_snapshot || RESTORE_FAILURES+=("配置回滚")
+    fi
+
+    if ((CURRENT_SWITCHED == 1)); then
+        if [[ -n "${PREVIOUS_RELEASE:-}" && -d "$PREVIOUS_RELEASE" ]]; then
+            atomic_symlink "$PREVIOUS_RELEASE" "$CURRENT_LINK" ||
+                RESTORE_FAILURES+=("站点指针回滚")
+        else
+            rm -f -- "$CURRENT_LINK" 2>/dev/null || RESTORE_FAILURES+=("移除首次部署站点指针")
+        fi
+    fi
+
+    if ((APP_POINTER_CHANGED == 1)); then
+        restore_app_pointer || RESTORE_FAILURES+=("更新器应用指针回滚")
+    fi
+
+    if ((SERVICES_TOUCHED == 1 || CURRENT_SWITCHED == 1)); then
+        compose_up || RESTORE_FAILURES+=("旧服务重建")
+        wait_container_running || RESTORE_FAILURES+=("旧容器状态")
+        if [[ -n "${PREVIOUS_RELEASE:-}" && -d "$PREVIOUS_RELEASE" ]]; then
+            local old_base="${PREVIOUS_PUBLIC_BASE:-$STASH_PUBLIC_BASE}"
+            local old_host="${PREVIOUS_PUBLIC_HOST:-$STASH_PUBLIC_HOST}"
+            if ! perform_health "$PREVIOUS_RELEASE" "$old_base" "$old_host" 0; then
+                RESTORE_FAILURES+=("旧版本健康复验（$old_base）")
+            fi
+        fi
+    fi
+
+    if [[ -z "${PREVIOUS_RELEASE:-}" ]]; then
+        if [[ -e "$CURRENT_LINK" || -L "$CURRENT_LINK" ]]; then
+            rm -f -- "$CURRENT_LINK" 2>/dev/null || RESTORE_FAILURES+=("清理首次部署站点指针")
+        fi
+    fi
+}
+
+# Single failure entry point for every mutation before the commit point.
+transaction_fail() {
     local reason="$1"
     local code="$2"
 
+    if ((FAILURE_HANDLER_RUNNING == 1)); then
+        log "回滚处理中再次失败（$reason），避免递归回滚；返回 EX_CRITICAL"
+        exit "$EX_CRITICAL"
+    fi
+    if ((COMMIT_DONE == 1)); then
+        log "提交点后失败（$reason）：发布已提交，不执行整站回滚；返回 $code"
+        exit "$code"
+    fi
+    FAILURE_HANDLER_RUNNING=1
+    TRANSACTION_ACTIVE=0
+    set +e
     log "发布事务失败：$reason"
     append_event "rollback_start" "$RELEASE_ID" "$reason"
+    restore_transaction_state
 
-    if [[ -n "${PREVIOUS_RELEASE:-}" && -d "$PREVIOUS_RELEASE" && -f "$PREVIOUS_RELEASE/index.html" ]]; then
-        if restore_previous_release "$PREVIOUS_RELEASE"; then
-            restore_app_pointer || warn "更新器应用指针恢复失败"
-            restore_config_snapshot || warn "发布前配置恢复失败，请检查 $CONFIG_BACKUP_DIR"
-            cleanup_config_backup
+    if ((${#RESTORE_FAILURES[@]} == 0)); then
+        if [[ -z "${PREVIOUS_RELEASE:-}" ]]; then
+            record_rollback "first_deploy_failed" "$RELEASE_DIR" "$reason" 1 ""
+            append_event "first_deploy_failed" "$RELEASE_ID" "$reason；已移除 current 指针并恢复发布前状态"
+            log "首次部署失败：已移除 current/应用指针并恢复配置（退出码 $code）"
+        else
             record_rollback "rollback" "$RELEASE_DIR" "$reason" 1 "$PRIOR_STATE_PREVIOUS"
             append_event "rollback_ok" "$RELEASE_ID" "$reason；current=$PREVIOUS_RELEASE"
-            log "回滚完成：$CURRENT_LINK -> $PREVIOUS_RELEASE（容器已重建并通过健康检查）"
-            exit "$code"
+            log "回滚完成：站点/更新器应用/配置/服务均已恢复并复验（退出码 $code）"
         fi
-        restore_app_pointer || warn "更新器应用指针恢复失败"
-        restore_config_snapshot || warn "发布前配置恢复失败，请检查 $CONFIG_BACKUP_DIR"
         cleanup_config_backup
-        record_rollback "rollback_failed" "$RELEASE_DIR" "$reason" 1 "$PRIOR_STATE_PREVIOUS"
-        append_event "rollback_failed" "$RELEASE_ID" "$reason"
-        die "$EX_CRITICAL" "回滚失败：上一版本 $PREVIOUS_RELEASE 未能恢复健康，请人工检查 $CURRENT_LINK、Compose 文件与容器日志"
+        exit "$code"
     fi
 
-    # First deploy: never leave a pointer to a release that cannot serve.
-    if [[ -L "$CURRENT_LINK" ]]; then
-        local link_target
-        link_target="$(readlink -f "$CURRENT_LINK" 2>/dev/null || true)"
-        if [[ "$link_target" == "$RELEASE_DIR" ]]; then
-            rm -f -- "$CURRENT_LINK"
-            log "首次部署失败：已移除 current 指针（$CURRENT_LINK）"
-        fi
-    fi
-    restore_app_pointer || warn "首次部署失败后更新器应用指针清理失败"
-    restore_config_snapshot || warn "发布前配置恢复失败，请检查 $CONFIG_BACKUP_DIR"
-    cleanup_config_backup
-    record_rollback "first_deploy_failed" "$RELEASE_DIR" "$reason" 1 ""
-    append_event "first_deploy_failed" "$RELEASE_ID" "$reason；已移除 current 指针"
-    log "发布包保留在 $RELEASE_DIR 便于排查；站点没有指向残缺版本"
-    exit "$code"
+    record_rollback "rollback_failed" "$RELEASE_DIR" "$reason" 1 "$PRIOR_STATE_PREVIOUS"
+    append_event "rollback_failed" "$RELEASE_ID" \
+        "$reason；失败步骤=${RESTORE_FAILURES[*]}；配置备份=$CONFIG_BACKUP_DIR"
+    log "回滚失败，以下恢复步骤未通过：${RESTORE_FAILURES[*]}"
+    log "配置备份已保留：${CONFIG_BACKUP_DIR:-<无>}；失败版本目录：$RELEASE_DIR"
+    log "人工恢复建议：检查 current、$UPDATER_CURRENT、$STASH_UPDATER_ROOT/env 与 systemd 单元，修复后重新运行发布或 --rollback-to"
+    die "$EX_CRITICAL" "回滚未能完整恢复（$reason）：${RESTORE_FAILURES[*]}"
 }
 
 do_rollback_to() {
@@ -509,7 +609,7 @@ if [[ -n "$RENDER_CONFIG_SCRIPT" ]]; then
     esac
     [[ -z "$ROLLBACK_TO" ]] || die_config "--rollback-to 不能与 --render-config-script 同时使用"
 fi
-if ((RENDER_INSTALL_UNITS == 0 && RENDER_INSTALL_CADDYFILE == 1)); then
+if [[ -z "$RENDER_CONFIG_SCRIPT" ]] && ((RENDER_INSTALL_CADDYFILE == 1)); then
     die_config "--render-install-caddyfile 需要同时提供 --render-config-script"
 fi
 if [[ -z "$RENDER_CONFIG_SCRIPT" ]] && ((RENDER_INSTALL_UNITS == 1 || RENDER_INSTALL_CADDYFILE == 1 || RENDER_ENABLE_TIMER == 1)); then
@@ -539,19 +639,23 @@ RELEASE_DIR="$RELEASES_DIR/$RELEASE_ID"
 [[ -e "$RELEASE_DIR" ]] && die_validation "版本目录已存在，拒绝覆盖：$RELEASE_DIR"
 
 STAGING_OWNED=0
-cleanup_staging() {
+on_exit() {
+    local exit_code=$?
     set +e
+    if ((TRANSACTION_ACTIVE == 1 && COMMIT_DONE == 0 && FAILURE_HANDLER_RUNNING == 0)); then
+        transaction_fail "未预期的脚本退出（exit $exit_code，可能由 set -e 触发）" "$exit_code"
+    fi
     if ((STAGING_OWNED == 0)) && [[ -n "$STAGING" && -d "$STAGING" ]]; then
         rm -rf -- "$STAGING" 2>/dev/null || true
     fi
 }
-trap cleanup_staging EXIT
+trap on_exit EXIT
 
 log "发布开始：release=$RELEASE_ID source=$SOURCE staging=$STAGING"
 log "当前版本：${PREVIOUS_RELEASE:-<首次部署>}"
 
 # ---------------------------------------------------------------------------
-# Validate the staged bundle before any pointer changes.
+# Phase 0: validate everything before the first mutation.
 # ---------------------------------------------------------------------------
 
 validate_bundle_dir "$STAGING" "$EXPECTED_SUMS"
@@ -560,64 +664,74 @@ if [[ -f "$STAGING/.build-manifest.json" ]]; then
 fi
 log "发布包校验通过：fingerprint=${FINGERPRINT:-unknown}"
 
-# Validate the new updater application before snapshotting/mutating anything.
 if [[ -n "$APP_DIR" ]]; then
     validate_app_dir "$APP_DIR"
 fi
 
-# Snapshot the config files render-config.sh may replace; restored on rollback.
+# Snapshot old config/address/timer state before any mutation.
 snapshot_config
 
-# Install the new updater application atomically (same helper for timer+manual).
+# ---------------------------------------------------------------------------
+# Phase 1: mutate app + release directories. Failures here must restore the
+# app pointer/config even though the site pointer has not switched yet.
+# ---------------------------------------------------------------------------
+
+TRANSACTION_ACTIVE=1
 if [[ -n "$APP_DIR" ]]; then
-    PREVIOUS_APP_DIR="$(current_app_path || true)"
     ensure_pointer_guard "$UPDATER_CURRENT"
-    atomic_symlink "$APP_DIR" "$UPDATER_CURRENT" || die_validation "无法原子切换更新器应用指针：$UPDATER_CURRENT"
+    if ! atomic_symlink "$APP_DIR" "$UPDATER_CURRENT"; then
+        transaction_fail "更新器应用指针切换失败" "$EX_VALIDATION"
+    fi
     APP_POINTER_CHANGED=1
     log "更新器应用已切换：$UPDATER_CURRENT -> $APP_DIR（上一应用：${PREVIOUS_APP_DIR:-<无>}）"
 fi
 
-copy_forward_assets "$STAGING"
+if ! copy_forward_assets "$STAGING"; then
+    transaction_fail "内容寻址资产 copy-forward 失败" "$EX_VALIDATION"
+fi
 
 if ! mv "$STAGING" "$RELEASE_DIR"; then
-    die_validation "无法将暂存目录原子移动到版本目录：$RELEASE_DIR"
+    transaction_fail "无法将暂存目录原子移动到版本目录：$RELEASE_DIR" "$EX_VALIDATION"
 fi
 STAGING_OWNED=1
 log "版本目录就绪：$RELEASE_DIR"
 
 # ---------------------------------------------------------------------------
-# Switch pointer -> recreate container -> verify real content.
+# Phase 2: install (staged/validated) config while the old site is still
+# current. A failure here restores config/app but does not touch the site.
+# ---------------------------------------------------------------------------
+
+if [[ -n "$RENDER_CONFIG_SCRIPT" ]]; then
+    CONFIG_TOUCHED=1
+    if ! render_config_install; then
+        transaction_fail "配置渲染/安装失败（EnvironmentFile/systemd/Caddyfile）" "$EX_CONFIG"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# Phase 3: switch the site, reload/recreate the actual services (a written
+# config is not a loaded config), then health-check the new release under the
+# new domain and the new cache policy.
 # ---------------------------------------------------------------------------
 
 ensure_pointer_guard "$CURRENT_LINK"
 if ! atomic_symlink "$RELEASE_DIR" "$CURRENT_LINK"; then
-    die_validation "无法原子切换 current 指针：$CURRENT_LINK"
+    transaction_fail "无法原子切换 current 指针：$CURRENT_LINK" "$EX_VALIDATION"
 fi
+CURRENT_SWITCHED=1
 log "current 指针已切换：$CURRENT_LINK -> $RELEASE_DIR"
 
-if ! compose_up; then
-    rollback_transaction "docker compose 重建失败" "$EX_COMPOSE"
-fi
-if ! wait_container_running; then
-    rollback_transaction "容器 $STASH_CONTAINER_NAME 未进入 running 状态" "$EX_COMPOSE"
-fi
-if ! perform_health "$RELEASE_DIR"; then
-    rollback_transaction "健康检查失败（HTTP/sha256 内容校验未通过）" "$EX_HEALTH"
-fi
-if ! render_config_install; then
-    rollback_transaction "配置渲染/安装失败（EnvironmentFile/systemd/Caddyfile）" "$EX_CONFIG"
+if ! reload_services; then
+    transaction_fail "服务重建/重载失败（docker compose）" "$EX_COMPOSE"
 fi
 
-# ---------------------------------------------------------------------------
-# Commit bookkeeping + retention, then atomically advance the update state.
-#
-# Retention runs BEFORE the state sync so the next cloud build is seeded from a
-# data dir that no longer contains expired content-addressed assets; otherwise
-# stale files would be carried forward on every build and never expire.
-# ---------------------------------------------------------------------------
+if ! perform_health "$RELEASE_DIR" "$STASH_PUBLIC_BASE" "$STASH_PUBLIC_HOST" "${STASH_STRICT_CACHE_HEADERS:-0}"; then
+    transaction_fail "健康检查失败（新版本/新域名/实际缓存头未通过）" "$EX_HEALTH"
+fi
 
-update_asset_ledger "$RELEASE_DIR"
-
+# Retention runs before the authoritative state sync so the seeded state does
+# not carry already-expired content-addressed assets forward forever. The
+# asset ledger is bookkeeping and is committed after the site/state commit.
 if ((RUN_RETENTION == 1)); then
     if ! bash "$SCRIPT_DIR/retention.sh" --lock-held \
         --keep-releases "$STASH_KEEP_RELEASES" --keep-asset-days "$STASH_KEEP_ASSET_DAYS"; then
@@ -627,15 +741,27 @@ fi
 
 if ((SYNC_STATE == 1)); then
     if ! sync_state "$RELEASE_DIR" "$RELEASE_ID"; then
-        rollback_transaction "更新状态同步失败（旧状态已保留，可重试）" "$EX_STATE"
+        transaction_fail "更新状态同步失败（旧状态已保留，可重试）" "$EX_STATE"
     fi
     log "更新状态已原子同步：$DATA_DIR"
 fi
 
-cleanup_config_backup
-write_publish_state "publish-release.sh" "publish" "success" "$RELEASE_DIR" "" "$FINGERPRINT" \
-    "$PREVIOUS_RELEASE" "$ROLLBACK_COUNT"
+# ---------------------------------------------------------------------------
+# Commit point. From here on the release is authoritative; only non-critical
+# bookkeeping follows and failures must NOT roll back a healthy publication.
+# ---------------------------------------------------------------------------
+COMMIT_DONE=1
+TRANSACTION_ACTIVE=0
+
+if ! ( update_asset_ledger "$RELEASE_DIR" ); then
+    warn "资产账本更新失败（发布已提交，可稍后手动重跑 retention/账本）"
+fi
+if ! write_publish_state "publish-release.sh" "publish" "success" "$RELEASE_DIR" "" "$FINGERPRINT" \
+    "$PREVIOUS_RELEASE" "$ROLLBACK_COUNT"; then
+    warn "发布状态写入失败（发布站点已上线，请检查 $STATE_FILE）"
+fi
 append_event "publish" "$RELEASE_ID" "source=$SOURCE current=$RELEASE_DIR previous=${PREVIOUS_RELEASE:-none}"
+cleanup_config_backup
 
 log "发布完成：release=$RELEASE_ID current=$CURRENT_LINK -> $RELEASE_DIR"
 log "发布状态：$STATE_FILE；事件日志：$PUBLIC_LOG"
