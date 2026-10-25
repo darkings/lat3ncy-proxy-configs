@@ -440,6 +440,104 @@ class HeaderCoverageProofTests(unittest.TestCase):
         )
 
 
+    def test_top_level_unanchored_branch_is_not_proven(self) -> None:
+        """REVIEW round 4: ^a|b$ is not a fully anchored finite language."""
+
+        result, _resolver = convert(
+            fixture(
+                [
+                    r'response if ${url} ~= /^https:\/\/api\.example\.com\/a|https:\/\/api\.example\.com\/b$/i '
+                    r'then response.body.mock("json", "{}", 200)',
+                    r'response if ${url} ~= /^https:\/\/api\.example\.com\/(a|b)$/i '
+                    r'then response.header.add("X-Exact", "true")',
+                ],
+            )
+        )
+        self.assertFalse(result.blocking, [str(d) for d in result.diagnostics])
+        mock = result.stash["http"]["mock"][0]
+        self.assertEqual(
+            mock["match"],
+            r"(?i)^https://api\.example\.com/a|https://api\.example\.com/b$",
+            "the converter must not add grouping/anchors to the source regex",
+        )
+        self.assertNotIn("X-Exact", mock.get("headers", {}))
+        header_rules = result.stash["http"].get("header-rewrite") or []
+        self.assertEqual(len(header_rules), 1)
+        import re
+
+        # The mock regex still matches /a/extra (its first branch has no $),
+        # but the header regex must not; the header itself must stay a normal
+        # rule so non-mock matching is not silently changed.
+        self.assertTrue(re.search(mock["match"], "https://api.example.com/a"))
+        self.assertTrue(re.search(mock["match"], "https://api.example.com/a/extra"))
+        self.assertTrue(re.search(mock["match"], "https://api.example.com/b"))
+        header_pattern = header_rules[0].split()[0]
+        self.assertTrue(re.search(header_pattern, "https://api.example.com/a"))
+        self.assertTrue(re.search(header_pattern, "https://api.example.com/b"))
+        self.assertFalse(re.search(header_pattern, "https://api.example.com/a/extra"))
+
+    def test_mixed_top_level_anchor_shapes_are_unsupported(self) -> None:
+        from kelee_semantics import _finite_language
+
+        self.assertIsNone(_finite_language(r"(?i)^a|b$"))
+        self.assertIsNone(_finite_language(r"(?i)^a|^b$"))
+        self.assertIsNone(_finite_language(r"(?i)^a$|b$"))
+        self.assertIsNone(_finite_language(r"(?i)^a$|"))
+        self.assertIsNone(_finite_language(r"(?i)^a(^b)$"))
+        self.assertIsNone(_finite_language(r"(?i)^a$|(?:^b)$"))
+        self.assertIsNone(_finite_language(r"(?i)^a$|^b$|"))
+        self.assertEqual(_finite_language(r"(?i)^a$|^b$"), ["a", "b"])
+        self.assertEqual(_finite_language(r"(?i)^(a|b)$"), ["a", "b"])
+        self.assertEqual(_finite_language(r"(?i)^a$|^b?$"), ["", "a", "b"])
+        self.assertEqual(_finite_language(r"(?i)^a$|^$"), ["", "a"])
+        self.assertEqual(
+            _finite_language(r"(?i)^[ab]{1,2}$|^c$"),
+            ["a", "aa", "ab", "b", "ba", "bb", "c"],
+        )
+
+        # Enumerated languages must agree with the real regex on a bounded
+        # candidate universe (not just with hand-picked samples).
+        import re
+
+        checks = {
+            r"(?i)^(a|b)$": ["a", "b", "c", "ab", ""],
+            r"(?i)^a$|^b$": ["a", "b", "c", "ab", ""],
+            r"(?i)^[ab]{1,2}$|^c$": [
+                "a",
+                "b",
+                "c",
+                "aa",
+                "ab",
+                "ba",
+                "bb",
+                "aaa",
+                "",
+            ],
+            r"(?i)^a$|^b?$": ["", "a", "b", "c", "ab"],
+            r"(?i)^a(?:b|c)$": ["ab", "ac", "a", "abc", "b"],
+        }
+        for pattern, candidates in checks.items():
+            enumerated = set(_finite_language(pattern) or [])
+            actual = {candidate for candidate in candidates if re.fullmatch(pattern, candidate)}
+            self.assertEqual(enumerated, actual, pattern)
+
+    def test_fully_anchored_alternation_is_proven_and_merged(self) -> None:
+        result, _resolver = convert(
+            fixture(
+                [
+                    r'response if ${url} ~= /^https:\/\/api\.example\.com\/a$|^https:\/\/api\.example\.com\/b$/i '
+                    r'then response.body.mock("json", "{}", 200)',
+                    r'response if ${url} ~= /^https:\/\/api\.example\.com\/(a|b)$/i '
+                    r'then response.header.add("X-Safe", "true")',
+                ],
+            )
+        )
+        self.assertFalse(result.blocking, [str(d) for d in result.diagnostics])
+        mock = result.stash["http"]["mock"][0]
+        self.assertEqual(mock["headers"].get("X-Safe"), "true")
+        self.assertFalse(result.stash["http"].get("header-rewrite"))
+
+
 
 if __name__ == "__main__":
     unittest.main()

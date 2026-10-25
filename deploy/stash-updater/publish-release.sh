@@ -198,6 +198,8 @@ APP_POINTER_CHANGED=0
 CONFIG_BACKUP_DIR=""
 CONFIG_PATH_LIST=()
 TIMER_WAS_ENABLED=0
+TIMER_WAS_ACTIVE=0
+TIMER_STATE_KNOWN=0
 CURRENT_SWITCHED=0
 CONFIG_TOUCHED=0
 SERVICES_TOUCHED=0
@@ -319,16 +321,121 @@ snapshot_config() {
         printf '%s\t%s\t%s\n' "$index" "$path" "$existed" >>"$CONFIG_BACKUP_DIR/map"
         index=$((index + 1))
     done
-    if ((RENDER_ENABLE_TIMER == 1)) && command -v systemctl >/dev/null 2>&1; then
-        if systemctl is-enabled --quiet stash-kelee-update.timer >/dev/null 2>&1; then
-            TIMER_WAS_ENABLED=1
+    if ((RENDER_ENABLE_TIMER == 1)); then
+        if ! command -v systemctl >/dev/null 2>&1; then
+            cleanup_config_backup
+            die_config "启用了 --render-enable-timer，但系统缺少 systemctl；无法读取/恢复发布前 timer 状态"
         fi
+        local enabled_out active_out enabled_known=0 active_known=0
+        enabled_out="$(systemctl is-enabled stash-kelee-update.timer 2>/dev/null || true)"
+        active_out="$(systemctl is-active stash-kelee-update.timer 2>/dev/null || true)"
+        case "$enabled_out" in
+        enabled | enabled-runtime)
+            TIMER_WAS_ENABLED=1
+            enabled_known=1
+            ;;
+        disabled | masked | not-found | "")
+            TIMER_WAS_ENABLED=0
+            enabled_known=1
+            ;;
+        esac
+        case "$active_out" in
+        active | activating | reloading)
+            TIMER_WAS_ACTIVE=1
+            active_known=1
+            ;;
+        inactive | failed | deactivating)
+            TIMER_WAS_ACTIVE=0
+            active_known=1
+            ;;
+        esac
+        if ((enabled_known == 0 || active_known == 0)); then
+            cleanup_config_backup
+            die_config "无法读取发布前 stash-kelee-update.timer 状态（is-enabled='$enabled_out' is-active='$active_out'）；拒绝在状态未知时修改 timer"
+        fi
+        TIMER_STATE_KNOWN=1
+        log "发布前 timer 状态：enabled=$TIMER_WAS_ENABLED active=$TIMER_WAS_ACTIVE（将完整恢复二者，不混用 --now）"
     fi
     log "已快照发布前配置（${#CONFIG_PATH_LIST[@]} 项）：$CONFIG_BACKUP_DIR（旧地址 ${PREVIOUS_PUBLIC_BASE}）"
 }
 
+# Restore the timer's pre-publish enabled and active states independently.
+# enabled and active are distinct: never use --now here (that would start a
+# timer that was enabled but not running, or enable one that was only running).
+# A command that fails but still reaches the desired state is not a recovery
+# failure; a state that does not match is.
+restore_timer_state() {
+    ((RENDER_ENABLE_TIMER == 1)) || return 0
+    local failures=0 enabled_out active_out
+    if ((TIMER_STATE_KNOWN != 1)); then
+        warn "无法读取发布前 timer enabled/active 状态，无法证明已恢复"
+        return 1
+    fi
+    if ! command -v systemctl >/dev/null 2>&1; then
+        warn "系统缺少 systemctl，无法恢复 timer 状态"
+        return 1
+    fi
+
+    if ((TIMER_WAS_ENABLED == 1)); then
+        systemctl enable stash-kelee-update.timer >/dev/null 2>&1 ||
+            warn "systemctl enable stash-kelee-update.timer 返回失败，继续校验实际状态"
+    else
+        systemctl disable stash-kelee-update.timer >/dev/null 2>&1 ||
+            warn "systemctl disable stash-kelee-update.timer 返回失败，继续校验实际状态"
+    fi
+    if ((TIMER_WAS_ACTIVE == 1)); then
+        systemctl start stash-kelee-update.timer >/dev/null 2>&1 ||
+            warn "systemctl start stash-kelee-update.timer 返回失败，继续校验实际状态"
+    else
+        systemctl stop stash-kelee-update.timer >/dev/null 2>&1 ||
+            warn "systemctl stop stash-kelee-update.timer 返回失败，继续校验实际状态"
+    fi
+
+    enabled_out="$(systemctl is-enabled stash-kelee-update.timer 2>/dev/null || true)"
+    active_out="$(systemctl is-active stash-kelee-update.timer 2>/dev/null || true)"
+    if ((TIMER_WAS_ENABLED == 1)); then
+        case "$enabled_out" in
+        enabled | enabled-runtime) ;;
+        *)
+            warn "timer enabled 状态恢复失败：期望 enabled，实际 '$enabled_out'"
+            failures=$((failures + 1))
+            ;;
+        esac
+    else
+        case "$enabled_out" in
+        disabled | masked | not-found) ;;
+        *)
+            warn "timer disabled 状态恢复失败：期望 disabled，实际 '$enabled_out'"
+            failures=$((failures + 1))
+            ;;
+        esac
+    fi
+    if ((TIMER_WAS_ACTIVE == 1)); then
+        case "$active_out" in
+        active | activating | reloading) ;;
+        *)
+            warn "timer active 状态恢复失败：期望 active，实际 '$active_out'"
+            failures=$((failures + 1))
+            ;;
+        esac
+    else
+        if [[ "$active_out" == "inactive" ]]; then
+            :
+        else
+            warn "timer inactive 状态恢复失败：期望 inactive，实际 '$active_out'"
+            failures=$((failures + 1))
+        fi
+    fi
+    if ((failures == 0)); then
+        log "timer 状态已恢复：enabled=$TIMER_WAS_ENABLED active=$TIMER_WAS_ACTIVE"
+        return 0
+    fi
+    return 1
+}
+
 # Restore every config file; keep going if one file fails so the remaining
-# independent restores are still attempted. Returns 1 when any copy failed.
+# independent restores are still attempted. Returns 1 when any copy/systemd
+# recovery failed.
 restore_config_snapshot() {
     [[ -n "$CONFIG_BACKUP_DIR" && -d "$CONFIG_BACKUP_DIR" && -f "$CONFIG_BACKUP_DIR/map" ]] || return 0
     local index path existed restored_units=0 failures=0
@@ -348,20 +455,17 @@ restore_config_snapshot() {
         /etc/systemd/system/*) restored_units=1 ;;
         esac
     done <"$CONFIG_BACKUP_DIR/map"
-    if command -v systemctl >/dev/null 2>&1; then
-        if ((restored_units == 1)); then
-            systemctl daemon-reload >/dev/null 2>&1 ||
-                warn "配置已恢复，但 systemctl daemon-reload 失败"
+    if ((restored_units == 1)); then
+        if ! command -v systemctl >/dev/null 2>&1; then
+            warn "已恢复 /etc systemd 单元，但系统缺少 systemctl，无法 daemon-reload"
+            failures=$((failures + 1))
+        elif ! systemctl daemon-reload >/dev/null 2>&1; then
+            warn "已恢复 /etc systemd 单元，但 systemctl daemon-reload 失败"
+            failures=$((failures + 1))
         fi
-        if ((RENDER_ENABLE_TIMER == 1)); then
-            if ((TIMER_WAS_ENABLED == 1)); then
-                systemctl enable --now stash-kelee-update.timer >/dev/null 2>&1 ||
-                    warn "配置已恢复，但重新启用 stash-kelee-update.timer 失败"
-            else
-                systemctl disable --now stash-kelee-update.timer >/dev/null 2>&1 ||
-                    warn "配置已恢复，但停用发布期间启用的 stash-kelee-update.timer 失败"
-            fi
-        fi
+    fi
+    if ! restore_timer_state; then
+        failures=$((failures + 1))
     fi
     if ((failures > 0)); then
         return 1

@@ -284,6 +284,84 @@ SH
 #!/usr/bin/env bash
 set -u
 printf 'systemctl %s\n' "$*" >>"${FAKE_CALLS_LOG:-/dev/null}"
+state_dir="${FAKE_SYSTEMCTL_STATE:-/tmp/fake-systemctl-state}"
+mkdir -p "$state_dir" 2>/dev/null || true
+enabled_file="$state_dir/enabled"
+active_file="$state_dir/active"
+command="${1:-}"
+shift || true
+
+fail_marker() {
+    [[ -n "${1:-}" && -f "${1}" ]]
+}
+
+case "$command" in
+is-enabled)
+    if [[ "${FAKE_SYSTEMCTL_UNKNOWN_STATE:-0}" == "1" ]]; then
+        echo unknown
+        exit 4
+    fi
+    if [[ -f "$enabled_file" ]]; then
+        echo enabled
+        exit 0
+    fi
+    echo disabled
+    exit 1
+    ;;
+is-active)
+    if [[ "${FAKE_SYSTEMCTL_UNKNOWN_STATE:-0}" == "1" ]]; then
+        echo unknown
+        exit 4
+    fi
+    if [[ -f "$active_file" ]]; then
+        echo active
+        exit 0
+    fi
+    echo inactive
+    exit 3
+    ;;
+enable)
+    if fail_marker "${FAKE_SYSTEMCTL_ENABLE_FAIL:-}"; then
+        echo 'fake: enable failed' >&2
+        exit 1
+    fi
+    : >"$enabled_file"
+    case " $* " in *" --now "*) : >"$active_file" ;; esac
+    exit 0
+    ;;
+disable)
+    if fail_marker "${FAKE_SYSTEMCTL_DISABLE_FAIL:-}"; then
+        echo 'fake: disable failed' >&2
+        exit 1
+    fi
+    rm -f "$enabled_file"
+    case " $* " in *" --now "*) rm -f "$active_file" ;; esac
+    exit 0
+    ;;
+start)
+    if fail_marker "${FAKE_SYSTEMCTL_START_FAIL:-}"; then
+        echo 'fake: start failed' >&2
+        exit 1
+    fi
+    : >"$active_file"
+    exit 0
+    ;;
+stop)
+    if fail_marker "${FAKE_SYSTEMCTL_STOP_FAIL:-}"; then
+        echo 'fake: stop failed' >&2
+        exit 1
+    fi
+    rm -f "$active_file"
+    exit 0
+    ;;
+daemon-reload)
+    if fail_marker "${FAKE_SYSTEMCTL_DAEMON_RELOAD_FAIL:-}"; then
+        echo 'fake: daemon-reload failed' >&2
+        exit 1
+    fi
+    exit 0
+    ;;
+esac
 exit 0
 SH
 
@@ -490,6 +568,7 @@ make_env() {
         "FAKE_DOCKER_UP_FAIL_FILE=$DOCKER_UP_FAIL_FILE"
         "FAKE_DOCKER_STATUS_FILE=$DOCKER_STATUS_FILE"
         "FAKE_HTTP_STATE_FILE=$HTTP_STATE_FILE"
+        "FAKE_SYSTEMCTL_STATE=$TEST_ROOT/systemctl-state"
     )
 }
 
@@ -501,6 +580,8 @@ prepare_remote() {
     echo 0 >"$DOCKER_UP_FAIL_FILE"
     echo running >"$DOCKER_STATUS_FILE"
     echo "$remote/current" >"$HTTP_STATE_FILE"
+    rm -rf "$TEST_ROOT/systemctl-state"
+    mkdir -p "$TEST_ROOT/systemctl-state"
 }
 
 run_publish() {
@@ -959,7 +1040,8 @@ else
     pass "配置备份目录已在回滚后清理"
 fi
 expect_contains "发布日志记录配置失败回滚" "$REMOTE4/updater/logs/publish.log" "配置渲染/安装失败"
-expect_contains "配置回滚时恢复 timer 启用状态" "$CALLS_LOG" "enable --now stash-kelee-update.timer"
+expect_contains "配置回滚时恢复 timer 禁用状态" "$CALLS_LOG" "disable stash-kelee-update.timer"
+expect_contains "配置回滚时停止发布期间激活的 timer" "$CALLS_LOG" "stop stash-kelee-update.timer"
 unset FAKE_RENDER_EXIT FAKE_RENDER_LOG
 make_env "$REMOTE"
 
@@ -1391,6 +1473,180 @@ expect_rc "旧地址不可推导时回滚返回原错误码 40（非 critical）
 expect_link "旧地址不可推导时 current 仍恢复旧版本" "$REMOTE18/current" "$REMOTE18/releases/legacy-no-manifest"
 expect_contains "旧地址不可推导时记录 rollback_ok" "$REMOTE18/updater/logs/publish.log" "|rollback_ok|"
 expect_contains "旧地址不可推导时明确警告跳过复验" "$RUN_LOG" "无法从旧环境/构建清单推导旧版本公开地址"
+make_env "$REMOTE"
+
+
+make_timer_render_script() {
+    local app="$1" action="$2" exit_code="$3"
+    cat >"$app/render-config.sh" <<SH
+#!/usr/bin/env bash
+set -u
+printf 'TIMER_RENDER=%s\n' "$action" >"\$STASH_UPDATER_ROOT/env"
+systemctl $action stash-kelee-update.timer >/dev/null 2>&1 || true
+exit $exit_code
+SH
+    chmod +x "$app/render-config.sh"
+}
+
+set_timer_state() {
+    local enabled="$1" active="$2"
+    rm -rf "$TEST_ROOT/systemctl-state"
+    mkdir -p "$TEST_ROOT/systemctl-state"
+    ((enabled == 1)) && : >"$TEST_ROOT/systemctl-state/enabled"
+    ((active == 1)) && : >"$TEST_ROOT/systemctl-state/active"
+    return 0
+}
+
+timer_state() {
+    local enabled=disabled active=inactive
+    [[ -f "$TEST_ROOT/systemctl-state/enabled" ]] && enabled=enabled
+    [[ -f "$TEST_ROOT/systemctl-state/active" ]] && active=active
+    printf '%s/%s' "$enabled" "$active"
+}
+
+printf '== 场景 30：timer 正常恢复路径（原 disabled/inactive -> 发布启用 -> 回滚禁用/停止） ==\n'
+REMOTE20="$TEST_ROOT/remote20"
+prepare_old_domain_remote "$REMOTE20" "https://old.example" "old.example"
+make_env "$REMOTE20"
+set_timer_state 0 0
+APP20="$REMOTE20/updater/releases/render/app"
+mkdir -p "$APP20"
+make_timer_render_script "$APP20" "enable --now" 10
+stage_bundle "$REMOTE20" "r4-timer-normal" "timer-normal" 0
+run_publish --release-id "r4-timer-normal" \
+    --staging "$REMOTE20/releases/.staging-r4-timer-normal" \
+    --expected-sums "$TEST_ROOT/r4-timer-normal.sums" \
+    --render-config-script "$APP20/render-config.sh" --render-enable-timer --skip-retention
+expect_rc "timer 正常恢复返回原错误码 10" 10
+expect_eq "timer 正常恢复最终为 disabled/inactive" "disabled/inactive" "$(timer_state)"
+expect_contains "timer 正常恢复记录 rollback_ok" "$REMOTE20/updater/logs/publish.log" "|rollback_ok|"
+expect_contains "timer 正常恢复执行 disable（非 enable）" "$CALLS_LOG" "disable stash-kelee-update.timer"
+expect_contains "timer 正常恢复执行 stop" "$CALLS_LOG" "stop stash-kelee-update.timer"
+if find "$REMOTE20/updater/state" -maxdepth 1 -name '.config-backup.*' | grep -q .; then
+    fail "timer 正常恢复后备份未清理"
+else
+    pass "timer 正常恢复后备份已清理"
+fi
+
+printf '== 场景 31：原 disabled -> 发布 enabled -> 回滚 disable 失败 -> EX_CRITICAL ==\n'
+REMOTE21="$TEST_ROOT/remote21"
+prepare_old_domain_remote "$REMOTE21" "https://old.example" "old.example"
+make_env "$REMOTE21"
+set_timer_state 0 0
+APP21="$REMOTE21/updater/releases/render/app"
+mkdir -p "$APP21"
+make_timer_render_script "$APP21" "enable --now" 10
+export FAKE_SYSTEMCTL_DISABLE_FAIL="$TEST_ROOT/timer-disable-fail"
+: >"$FAKE_SYSTEMCTL_DISABLE_FAIL"
+stage_bundle "$REMOTE21" "r4-timer-disable-fail" "timer-disable-fail" 0
+run_publish --release-id "r4-timer-disable-fail" \
+    --staging "$REMOTE21/releases/.staging-r4-timer-disable-fail" \
+    --expected-sums "$TEST_ROOT/r4-timer-disable-fail.sums" \
+    --render-config-script "$APP21/render-config.sh" --render-enable-timer --skip-retention
+expect_rc "timer disable 恢复失败返回 EX_CRITICAL(60)" 60
+expect_eq "timer disable 失败后仍为 enabled" "enabled/inactive" "$(timer_state)"
+expect_contains "timer disable 失败记录 rollback_failed" "$REMOTE21/updater/logs/publish.log" "|rollback_failed|"
+if find "$REMOTE21/updater/state" -maxdepth 1 -name '.config-backup.*' | grep -q .; then
+    pass "timer disable 失败时保留配置备份"
+else
+    fail "timer disable 失败后配置备份被删除"
+fi
+unset FAKE_SYSTEMCTL_DISABLE_FAIL
+
+printf '== 场景 32：原 enabled/active -> 回滚 enable 失败 -> EX_CRITICAL ==\n'
+REMOTE22="$TEST_ROOT/remote22"
+prepare_old_domain_remote "$REMOTE22" "https://old.example" "old.example"
+make_env "$REMOTE22"
+set_timer_state 1 1
+APP22="$REMOTE22/updater/releases/render/app"
+mkdir -p "$APP22"
+make_timer_render_script "$APP22" "disable --now" 10
+export FAKE_SYSTEMCTL_ENABLE_FAIL="$TEST_ROOT/timer-enable-fail"
+: >"$FAKE_SYSTEMCTL_ENABLE_FAIL"
+stage_bundle "$REMOTE22" "r4-timer-enable-fail" "timer-enable-fail" 0
+run_publish --release-id "r4-timer-enable-fail" \
+    --staging "$REMOTE22/releases/.staging-r4-timer-enable-fail" \
+    --expected-sums "$TEST_ROOT/r4-timer-enable-fail.sums" \
+    --render-config-script "$APP22/render-config.sh" --render-enable-timer --skip-retention
+expect_rc "timer enable 恢复失败返回 EX_CRITICAL(60)" 60
+expect_eq "timer enable 失败后仍为 disabled" "disabled/active" "$(timer_state)"
+expect_contains "timer enable 失败记录 rollback_failed" "$REMOTE22/updater/logs/publish.log" "|rollback_failed|"
+if find "$REMOTE22/updater/state" -maxdepth 1 -name '.config-backup.*' | grep -q .; then
+    pass "timer enable 失败时保留配置备份"
+else
+    fail "timer enable 失败后配置备份被删除"
+fi
+unset FAKE_SYSTEMCTL_ENABLE_FAIL
+
+printf '== 场景 33：daemon-reload 失败 -> EX_CRITICAL、保留备份 ==\n'
+REMOTE23="$TEST_ROOT/remote23"
+prepare_old_domain_remote "$REMOTE23" "https://old.example" "old.example"
+make_env "$REMOTE23"
+APP23="$REMOTE23/updater/releases/render/app"
+mkdir -p "$APP23"
+cat >"$APP23/render-config.sh" <<'SH'
+#!/usr/bin/env bash
+set -u
+printf 'DAEMON_RENDER=1\n' >"$STASH_UPDATER_ROOT/env"
+exit 10
+SH
+chmod +x "$APP23/render-config.sh"
+export FAKE_SYSTEMCTL_DAEMON_RELOAD_FAIL="$TEST_ROOT/daemon-reload-fail"
+: >"$FAKE_SYSTEMCTL_DAEMON_RELOAD_FAIL"
+stage_bundle "$REMOTE23" "r4-daemon-reload-fail" "daemon-reload-fail" 0
+run_publish --release-id "r4-daemon-reload-fail" \
+    --staging "$REMOTE23/releases/.staging-r4-daemon-reload-fail" \
+    --expected-sums "$TEST_ROOT/r4-daemon-reload-fail.sums" \
+    --render-config-script "$APP23/render-config.sh" --render-install-units --skip-retention
+expect_rc "daemon-reload 失败返回 EX_CRITICAL(60)" 60
+expect_contains "daemon-reload 失败记录 rollback_failed" "$REMOTE23/updater/logs/publish.log" "|rollback_failed|"
+if find "$REMOTE23/updater/state" -maxdepth 1 -name '.config-backup.*' | grep -q .; then
+    pass "daemon-reload 失败时保留配置备份"
+else
+    fail "daemon-reload 失败后配置备份被删除"
+fi
+unset FAKE_SYSTEMCTL_DAEMON_RELOAD_FAIL
+
+printf '== 场景 34：无法读取发布前 timer 状态 -> 明确诊断并拒绝修改 ==\n'
+REMOTE24="$TEST_ROOT/remote24"
+prepare_old_domain_remote "$REMOTE24" "https://old.example" "old.example"
+make_env "$REMOTE24"
+set_timer_state 0 0
+APP24="$REMOTE24/updater/releases/render/app"
+mkdir -p "$APP24"
+make_timer_render_script "$APP24" "enable --now" 10
+export FAKE_SYSTEMCTL_UNKNOWN_STATE=1
+stage_bundle "$REMOTE24" "r4-timer-unknown" "timer-unknown" 0
+run_publish --release-id "r4-timer-unknown" \
+    --staging "$REMOTE24/releases/.staging-r4-timer-unknown" \
+    --expected-sums "$TEST_ROOT/r4-timer-unknown.sums" \
+    --render-config-script "$APP24/render-config.sh" --render-enable-timer --skip-retention
+expect_rc "无法读取 timer 状态返回配置错误 10" 10
+expect_contains "无法读取 timer 状态给出明确诊断" "$RUN_LOG" "无法读取发布前 stash-kelee-update.timer 状态"
+expect_eq "无法读取 timer 状态时 timer 未改变" "disabled/inactive" "$(timer_state)"
+if find "$REMOTE24/updater/state" -maxdepth 1 -name '.config-backup.*' | grep -q .; then
+    fail "无法读取 timer 状态后备份未清理"
+else
+    pass "无法读取 timer 状态后备份已清理"
+fi
+unset FAKE_SYSTEMCTL_UNKNOWN_STATE
+
+printf '== 场景 35：原 enabled/inactive -> 回滚不得意外启动 timer ==\n'
+REMOTE25="$TEST_ROOT/remote25"
+prepare_old_domain_remote "$REMOTE25" "https://old.example" "old.example"
+make_env "$REMOTE25"
+set_timer_state 1 0
+APP25="$REMOTE25/updater/releases/render/app"
+mkdir -p "$APP25"
+make_timer_render_script "$APP25" "enable --now" 10
+stage_bundle "$REMOTE25" "r4-timer-enabled-inactive" "timer-enabled-inactive" 0
+run_publish --release-id "r4-timer-enabled-inactive" \
+    --staging "$REMOTE25/releases/.staging-r4-timer-enabled-inactive" \
+    --expected-sums "$TEST_ROOT/r4-timer-enabled-inactive.sums" \
+    --render-config-script "$APP25/render-config.sh" --render-enable-timer --skip-retention
+expect_rc "enabled/inactive 恢复返回原错误码 10" 10
+expect_eq "enabled/inactive 恢复后仍为 enabled/inactive" "enabled/inactive" "$(timer_state)"
+expect_contains "enabled/inactive 恢复记录 rollback_ok" "$REMOTE25/updater/logs/publish.log" "|rollback_ok|"
 make_env "$REMOTE"
 
 printf '\n== 汇总 ==\n'

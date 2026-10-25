@@ -755,6 +755,7 @@ class PendingHeader:
     value: str
     source: str
     merged: bool = False
+    merged_mocks: list[str] = field(default_factory=list)
 
 
 def _host_tokens(pattern: str) -> set[str]:
@@ -1379,13 +1380,12 @@ def convert_rewrites(rewrite_lines: list[str], ctx: ConversionContext) -> None:
     # Merge only when coverage is proven; emit a normal header-rewrite for any
     # header that was not merged OR that can also match non-mock URLs (merging
     # into a mock must never drop the header's effect elsewhere).
-    mock_patterns = [mock["match"] for mock in ctx.mock if mock.get("match")]
     for mock in ctx.mock:
         if mock.get("match"):
             _merge_pending_into_mock(mock, pending_headers, ctx)
     for header in pending_headers:
-        if header.merged and mock_patterns and _header_fully_covered_by_mocks(
-            header.pattern, mock_patterns
+        if header.merged and _header_fully_covered_by_mocks(
+            header.pattern, header.merged_mocks
         ):
             continue
         ctx.header_rewrite.append(
@@ -1437,7 +1437,10 @@ def _expand_finite_tokens(tokens, limit: int) -> list[str] | None:
         if op == sre.LITERAL:
             piece = [chr(av)]
         elif op == sre.AT:
-            piece = [""]
+            # A nested/local anchor would make the enumerated strings a
+            # strict subset of the real match language. Only the top-level
+            # branch anchoring proof may consume ^/$.
+            return None
         elif op == sre.IN:
             choices: list[str] = []
             for inner_op, inner_av in av:
@@ -1511,12 +1514,63 @@ def _expand_finite_tokens(tokens, limit: int) -> list[str] | None:
     return results
 
 
+def _split_top_level_alternatives(body: str) -> list[str] | None:
+    """Split a regex body on every top-level ``|``.
+
+    ``|`` inside an escaped pair, a character class or a group does not split.
+    An unbalanced/truncated pattern returns None (the regex parser would reject
+    it anyway, and we must not guess a structure for the proof).
+    """
+
+    branches: list[str] = []
+    start = 0
+    depth = 0
+    in_class = False
+    escaped = False
+    for index, char in enumerate(body):
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if in_class:
+            if char == "]":
+                in_class = False
+            continue
+        if char == "[":
+            in_class = True
+            continue
+        if char == "(":
+            depth += 1
+            continue
+        if char == ")":
+            depth -= 1
+            if depth < 0:
+                return None
+            continue
+        if char == "|" and depth == 0:
+            branches.append(body[start:index])
+            start = index + 1
+    if escaped or in_class or depth != 0:
+        return None
+    branches.append(body[start:])
+    return branches
+
+
 def _finite_language(pattern: str, *, limit: int = FINITE_LANGUAGE_LIMIT) -> list[str] | None:
     """Return the complete URL language of an anchored finite regex, or None.
 
-    Unanchored patterns have an unbounded language (arbitrary prefixes/
-    suffixes), and unbounded repetitions are likewise not enumerable; both
-    return None so callers never treat sampling as proof.
+    Anchoring is proved per top-level alternative, not by naively checking that
+    the whole pattern starts with ``^`` and ends with ``$``. For example
+    ``^https://a/x|https://a/y$`` is *not* fully anchored: its first branch has
+    no end anchor and matches ``.../x/extra``. Requiring every top-level branch
+    to begin with ^ and end with $ (and rejecting any nested/local anchor via
+    the parser) avoids treating such a regex as a finite full-match language.
+
+    Unanchored patterns have an unbounded language, and unbounded repetitions
+    are not enumerable; both return None so callers never treat sampling as
+    proof.
     """
 
     body, flags = _split_inline_flags(pattern)
@@ -1525,18 +1579,24 @@ def _finite_language(pattern: str, *, limit: int = FINITE_LANGUAGE_LIMIT) -> lis
     # the proof must be sound without that assumption).
     if any(flag in flags for flag in "ms"):
         return None
-    if not (body.startswith("^") and body.endswith("$")):
+    branches = _split_top_level_alternatives(body)
+    if branches is None or not branches:
         return None
-    inner = body[1:-1]
     sre = _regex_compiler()
-    try:
-        parsed = sre.parse(inner, flags=0)
-    except Exception:  # noqa: BLE001
-        return None
-    expanded = _expand_finite_tokens(list(parsed), limit)
-    if expanded is None:
-        return None
-    unique = sorted(set(expanded))
+    language: list[str] = []
+    for branch in branches:
+        if len(branch) < 2 or not branch.startswith("^") or not branch.endswith("$"):
+            return None
+        inner = branch[1:-1]
+        try:
+            parsed = sre.parse(inner, flags=0)
+        except Exception:  # noqa: BLE001
+            return None
+        expanded = _expand_finite_tokens(list(parsed), limit)
+        if expanded is None:
+            return None
+        language.extend(expanded)
+    unique = sorted(set(language))
     if len(unique) > limit:
         return None
     return unique
@@ -1620,6 +1680,7 @@ def _merge_pending_into_mock(mock: dict, pending: list[PendingHeader], ctx: Conv
             continue
         headers[header.name] = header.value
         header.merged = True
+        header.merged_mocks.append(mock["match"])
         ctx.add_patch(
             "mock-header-merge",
             f"mock 响应头合并 response.header.add({header.name}={header.value})"
