@@ -138,6 +138,7 @@ python scripts/convert_kelee_lpx.py --audit-snapshot
 ### 发布事务、回滚与 GitHub 职责
 
 - 本机 `deploy-stash.ps1` 与云端 `stash-kelee-update.timer` 共用同一把 `flock` 和同一个 `publish-release.sh` 事务：上传/暂存 → 校验构建清单与文件哈希 → 快照旧配置、旧公共地址与 timer 状态 → 切换更新器应用 → copy-forward 内容寻址资产 → 原子移动版本目录 → **锁内暂存/校验/安装** EnvironmentFile、systemd 单元与可选 Caddyfile → 原子切换 `current` → 按实际 Docker/Caddy 重建/重载服务 → 用**新地址与新缓存策略**做健康检查（首页、代表性覆写、provider 合集、内容哈希脚本的字节哈希与内容标记）→ 资产账本/保留策略 → 原子同步权威更新状态（提交点），之后只做非关键记账。失败时恢复旧 `current`、更新器应用指针、旧配置与 timer 状态，重建旧服务并用**旧地址 + 旧配置**复验；任何关键恢复步骤失败返回 `EX_CRITICAL`、记录 `rollback_failed` 并保留配置备份与人工恢复路径，首次部署失败则移除指针而不是留下半套站点。
+- 默认部署不强制以“新缓存策略”为健康检查失败条件；安装 Caddyfile（`-InstallCaddyfile`）或显式 `-StrictCacheHeaders` 时才把缓存头不匹配升级为失败，否则只记录警告（旧 Caddyfile 不会因此误阻断发布）。
 - 旧版本按 `STASH_KEEP_RELEASES`（默认 3）与 `STASH_KEEP_ASSET_DAYS`（默认 30 天）清理，始终保护当前版本、回滚版本和仍被旧覆写引用的内容哈希脚本；清理前先确认当前版本引用与本机资产账本。
 - 手工回滚（先加载 EnvironmentFile，否则助手会因缺少公共地址/路径而拒绝）：`set -a; . <updater>/env; set +a; bash <updater>/current/publish-release.sh --rollback-to <版本号>`；`deploy-stash.ps1 -DryRun` 只校验参数并打印计划（不构建、不联网、不写产物、不执行 ssh/scp），`-BuildOnly` 才进行本地构建，去掉开关执行部署。
 - GitHub Actions 只承担**离线验证 + 构建并上传 artifact**：`validate.yml` 做真实 YAML 解析、结构/完整性校验、转换/解析/校验/构建/发布事务测试；`kelee-sync.yml` 分成无网络离线逻辑 job 和上游构建 job，`contents: read`，不上传仓库、不提交生成物、不发布站点。生产发布由本机部署或云端 timer 完成，二者状态一致。

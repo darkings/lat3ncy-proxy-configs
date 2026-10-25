@@ -282,7 +282,27 @@ config_snapshot_paths() {
 }
 
 snapshot_config() {
-    [[ -n "$RENDER_CONFIG_SCRIPT" ]] || return 0
+    # Rollback must verify the old release with the old address/config. Capture
+    # the address even for the cloud path (no render script): the old env file
+    # or manifest is still authoritative for the previous release.
+    PREVIOUS_PUBLIC_BASE=""
+    PREVIOUS_PUBLIC_HOST=""
+    if [[ -f "$STASH_UPDATER_ROOT/env" ]]; then
+        PREVIOUS_PUBLIC_BASE="$(sed -n 's/^KELEE_PUBLIC_BASE=//p' "$STASH_UPDATER_ROOT/env" | tail -n 1)"
+        PREVIOUS_PUBLIC_HOST="$(sed -n 's/^STASH_PUBLIC_HOST=//p' "$STASH_UPDATER_ROOT/env" | tail -n 1)"
+    fi
+    if [[ -z "$PREVIOUS_PUBLIC_BASE" && -n "${PREVIOUS_RELEASE:-}" && -f "$PREVIOUS_RELEASE/.build-manifest.json" ]]; then
+        PREVIOUS_PUBLIC_BASE="$(sed -n 's/.*"public_base"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+            "$PREVIOUS_RELEASE/.build-manifest.json" | head -n 1)"
+    fi
+    if [[ -n "$PREVIOUS_PUBLIC_BASE" && -z "$PREVIOUS_PUBLIC_HOST" ]]; then
+        PREVIOUS_PUBLIC_HOST="${PREVIOUS_PUBLIC_BASE#*://}"
+        PREVIOUS_PUBLIC_HOST="${PREVIOUS_PUBLIC_HOST%%/*}"
+    fi
+
+    if [[ -z "$RENDER_CONFIG_SCRIPT" ]]; then
+        return 0
+    fi
     mkdir -p "$STATE_DIR" || die "$EX_STATE" "无法创建状态目录：$STATE_DIR"
     CONFIG_BACKUP_DIR="$(mktemp -d "$STATE_DIR/.config-backup.${RELEASE_ID}.XXXXXX")" ||
         die "$EX_STATE" "无法创建配置备份目录"
@@ -299,25 +319,6 @@ snapshot_config() {
         printf '%s\t%s\t%s\n' "$index" "$path" "$existed" >>"$CONFIG_BACKUP_DIR/map"
         index=$((index + 1))
     done
-    # Rollback health checks must use the old release's own address, not the
-    # new domain from the EnvironmentFile being installed by this transaction.
-    PREVIOUS_PUBLIC_BASE=""
-    PREVIOUS_PUBLIC_HOST=""
-    if [[ -f "$STASH_UPDATER_ROOT/env" ]]; then
-        PREVIOUS_PUBLIC_BASE="$(sed -n 's/^KELEE_PUBLIC_BASE=//p' "$STASH_UPDATER_ROOT/env" | tail -n 1)"
-        PREVIOUS_PUBLIC_HOST="$(sed -n 's/^STASH_PUBLIC_HOST=//p' "$STASH_UPDATER_ROOT/env" | tail -n 1)"
-    fi
-    if [[ -z "$PREVIOUS_PUBLIC_BASE" && -n "${PREVIOUS_RELEASE:-}" && -f "$PREVIOUS_RELEASE/.build-manifest.json" ]]; then
-        PREVIOUS_PUBLIC_BASE="$(sed -n 's/.*"public_base"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
-            "$PREVIOUS_RELEASE/.build-manifest.json" | head -n 1)"
-        if [[ -n "$PREVIOUS_PUBLIC_BASE" ]]; then
-            PREVIOUS_PUBLIC_HOST="${PREVIOUS_PUBLIC_BASE#*://}"
-        fi
-    fi
-    if [[ -z "$PREVIOUS_PUBLIC_BASE" ]]; then
-        PREVIOUS_PUBLIC_BASE="$STASH_PUBLIC_BASE"
-        PREVIOUS_PUBLIC_HOST="$STASH_PUBLIC_HOST"
-    fi
     if ((RENDER_ENABLE_TIMER == 1)) && command -v systemctl >/dev/null 2>&1; then
         if systemctl is-enabled --quiet stash-kelee-update.timer >/dev/null 2>&1; then
             TIMER_WAS_ENABLED=1
@@ -448,10 +449,13 @@ restore_transaction_state() {
         compose_up || RESTORE_FAILURES+=("旧服务重建")
         wait_container_running || RESTORE_FAILURES+=("旧容器状态")
         if [[ -n "${PREVIOUS_RELEASE:-}" && -d "$PREVIOUS_RELEASE" ]]; then
-            local old_base="${PREVIOUS_PUBLIC_BASE:-$STASH_PUBLIC_BASE}"
-            local old_host="${PREVIOUS_PUBLIC_HOST:-$STASH_PUBLIC_HOST}"
-            if ! perform_health "$PREVIOUS_RELEASE" "$old_base" "$old_host" 0; then
-                RESTORE_FAILURES+=("旧版本健康复验（$old_base）")
+            if [[ -z "$PREVIOUS_PUBLIC_BASE" || -z "$PREVIOUS_PUBLIC_HOST" ]]; then
+                warn "无法从旧环境/构建清单推导旧版本公开地址，跳过旧版本健康复验；请人工确认 $PREVIOUS_RELEASE"
+            else
+                if ! perform_health "$PREVIOUS_RELEASE" "$PREVIOUS_PUBLIC_BASE" \
+                    "$PREVIOUS_PUBLIC_HOST" 0; then
+                    RESTORE_FAILURES+=("旧版本健康复验（$PREVIOUS_PUBLIC_BASE）")
+                fi
             fi
         fi
     fi
@@ -756,9 +760,9 @@ TRANSACTION_ACTIVE=0
 if ! ( update_asset_ledger "$RELEASE_DIR" ); then
     warn "资产账本更新失败（发布已提交，可稍后手动重跑 retention/账本）"
 fi
-if ! write_publish_state "publish-release.sh" "publish" "success" "$RELEASE_DIR" "" "$FINGERPRINT" \
-    "$PREVIOUS_RELEASE" "$ROLLBACK_COUNT"; then
-    warn "发布状态写入失败（发布站点已上线，请检查 $STATE_FILE）"
+if ! ( write_publish_state "publish-release.sh" "publish" "success" "$RELEASE_DIR" "" "$FINGERPRINT" \
+    "$PREVIOUS_RELEASE" "$ROLLBACK_COUNT" ); then
+    warn "发布状态写入失败（发布站点已上线，请检查 $STATE_FILE；不执行回滚）"
 fi
 append_event "publish" "$RELEASE_ID" "source=$SOURCE current=$RELEASE_DIR previous=${PREVIOUS_RELEASE:-none}"
 cleanup_config_backup

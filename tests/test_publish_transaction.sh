@@ -1343,6 +1343,56 @@ fi
 unset FAKE_DOCKER_FAIL_AFTER FAKE_DOCKER_COUNTER_FILE
 make_env "$REMOTE"
 
+
+printf '== 场景 28：提交点后 publish.env 写失败不得把成功发布报告为回滚 ==\n'
+REMOTE17="$TEST_ROOT/remote17"
+prepare_remote "$REMOTE17"
+make_env "$REMOTE17"
+echo "$REMOTE17/current" >"$HTTP_STATE_FILE"
+stage_bundle "$REMOTE17" "r3-post-commit-write-fail" "post-commit-write-fail" 0
+cat >"$FAKE_BIN/mv" <<'SH'
+#!/usr/bin/env bash
+for arg in "$@"; do
+    case "$arg" in
+    *"/updater/state/publish.env") exit 1 ;;
+    esac
+done
+exec /usr/bin/mv "$@"
+SH
+chmod +x "$FAKE_BIN/mv"
+run_publish --release-id "r3-post-commit-write-fail" \
+    --staging "$REMOTE17/releases/.staging-r3-post-commit-write-fail" \
+    --expected-sums "$TEST_ROOT/r3-post-commit-write-fail.sums" \
+    --skip-retention
+expect_rc "提交点后状态写失败仍返回成功 0（不误报回滚）" 0
+expect_link "提交点后状态写失败仍保留新版本 current" "$REMOTE17/current" "$REMOTE17/releases/r3-post-commit-write-fail"
+expect_contains "提交点后状态写失败给出警告" "$RUN_LOG" "发布状态写入失败"
+expect_contains "提交点后状态写失败仍记录 publish 事件" "$REMOTE17/updater/logs/publish.log" "|publish|"
+rm -f "$FAKE_BIN/mv"
+
+printf '== 场景 29：旧地址不可推导时回滚健康复验跳过而不是误报 critical ==\n'
+REMOTE18="$TEST_ROOT/remote18"
+prepare_remote "$REMOTE18"
+mkdir -p "$REMOTE18/releases/legacy-no-manifest"
+printf '<html><body>legacy without manifest/env</body></html>\n' >"$REMOTE18/releases/legacy-no-manifest/index.html"
+printf 'name: legacy\n' >"$REMOTE18/releases/legacy-no-manifest/A_Test.stoverride"
+printf 'name: legacy-scripts\n' >"$REMOTE18/releases/legacy-no-manifest/kelee-scripts.stoverride"
+ln -sfn "$REMOTE18/releases/legacy-no-manifest" "$REMOTE18/current"
+rm -f "$REMOTE18/updater/env"
+mkdir -p "$TEST_ROOT/empty-http-root"
+echo "$TEST_ROOT/empty-http-root" >"$HTTP_STATE_FILE"
+make_env "$REMOTE18"
+stage_bundle "$REMOTE18" "r3-unknown-old-address" "unknown-old-address" 0
+run_publish --release-id "r3-unknown-old-address" \
+    --staging "$REMOTE18/releases/.staging-r3-unknown-old-address" \
+    --expected-sums "$TEST_ROOT/r3-unknown-old-address.sums" \
+    --skip-retention
+expect_rc "旧地址不可推导时回滚返回原错误码 40（非 critical）" 40
+expect_link "旧地址不可推导时 current 仍恢复旧版本" "$REMOTE18/current" "$REMOTE18/releases/legacy-no-manifest"
+expect_contains "旧地址不可推导时记录 rollback_ok" "$REMOTE18/updater/logs/publish.log" "|rollback_ok|"
+expect_contains "旧地址不可推导时明确警告跳过复验" "$RUN_LOG" "无法从旧环境/构建清单推导旧版本公开地址"
+make_env "$REMOTE"
+
 printf '\n== 汇总 ==\n'
 printf '通过 %d/%d 项检查\n' "$PASS_COUNT" "$CHECKS"
 if ((FAILURES > 0)); then

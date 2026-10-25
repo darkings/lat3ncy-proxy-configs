@@ -419,6 +419,27 @@ class HeaderCoverageProofTests(unittest.TestCase):
         self.assertNotIn("X-Any", result.stash["http"]["mock"][0]["headers"])
         self.assertTrue(result.stash["http"].get("header-rewrite"))
 
+    def test_identical_unbounded_pattern_merges_without_duplicate_rule(self) -> None:
+        result, _resolver = convert(
+            fixture(
+                [
+                    r'response if ${url} ~= /^https:\/\/api\.example\.com\/a+$/i '
+                    r'then response.body.mock("json", "{}", 200)',
+                    r'response if ${url} ~= /^https:\/\/api\.example\.com\/a+$/i '
+                    r'then response.header.add("X-Same-Unbounded", "1")',
+                ],
+            )
+        )
+        self.assertFalse(result.blocking, [str(d) for d in result.diagnostics])
+        self.assertEqual(
+            result.stash["http"]["mock"][0]["headers"].get("X-Same-Unbounded"), "1"
+        )
+        self.assertFalse(
+            result.stash["http"].get("header-rewrite"),
+            "textual equality proves full mock coverage; no duplicate rule",
+        )
+
+
 
 if __name__ == "__main__":
     unittest.main()

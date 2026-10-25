@@ -149,16 +149,6 @@ render_template() {
     mv -f "$tmp" "$out" || die "$EX_STATE" "无法写入：$out"
 }
 
-render_file_to() {
-    # render a template to an arbitrary output path (atomic)
-    local template="$1"
-    local out="$2"
-    local out_dir
-    out_dir="$(dirname "$out")"
-    mkdir -p "$out_dir" || die "$EX_STATE" "无法创建目录：$out_dir"
-    render_template "$template" "$out"
-}
-
 mkdir -p "$STATE_DIR" "$LOG_DIR" "$SYSTEMD_DIR" || die "$EX_STATE" "无法创建状态/日志/systemd 目录"
 
 # ---------------------------------------------------------------------------

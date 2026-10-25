@@ -1519,7 +1519,12 @@ def _finite_language(pattern: str, *, limit: int = FINITE_LANGUAGE_LIMIT) -> lis
     return None so callers never treat sampling as proof.
     """
 
-    body, _flags = _split_inline_flags(pattern)
+    body, flags = _split_inline_flags(pattern)
+    # (?m) changes ^/$ semantics and (?s) changes '.', so a "complete finite
+    # language" proof is not valid for them (URLs never contain newlines, but
+    # the proof must be sound without that assumption).
+    if any(flag in flags for flag in "ms"):
+        return None
     if not (body.startswith("^") and body.endswith("$")):
         return None
     inner = body[1:-1]
@@ -1574,6 +1579,11 @@ def _pattern_covers(header_pattern: str, mock_pattern: str) -> bool:
 def _header_fully_covered_by_mocks(header_pattern: str, mock_patterns: list[str]) -> bool:
     """Prove that every URL the header matches is one of the mock URLs."""
 
+    # Textual equality is a complete proof even when the language is infinite /
+    # not enumerable: the matching mock regex accepts exactly the same strings.
+    header_text = header_pattern.strip()
+    if any(header_text == mock.strip() for mock in mock_patterns):
+        return True
     _header_body, header_flags = _split_inline_flags(header_pattern)
     candidates = _finite_language(header_pattern)
     if candidates is None:
