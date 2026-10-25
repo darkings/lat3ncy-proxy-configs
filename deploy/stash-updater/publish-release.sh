@@ -306,6 +306,7 @@ config_snapshot_paths() {
 #     inactive | 3            -> inactive
 #     inactive | 4            -> inactive (missing unit; systemd 255)
 #     failed | 3              -> inactive (not running)
+#     not-found | 3           -> inactive (legacy compatibility)
 #     not-found | 4           -> inactive (explicit absent evidence)
 # Anything else (including activating/deactivating/reloading, empty stdout,
 # stderr-only errors and mismatched rc) is unknown and must be rejected before
@@ -382,7 +383,7 @@ classify_timer_active_state() {
         TIMER_PROBE_VALUE=1
         return 0
         ;;
-    "inactive|3" | "inactive|4" | "failed|3" | "not-found|4")
+    "inactive|3" | "inactive|4" | "failed|3" | "not-found|3" | "not-found|4")
         TIMER_PROBE_VALUE=0
         return 0
         ;;

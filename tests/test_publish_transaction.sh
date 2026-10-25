@@ -1884,6 +1884,29 @@ else
 fi
 unset FAKE_SYSTEMCTL_POST_MUTATION_QUERY_FAIL FAKE_RENDER_CALLED
 
+
+printf '== 场景 43：首次部署 not-found/inactive（旧版 rc1/3）也可正常发布 ==\n'
+REMOTE32="$TEST_ROOT/remote32"
+prepare_remote "$REMOTE32"
+make_env "$REMOTE32"
+export FAKE_SYSTEMCTL_ENABLED_TEXT="not-found"
+export FAKE_SYSTEMCTL_ENABLED_RC=1
+export FAKE_SYSTEMCTL_ACTIVE_TEXT="inactive"
+export FAKE_SYSTEMCTL_ACTIVE_RC=3
+APP32="$REMOTE32/updater/releases/render/app"
+mkdir -p "$APP32"
+make_render_script "$APP32"
+stage_bundle "$REMOTE32" "r5-first-deploy-notfound-legacy" "first-deploy-notfound-legacy" 0
+run_publish --release-id "r5-first-deploy-notfound-legacy" \
+    --staging "$REMOTE32/releases/.staging-r5-first-deploy-notfound-legacy" \
+    --expected-sums "$TEST_ROOT/r5-first-deploy-notfound-legacy.sums" \
+    --render-config-script "$APP32/render-config.sh" --render-enable-timer --skip-retention
+expect_rc "旧版 rc1/3 not-found/inactive 首次部署发布成功" 0
+expect_link "旧版 rc1/3 首次部署 current 指向新版本" "$REMOTE32/current" "$REMOTE32/releases/r5-first-deploy-notfound-legacy"
+expect_contains "旧版 rc1/3 被记录为 enabled=0 active=0" "$RUN_LOG" "发布前 timer 状态：enabled=0 active=0"
+expect_eq "旧版 rc1/3 首次部署 timer 保持 disabled/inactive" "disabled/inactive" "$(timer_state)"
+unset FAKE_SYSTEMCTL_ENABLED_TEXT FAKE_SYSTEMCTL_ENABLED_RC FAKE_SYSTEMCTL_ACTIVE_TEXT FAKE_SYSTEMCTL_ACTIVE_RC
+
 printf '\n== 汇总 ==\n'
 printf '通过 %d/%d 项检查\n' "$PASS_COUNT" "$CHECKS"
 if ((FAILURES > 0)); then
