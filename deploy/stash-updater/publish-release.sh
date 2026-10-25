@@ -299,12 +299,14 @@ config_snapshot_paths() {
 #     disabled | 1            -> disabled
 #     masked | 1              -> disabled
 #     masked-runtime | 1      -> disabled
-#     not-found | 1           -> absent (disabled)
+#     not-found | 1           -> absent (disabled; legacy)
+#     not-found | 4           -> absent (disabled; systemd 255)
 #   is-active:
 #     active | 0              -> active
 #     inactive | 3            -> inactive
+#     inactive | 4            -> inactive (missing unit; systemd 255)
 #     failed | 3              -> inactive (not running)
-#     not-found | 3           -> inactive (explicit absent evidence)
+#     not-found | 4           -> inactive (explicit absent evidence)
 # Anything else (including activating/deactivating/reloading, empty stdout,
 # stderr-only errors and mismatched rc) is unknown and must be rejected before
 # any transaction mutation.
@@ -357,7 +359,7 @@ classify_timer_enabled_state() {
         TIMER_PROBE_VALUE=1
         return 0
         ;;
-    "disabled|1" | "masked|1" | "masked-runtime|1" | "not-found|1")
+    "disabled|1" | "masked|1" | "masked-runtime|1" | "not-found|1" | "not-found|4")
         TIMER_PROBE_VALUE=0
         return 0
         ;;
@@ -380,7 +382,7 @@ classify_timer_active_state() {
         TIMER_PROBE_VALUE=1
         return 0
         ;;
-    "inactive|3" | "failed|3" | "not-found|3")
+    "inactive|3" | "inactive|4" | "failed|3" | "not-found|4")
         TIMER_PROBE_VALUE=0
         return 0
         ;;

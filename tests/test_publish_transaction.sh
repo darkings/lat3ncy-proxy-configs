@@ -1840,14 +1840,14 @@ run_publish --release-id "r5-active-contradiction" \
 assert_snapshot_rejected_unchanged "$REMOTE29" "active 组合 inactive/0" "$APP"
 unset FAKE_SYSTEMCTL_ACTIVE_TEXT FAKE_SYSTEMCTL_ACTIVE_RC FAKE_RENDER_CALLED
 
-printf '== 场景 41：首次部署 not-found/inactive 明确证据可正常发布 ==\n'
+printf '== 场景 41：首次部署 not-found/inactive (systemd 255 rc4) 明确证据可正常发布 ==\n'
 REMOTE30="$TEST_ROOT/remote30"
 prepare_remote "$REMOTE30"
 make_env "$REMOTE30"
 export FAKE_SYSTEMCTL_ENABLED_TEXT="not-found"
-export FAKE_SYSTEMCTL_ENABLED_RC=1
+export FAKE_SYSTEMCTL_ENABLED_RC=4
 export FAKE_SYSTEMCTL_ACTIVE_TEXT="inactive"
-export FAKE_SYSTEMCTL_ACTIVE_RC=3
+export FAKE_SYSTEMCTL_ACTIVE_RC=4
 APP30="$REMOTE30/updater/releases/render/app"
 mkdir -p "$APP30"
 make_render_script "$APP30"
