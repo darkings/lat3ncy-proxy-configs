@@ -283,6 +283,114 @@ config_snapshot_paths() {
     fi
 }
 
+# ---------------------------------------------------------------------------
+# systemd timer state probing
+#
+# Query stdout, stderr and the exit code separately. A state is accepted only
+# for an explicit (text, rc) pair; empty output, unknown text, multi-line text
+# and contradictory text/rc are *unknown*, never "disabled". Non-zero rc is
+# normal for disabled/masked/not-found (is-enabled) and inactive/failed
+# (is-active), so rc alone is never used as a query-failure signal.
+#
+# Accepted table:
+#   is-enabled:
+#     enabled | 0             -> enabled
+#     enabled-runtime | 0     -> enabled
+#     disabled | 1            -> disabled
+#     masked | 1              -> disabled
+#     masked-runtime | 1      -> disabled
+#     not-found | 1           -> absent (disabled)
+#   is-active:
+#     active | 0              -> active
+#     inactive | 3            -> inactive
+#     failed | 3              -> inactive (not running)
+#     not-found | 3           -> inactive (explicit absent evidence)
+# Anything else (including activating/deactivating/reloading, empty stdout,
+# stderr-only errors and mismatched rc) is unknown and must be rejected before
+# any transaction mutation.
+# ---------------------------------------------------------------------------
+
+QUERY_STDOUT=""
+QUERY_STDERR=""
+QUERY_RC=0
+TIMER_PROBE_VALUE=0
+TIMER_STATE_REASON=""
+
+_trim_state_text() {
+    local text="$1"
+    text="${text//$'\r'/}"
+    text="${text#"${text%%[![:space:]]*}"}"
+    text="${text%"${text##*[![:space:]]}"}"
+    printf '%s' "$text"
+}
+
+probe_systemctl_state() {
+    local mode="$1"
+    local unit="$2"
+    local out err rc=0
+    out="$(mktemp)" || return 1
+    err="$(mktemp)" || {
+        rm -f -- "$out" 2>/dev/null || true
+        return 1
+    }
+    systemctl "$mode" "$unit" >"$out" 2>"$err" || rc=$?
+    QUERY_STDOUT="$(cat "$out")"
+    QUERY_STDERR="$(cat "$err")"
+    QUERY_RC=$rc
+    rm -f -- "$out" "$err" 2>/dev/null || true
+    return 0
+}
+
+probe_detail() {
+    printf 'stdout=%q stderr=%q rc=%s' "$QUERY_STDOUT" "$QUERY_STDERR" "$QUERY_RC"
+}
+
+classify_timer_enabled_state() {
+    local text
+    text="$(_trim_state_text "$QUERY_STDOUT")"
+    if [[ "$text" == *$'\n'* ]]; then
+        TIMER_STATE_REASON="is-enabled 输出包含多行文本"
+        return 1
+    fi
+    case "$text|$QUERY_RC" in
+    "enabled|0" | "enabled-runtime|0")
+        TIMER_PROBE_VALUE=1
+        return 0
+        ;;
+    "disabled|1" | "masked|1" | "masked-runtime|1" | "not-found|1")
+        TIMER_PROBE_VALUE=0
+        return 0
+        ;;
+    *)
+        TIMER_STATE_REASON="is-enabled 文本/退出码组合不在可接受表内"
+        return 1
+        ;;
+    esac
+}
+
+classify_timer_active_state() {
+    local text
+    text="$(_trim_state_text "$QUERY_STDOUT")"
+    if [[ "$text" == *$'\n'* ]]; then
+        TIMER_STATE_REASON="is-active 输出包含多行文本"
+        return 1
+    fi
+    case "$text|$QUERY_RC" in
+    "active|0")
+        TIMER_PROBE_VALUE=1
+        return 0
+        ;;
+    "inactive|3" | "failed|3" | "not-found|3")
+        TIMER_PROBE_VALUE=0
+        return 0
+        ;;
+    *)
+        TIMER_STATE_REASON="is-active 文本/退出码组合不在可接受表内"
+        return 1
+        ;;
+    esac
+}
+
 snapshot_config() {
     # Rollback must verify the old release with the old address/config. Capture
     # the address even for the cloud path (no render script): the old env file
@@ -326,35 +434,36 @@ snapshot_config() {
             cleanup_config_backup
             die_config "启用了 --render-enable-timer，但系统缺少 systemctl；无法读取/恢复发布前 timer 状态"
         fi
-        local enabled_out active_out enabled_known=0 active_known=0
-        enabled_out="$(systemctl is-enabled stash-kelee-update.timer 2>/dev/null || true)"
-        active_out="$(systemctl is-active stash-kelee-update.timer 2>/dev/null || true)"
-        case "$enabled_out" in
-        enabled | enabled-runtime)
-            TIMER_WAS_ENABLED=1
-            enabled_known=1
-            ;;
-        disabled | masked | not-found | "")
-            TIMER_WAS_ENABLED=0
-            enabled_known=1
-            ;;
-        esac
-        case "$active_out" in
-        active | activating | reloading)
-            TIMER_WAS_ACTIVE=1
-            active_known=1
-            ;;
-        inactive | failed | deactivating)
-            TIMER_WAS_ACTIVE=0
-            active_known=1
-            ;;
-        esac
-        if ((enabled_known == 0 || active_known == 0)); then
+        if ! probe_systemctl_state is-enabled stash-kelee-update.timer; then
             cleanup_config_backup
-            die_config "无法读取发布前 stash-kelee-update.timer 状态（is-enabled='$enabled_out' is-active='$active_out'）；拒绝在状态未知时修改 timer"
+            die_config "无法执行 systemctl is-enabled 查询；拒绝在状态未知时修改 timer"
         fi
+        if ! classify_timer_enabled_state; then
+            local enabled_detail
+            enabled_detail="$(probe_detail)"
+            cleanup_config_backup
+            die_config "无法读取发布前 stash-kelee-update.timer 状态（enabled 查询：$TIMER_STATE_REASON；$enabled_detail）；拒绝在状态未知时修改 timer"
+        fi
+        TIMER_WAS_ENABLED=$TIMER_PROBE_VALUE
+        local enabled_stdout="$QUERY_STDOUT" enabled_stderr="$QUERY_STDERR" enabled_rc="$QUERY_RC"
+
+        if ! probe_systemctl_state is-active stash-kelee-update.timer; then
+            cleanup_config_backup
+            die_config "无法执行 systemctl is-active 查询；拒绝在状态未知时修改 timer"
+        fi
+        if ! classify_timer_active_state; then
+            local active_detail
+            active_detail="$(probe_detail)"
+            cleanup_config_backup
+            die_config "无法读取发布前 stash-kelee-update.timer 状态（active 查询：$TIMER_STATE_REASON；$active_detail）；拒绝在状态未知时修改 timer"
+        fi
+        TIMER_WAS_ACTIVE=$TIMER_PROBE_VALUE
+        local active_stdout="$QUERY_STDOUT" active_stderr="$QUERY_STDERR" active_rc="$QUERY_RC"
         TIMER_STATE_KNOWN=1
-        log "发布前 timer 状态：enabled=$TIMER_WAS_ENABLED active=$TIMER_WAS_ACTIVE（将完整恢复二者，不混用 --now）"
+        log "发布前 timer 状态：enabled=$TIMER_WAS_ENABLED active=$TIMER_WAS_ACTIVE"
+        log "  is-enabled: stdout=$(printf '%q' "$enabled_stdout") stderr=$(printf '%q' "$enabled_stderr") rc=$enabled_rc"
+        log "  is-active:  stdout=$(printf '%q' "$active_stdout") stderr=$(printf '%q' "$active_stderr") rc=$active_rc"
+        log "  将完整恢复 enabled/active 二者，不混用 --now"
     fi
     log "已快照发布前配置（${#CONFIG_PATH_LIST[@]} 项）：$CONFIG_BACKUP_DIR（旧地址 ${PREVIOUS_PUBLIC_BASE}）"
 }
@@ -366,7 +475,7 @@ snapshot_config() {
 # failure; a state that does not match is.
 restore_timer_state() {
     ((RENDER_ENABLE_TIMER == 1)) || return 0
-    local failures=0 enabled_out active_out
+    local failures=0
     if ((TIMER_STATE_KNOWN != 1)); then
         warn "无法读取发布前 timer enabled/active 状态，无法证明已恢复"
         return 1
@@ -391,40 +500,29 @@ restore_timer_state() {
             warn "systemctl stop stash-kelee-update.timer 返回失败，继续校验实际状态"
     fi
 
-    enabled_out="$(systemctl is-enabled stash-kelee-update.timer 2>/dev/null || true)"
-    active_out="$(systemctl is-active stash-kelee-update.timer 2>/dev/null || true)"
-    if ((TIMER_WAS_ENABLED == 1)); then
-        case "$enabled_out" in
-        enabled | enabled-runtime) ;;
-        *)
-            warn "timer enabled 状态恢复失败：期望 enabled，实际 '$enabled_out'"
-            failures=$((failures + 1))
-            ;;
-        esac
-    else
-        case "$enabled_out" in
-        disabled | masked | not-found) ;;
-        *)
-            warn "timer disabled 状态恢复失败：期望 disabled，实际 '$enabled_out'"
-            failures=$((failures + 1))
-            ;;
-        esac
+    local enabled_detail active_detail
+    if ! probe_systemctl_state is-enabled stash-kelee-update.timer; then
+        warn "恢复后无法执行 systemctl is-enabled 查询，无法证明 timer enabled 状态"
+        failures=$((failures + 1))
+    elif ! classify_timer_enabled_state; then
+        enabled_detail="$(probe_detail)"
+        warn "恢复后 timer enabled 查询不可信（$TIMER_STATE_REASON；$enabled_detail）"
+        failures=$((failures + 1))
+    elif ((TIMER_PROBE_VALUE != TIMER_WAS_ENABLED)); then
+        warn "timer enabled 状态恢复失败：期望 $TIMER_WAS_ENABLED，实际 $TIMER_PROBE_VALUE"
+        failures=$((failures + 1))
     fi
-    if ((TIMER_WAS_ACTIVE == 1)); then
-        case "$active_out" in
-        active | activating | reloading) ;;
-        *)
-            warn "timer active 状态恢复失败：期望 active，实际 '$active_out'"
-            failures=$((failures + 1))
-            ;;
-        esac
-    else
-        if [[ "$active_out" == "inactive" ]]; then
-            :
-        else
-            warn "timer inactive 状态恢复失败：期望 inactive，实际 '$active_out'"
-            failures=$((failures + 1))
-        fi
+
+    if ! probe_systemctl_state is-active stash-kelee-update.timer; then
+        warn "恢复后无法执行 systemctl is-active 查询，无法证明 timer active 状态"
+        failures=$((failures + 1))
+    elif ! classify_timer_active_state; then
+        active_detail="$(probe_detail)"
+        warn "恢复后 timer active 查询不可信（$TIMER_STATE_REASON；$active_detail）"
+        failures=$((failures + 1))
+    elif ((TIMER_PROBE_VALUE != TIMER_WAS_ACTIVE)); then
+        warn "timer active 状态恢复失败：期望 $TIMER_WAS_ACTIVE，实际 $TIMER_PROBE_VALUE"
+        failures=$((failures + 1))
     fi
     if ((failures == 0)); then
         log "timer 状态已恢复：enabled=$TIMER_WAS_ENABLED active=$TIMER_WAS_ACTIVE"

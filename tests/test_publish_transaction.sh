@@ -295,8 +295,32 @@ fail_marker() {
     [[ -n "${1:-}" && -f "${1}" ]]
 }
 
+post_mutation_query_fail() {
+    local marker="${FAKE_SYSTEMCTL_POST_MUTATION_QUERY_FAIL:-}"
+    if [[ -n "$marker" && -f "$marker" ]]; then
+        echo 'fake: systemctl query failed after a recovery mutation' >&2
+        exit 4
+    fi
+}
+
+mark_post_mutation() {
+    local marker="${FAKE_SYSTEMCTL_POST_MUTATION_QUERY_FAIL:-}"
+    [[ -n "$marker" ]] && : >"$marker"
+    return 0
+}
+
 case "$command" in
 is-enabled)
+    post_mutation_query_fail
+    if [[ -n "${FAKE_SYSTEMCTL_ENABLED_FAIL_ONCE:-}" && -f "$FAKE_SYSTEMCTL_ENABLED_FAIL_ONCE" ]]; then
+        rm -f "$FAKE_SYSTEMCTL_ENABLED_FAIL_ONCE"
+        echo 'fake: first is-enabled query failed (empty stdout)' >&2
+        exit 1
+    fi
+    if [[ -n "${FAKE_SYSTEMCTL_ENABLED_TEXT+x}" ]]; then
+        printf '%s' "$FAKE_SYSTEMCTL_ENABLED_TEXT"
+        exit "${FAKE_SYSTEMCTL_ENABLED_RC:-0}"
+    fi
     if [[ "${FAKE_SYSTEMCTL_UNKNOWN_STATE:-0}" == "1" ]]; then
         echo unknown
         exit 4
@@ -309,6 +333,16 @@ is-enabled)
     exit 1
     ;;
 is-active)
+    post_mutation_query_fail
+    if [[ -n "${FAKE_SYSTEMCTL_ACTIVE_FAIL_ONCE:-}" && -f "$FAKE_SYSTEMCTL_ACTIVE_FAIL_ONCE" ]]; then
+        rm -f "$FAKE_SYSTEMCTL_ACTIVE_FAIL_ONCE"
+        echo 'fake: first is-active query failed (empty stdout)' >&2
+        exit 1
+    fi
+    if [[ -n "${FAKE_SYSTEMCTL_ACTIVE_TEXT+x}" ]]; then
+        printf '%s' "$FAKE_SYSTEMCTL_ACTIVE_TEXT"
+        exit "${FAKE_SYSTEMCTL_ACTIVE_RC:-0}"
+    fi
     if [[ "${FAKE_SYSTEMCTL_UNKNOWN_STATE:-0}" == "1" ]]; then
         echo unknown
         exit 4
@@ -321,6 +355,7 @@ is-active)
     exit 3
     ;;
 enable)
+    mark_post_mutation
     if fail_marker "${FAKE_SYSTEMCTL_ENABLE_FAIL:-}"; then
         echo 'fake: enable failed' >&2
         exit 1
@@ -330,6 +365,7 @@ enable)
     exit 0
     ;;
 disable)
+    mark_post_mutation
     if fail_marker "${FAKE_SYSTEMCTL_DISABLE_FAIL:-}"; then
         echo 'fake: disable failed' >&2
         exit 1
@@ -339,6 +375,7 @@ disable)
     exit 0
     ;;
 start)
+    mark_post_mutation
     if fail_marker "${FAKE_SYSTEMCTL_START_FAIL:-}"; then
         echo 'fake: start failed' >&2
         exit 1
@@ -347,6 +384,7 @@ start)
     exit 0
     ;;
 stop)
+    mark_post_mutation
     if fail_marker "${FAKE_SYSTEMCTL_STOP_FAIL:-}"; then
         echo 'fake: stop failed' >&2
         exit 1
@@ -1648,6 +1686,203 @@ expect_rc "enabled/inactive 恢复返回原错误码 10" 10
 expect_eq "enabled/inactive 恢复后仍为 enabled/inactive" "enabled/inactive" "$(timer_state)"
 expect_contains "enabled/inactive 恢复记录 rollback_ok" "$REMOTE25/updater/logs/publish.log" "|rollback_ok|"
 make_env "$REMOTE"
+
+
+# ---------------------------------------------------------------------------
+# Round 5: systemctl state probing must not treat empty stdout / unexpected rc
+# as disabled, and unknown state must be rejected before any mutation.
+# ---------------------------------------------------------------------------
+
+make_probe_render_script() {
+    local app="$1"
+    cat >"$app/render-config.sh" <<'SH'
+#!/usr/bin/env bash
+set -u
+if [[ -n "${FAKE_RENDER_CALLED:-}" ]]; then
+    : >"$FAKE_RENDER_CALLED"
+fi
+printf 'R5_RENDER=1\n' >"$STASH_UPDATER_ROOT/env"
+systemctl enable --now stash-kelee-update.timer >/dev/null 2>&1 || true
+exit 10
+SH
+    chmod +x "$app/render-config.sh"
+}
+
+prepare_probe_remote() {
+    local remote="$1" release_id="$2"
+    prepare_old_domain_remote "$remote" "https://old.example" "old.example"
+    make_env "$remote"
+    set_timer_state 1 1
+    local app="$remote/updater/releases/render/app"
+    mkdir -p "$app"
+    make_probe_render_script "$app"
+    stage_bundle "$remote" "$release_id" "$release_id" 0
+    APP="$app"
+}
+
+assert_snapshot_rejected_unchanged() {
+    local remote="$1" desc="$2" app="$3"
+    expect_rc "$desc 返回配置错误 10" 10
+    expect_eq "$desc timer 保持 enabled/active" "enabled/active" "$(timer_state)"
+    expect_link "$desc current 仍指向旧版本" "$remote/current" "$remote/releases/legacy"
+    expect_contains "$desc 旧 EnvironmentFile 未变" "$remote/updater/env" "KELEE_PUBLIC_BASE=https://old.example"
+    expect_contains "$desc 旧 Caddyfile 未变" "$remote/Caddyfile" "@stash host old.example"
+    if [[ -n "${FAKE_RENDER_CALLED:-}" && -f "$FAKE_RENDER_CALLED" ]]; then
+        fail "$desc 不应调用渲染脚本"
+    else
+        pass "$desc 未调用渲染脚本"
+    fi
+    if grep -Eq 'systemctl (enable|disable|start|stop)' "$CALLS_LOG"; then
+        fail "$desc 不应调用 timer 变更命令"
+    else
+        pass "$desc 未调用 timer 变更命令"
+    fi
+    if find "$remote/updater/data" -type f | grep -q .; then
+        fail "$desc 不应修改权威数据目录"
+    else
+        pass "$desc 权威数据目录未变"
+    fi
+    if find "$remote/updater/state" -maxdepth 1 -name '.config-backup.*' | grep -q .; then
+        fail "$desc 备份未清理"
+    else
+        pass "$desc 备份已清理"
+    fi
+    if [[ -f "$remote/updater/logs/publish.log" ]] && grep -Eq '\|(rollback_ok|rollback_failed|publish)\|' "$remote/updater/logs/publish.log"; then
+        fail "$desc 不应记录发布/回滚事件"
+    else
+        pass "$desc 未记录发布/回滚事件"
+    fi
+}
+
+printf '== 场景 36：首次 is-enabled 查询失败（stdout 为空）-> 变更前拒绝 ==\n'
+REMOTE26="$TEST_ROOT/remote26"
+prepare_probe_remote "$REMOTE26" "r5-enabled-query-fail"
+mkdir -p "$REMOTE26/updater/releases/app-old/app" "$REMOTE26/updater/releases/app-new/app"
+cp -R "$UPDATER/." "$REMOTE26/updater/releases/app-old/app/"
+cp -R "$UPDATER/." "$REMOTE26/updater/releases/app-new/app/"
+for app_dir in "$REMOTE26/updater/releases/app-old/app" "$REMOTE26/updater/releases/app-new/app"; do
+    mkdir -p "$app_dir/scripts"
+    printf 'placeholder\n' >"$app_dir/scripts/check_kelee_update.py"
+done
+ln -sfn "$REMOTE26/updater/releases/app-old/app" "$REMOTE26/updater/current"
+export FAKE_SYSTEMCTL_ENABLED_FAIL_ONCE="$TEST_ROOT/enabled-query-fail-once"
+: >"$FAKE_SYSTEMCTL_ENABLED_FAIL_ONCE"
+export FAKE_RENDER_CALLED="$TEST_ROOT/render-called-36"
+rm -f "$FAKE_RENDER_CALLED"
+run_publish --release-id "r5-enabled-query-fail" \
+    --staging "$REMOTE26/releases/.staging-r5-enabled-query-fail" \
+    --expected-sums "$TEST_ROOT/r5-enabled-query-fail.sums" \
+    --install-app "$REMOTE26/updater/releases/app-new/app" \
+    --render-config-script "$APP/render-config.sh" --render-enable-timer --skip-retention
+assert_snapshot_rejected_unchanged "$REMOTE26" "首次 is-enabled 查询失败" "$APP"
+expect_link "首次 is-enabled 查询失败 更新器应用指针未变" "$REMOTE26/updater/current" "$REMOTE26/updater/releases/app-old/app"
+expect_contains "首次 is-enabled 查询失败诊断包含 stdout/rc" "$RUN_LOG" "is-enabled"
+unset FAKE_SYSTEMCTL_ENABLED_FAIL_ONCE FAKE_RENDER_CALLED
+
+printf '== 场景 37：is-enabled 空输出但返回 0 -> 仍按未知拒绝 ==\n'
+REMOTE27="$TEST_ROOT/remote27"
+prepare_probe_remote "$REMOTE27" "r5-enabled-empty-ok"
+export FAKE_SYSTEMCTL_ENABLED_TEXT=""
+export FAKE_SYSTEMCTL_ENABLED_RC=0
+export FAKE_RENDER_CALLED="$TEST_ROOT/render-called-37"
+rm -f "$FAKE_RENDER_CALLED"
+run_publish --release-id "r5-enabled-empty-ok" \
+    --staging "$REMOTE27/releases/.staging-r5-enabled-empty-ok" \
+    --expected-sums "$TEST_ROOT/r5-enabled-empty-ok.sums" \
+    --render-config-script "$APP/render-config.sh" --render-enable-timer --skip-retention
+assert_snapshot_rejected_unchanged "$REMOTE27" "is-enabled 空输出 rc0" "$APP"
+unset FAKE_SYSTEMCTL_ENABLED_TEXT FAKE_SYSTEMCTL_ENABLED_RC FAKE_RENDER_CALLED
+
+printf '== 场景 38：is-active 查询失败 -> 变更前拒绝 ==\n'
+REMOTE28="$TEST_ROOT/remote28"
+prepare_probe_remote "$REMOTE28" "r5-active-query-fail"
+export FAKE_SYSTEMCTL_ACTIVE_FAIL_ONCE="$TEST_ROOT/active-query-fail-once"
+: >"$FAKE_SYSTEMCTL_ACTIVE_FAIL_ONCE"
+export FAKE_RENDER_CALLED="$TEST_ROOT/render-called-38"
+rm -f "$FAKE_RENDER_CALLED"
+run_publish --release-id "r5-active-query-fail" \
+    --staging "$REMOTE28/releases/.staging-r5-active-query-fail" \
+    --expected-sums "$TEST_ROOT/r5-active-query-fail.sums" \
+    --render-config-script "$APP/render-config.sh" --render-enable-timer --skip-retention
+assert_snapshot_rejected_unchanged "$REMOTE28" "is-active 查询失败" "$APP"
+unset FAKE_SYSTEMCTL_ACTIVE_FAIL_ONCE FAKE_RENDER_CALLED
+
+printf '== 场景 39：矛盾/未知的 enabled 文本与退出码 -> 变更前拒绝 ==\n'
+for combo in "enabled:1" "disabled:0" "unknown:0" "disabled:4"; do
+    text="${combo%:*}"
+    rc="${combo#*:}"
+    release_id="r5-enabled-$(printf '%s' "$combo" | tr ':' '-')"
+    remote="$TEST_ROOT/remote-$release_id"
+    prepare_probe_remote "$remote" "$release_id"
+    export FAKE_SYSTEMCTL_ENABLED_TEXT="$text"
+    export FAKE_SYSTEMCTL_ENABLED_RC="$rc"
+    export FAKE_RENDER_CALLED="$TEST_ROOT/render-called-$release_id"
+    rm -f "$FAKE_RENDER_CALLED"
+    run_publish --release-id "$release_id" \
+        --staging "$remote/releases/.staging-$release_id" \
+        --expected-sums "$TEST_ROOT/$release_id.sums" \
+        --render-config-script "$APP/render-config.sh" --render-enable-timer --skip-retention
+    assert_snapshot_rejected_unchanged "$remote" "enabled 组合 $text/$rc" "$APP"
+    unset FAKE_SYSTEMCTL_ENABLED_TEXT FAKE_SYSTEMCTL_ENABLED_RC FAKE_RENDER_CALLED
+done
+
+printf '== 场景 40：矛盾的 active 文本与退出码 -> 变更前拒绝 ==\n'
+REMOTE29="$TEST_ROOT/remote29"
+prepare_probe_remote "$REMOTE29" "r5-active-contradiction"
+export FAKE_SYSTEMCTL_ACTIVE_TEXT="inactive"
+export FAKE_SYSTEMCTL_ACTIVE_RC=0
+export FAKE_RENDER_CALLED="$TEST_ROOT/render-called-40"
+rm -f "$FAKE_RENDER_CALLED"
+run_publish --release-id "r5-active-contradiction" \
+    --staging "$REMOTE29/releases/.staging-r5-active-contradiction" \
+    --expected-sums "$TEST_ROOT/r5-active-contradiction.sums" \
+    --render-config-script "$APP/render-config.sh" --render-enable-timer --skip-retention
+assert_snapshot_rejected_unchanged "$REMOTE29" "active 组合 inactive/0" "$APP"
+unset FAKE_SYSTEMCTL_ACTIVE_TEXT FAKE_SYSTEMCTL_ACTIVE_RC FAKE_RENDER_CALLED
+
+printf '== 场景 41：首次部署 not-found/inactive 明确证据可正常发布 ==\n'
+REMOTE30="$TEST_ROOT/remote30"
+prepare_remote "$REMOTE30"
+make_env "$REMOTE30"
+export FAKE_SYSTEMCTL_ENABLED_TEXT="not-found"
+export FAKE_SYSTEMCTL_ENABLED_RC=1
+export FAKE_SYSTEMCTL_ACTIVE_TEXT="inactive"
+export FAKE_SYSTEMCTL_ACTIVE_RC=3
+APP30="$REMOTE30/updater/releases/render/app"
+mkdir -p "$APP30"
+make_render_script "$APP30"
+stage_bundle "$REMOTE30" "r5-first-deploy-notfound" "first-deploy-notfound" 0
+run_publish --release-id "r5-first-deploy-notfound" \
+    --staging "$REMOTE30/releases/.staging-r5-first-deploy-notfound" \
+    --expected-sums "$TEST_ROOT/r5-first-deploy-notfound.sums" \
+    --render-config-script "$APP30/render-config.sh" --render-enable-timer --skip-retention
+expect_rc "not-found/inactive 首次部署发布成功" 0
+expect_link "not-found/inactive 首次部署 current 指向新版本" "$REMOTE30/current" "$REMOTE30/releases/r5-first-deploy-notfound"
+expect_contains "not-found/inactive 被记录为 enabled=0 active=0" "$RUN_LOG" "发布前 timer 状态：enabled=0 active=0"
+expect_eq "not-found/inactive 首次部署 timer 保持 disabled/inactive" "disabled/inactive" "$(timer_state)"
+unset FAKE_SYSTEMCTL_ENABLED_TEXT FAKE_SYSTEMCTL_ENABLED_RC FAKE_SYSTEMCTL_ACTIVE_TEXT FAKE_SYSTEMCTL_ACTIVE_RC
+
+printf '== 场景 42：恢复后状态复验查询未知 -> EX_CRITICAL、保留备份 ==\n'
+REMOTE31="$TEST_ROOT/remote31"
+prepare_probe_remote "$REMOTE31" "r5-verify-query-unknown"
+set_timer_state 0 0
+export FAKE_SYSTEMCTL_POST_MUTATION_QUERY_FAIL="$TEST_ROOT/post-mutation-query-fail"
+rm -f "$FAKE_SYSTEMCTL_POST_MUTATION_QUERY_FAIL"
+export FAKE_RENDER_CALLED="$TEST_ROOT/render-called-42"
+rm -f "$FAKE_RENDER_CALLED"
+run_publish --release-id "r5-verify-query-unknown" \
+    --staging "$REMOTE31/releases/.staging-r5-verify-query-unknown" \
+    --expected-sums "$TEST_ROOT/r5-verify-query-unknown.sums" \
+    --render-config-script "$APP/render-config.sh" --render-enable-timer --skip-retention
+expect_rc "恢复后状态复验未知返回 EX_CRITICAL(60)" 60
+expect_eq "恢复后复验未知时 timer 实际已禁用/停止" "disabled/inactive" "$(timer_state)"
+expect_contains "恢复后复验未知记录 rollback_failed" "$REMOTE31/updater/logs/publish.log" "|rollback_failed|"
+if find "$REMOTE31/updater/state" -maxdepth 1 -name '.config-backup.*' | grep -q .; then
+    pass "恢复后复验未知时保留配置备份"
+else
+    fail "恢复后复验未知后配置备份被删除"
+fi
+unset FAKE_SYSTEMCTL_POST_MUTATION_QUERY_FAIL FAKE_RENDER_CALLED
 
 printf '\n== 汇总 ==\n'
 printf '通过 %d/%d 项检查\n' "$PASS_COUNT" "$CHECKS"
