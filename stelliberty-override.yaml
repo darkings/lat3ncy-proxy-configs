@@ -442,13 +442,6 @@ rules:
   - RULE-SET,Microsoft-CN,DIRECT
   - RULE-SET,Steam-CN,DIRECT
   - RULE-SET,Apple,DIRECT
-  # Google 静态资源 / 更新 / 云存储国内有可用边缘，直连实测比代理快一个数量级
-  # （dl.google.com 12MB/s、storage.googleapis.com 500KB/s）；核心 Google 服务仍走 Google 策略组。
-  - DOMAIN-SUFFIX,dl.google.com,DIRECT
-  - DOMAIN-SUFFIX,storage.googleapis.com,DIRECT
-  - DOMAIN-SUFFIX,gstatic.com,DIRECT
-  - DOMAIN-SUFFIX,fonts.googleapis.com,DIRECT
-  - DOMAIN-SUFFIX,update.googleapis.com,DIRECT
   # Microsoft 身份与 Graph 端点直连可用；OneDrive 仍经 RULE-SET,OneDrive 进入 Microsoft 策略组。
   - DOMAIN-SUFFIX,login.microsoftonline.com,DIRECT
   - DOMAIN-SUFFIX,graph.microsoft.com,DIRECT
