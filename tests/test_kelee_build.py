@@ -44,7 +44,7 @@ BASE = "https://stash.example.test"
 CUSTOM_BASE = "https://kelee-mirror.example.test"
 FIXED_NOW = _dt.datetime(2026, 10, 25, 0, 0, 0, tzinfo=_dt.timezone.utc)
 HASHED_SCRIPTS_RE = r"^https://stash\.example\.test/scripts/[0-9a-f]{12}-[A-Za-z0-9._-]+\.js$"
-DEFAULT_HOST = "stash.invalid"
+DEFAULT_HOST = "stash.stale.example"
 
 
 # ---------------------------------------------------------------------------
@@ -490,7 +490,7 @@ class PageGenerationTests(BuildTestBase):
         self.assertEqual(page.validate_page(html, public_base=BASE), [])
 
         stale = html.replace(BASE, f"https://{DEFAULT_HOST}")
-        problems = page.validate_page(stale, public_base=BASE)
+        problems = page.validate_page(stale, public_base=BASE, legacy_hosts=(DEFAULT_HOST,))
         self.assertTrue(any(DEFAULT_HOST in problem for problem in problems), problems)
 
         no_provider_count = html.replace("provider 2 个", "provider ? 个")

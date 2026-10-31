@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Single source of truth for KeLee Loon→Stash conversion and publishing.
 
-Everything that previously hardcoded ``https://stash.invalid`` or duplicated
+Everything that previously hardcoded a production public host or duplicated
 Loon/Stash mapping tables lives here:
 
 * public base / mirror base resolution (one env-var contract for converter,
@@ -33,12 +33,11 @@ PUBLIC_BASE_ENV = "KELEE_PUBLIC_BASE"
 MIRROR_BASE_ENV = "KELEE_MIRROR_BASE"
 PUBLIC_HOST_ENV = "STASH_PUBLIC_HOST"
 
-# Kept in exactly one place so tests can prove no other module/site embeds it.
-# Local one-off conversion may fall back to it; publish paths (check/build,
-# deploy, cloud updater, CI) MUST resolve the address explicitly and fail
-# instead of silently publishing to this default.
-DEFAULT_PUBLIC_HOST = "stash.invalid"
-DEFAULT_PUBLIC_BASE = f"https://{DEFAULT_PUBLIC_HOST}"
+# There is deliberately no built-in production host. Every publish path must
+# resolve an explicit address; local one-off conversion must pass one too.
+DEFAULT_PUBLIC_HOST = ""
+DEFAULT_PUBLIC_BASE = ""
+LEGACY_PUBLIC_HOSTS = ()
 
 
 class PublicBaseError(ValueError):
@@ -108,13 +107,13 @@ def resolve_public_base(
     elif host_env:
         base = normalize_base(f"https://{host_env}", what=PUBLIC_HOST_ENV)
         source = PUBLIC_HOST_ENV
-    elif allow_default:
+    elif allow_default and DEFAULT_PUBLIC_BASE:
         base = DEFAULT_PUBLIC_BASE
         source = "default"
     else:
         raise PublicBaseError(
             f"{PUBLIC_BASE_ENV} is required (or pass --public-base); "
-            "refusing to publish with an implicit default host"
+            "refusing to use an implicit production host"
         )
 
     if require and source == "default":

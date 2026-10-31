@@ -51,7 +51,7 @@ import kelee_config as cfg  # noqa: E402
 import kelee_enhancements as enh  # noqa: E402
 from kelee_assets import ResourceResolver, load_audit_snapshot_map  # noqa: E402
 
-PUBLIC_BASE = cfg.DEFAULT_PUBLIC_BASE
+PUBLIC_BASE = "https://stash.example.test"
 NODE = shutil.which("node")
 NODE_RUNNER = REPO_ROOT / "tests" / "fixtures" / "conversion" / "node_runner.js"
 NODE_REQUIRED = unittest.skipUnless(

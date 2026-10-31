@@ -62,8 +62,6 @@ foreach ($guidance in @(
     'Stash 版要求 iOS 客户端 3.4 或更高版本',
     '创建名称严格为 `ios` 的订阅',
     'Sub-Store 由 Stash 自带',
-    'Cats-Team AdRules 默认在规则层拦截广告域名',
-    'Loon 的 `.lpx` 不能直接写进 Stash YAML',
     '进入“Tailscale 认证”并完成首次登录',
     '`*.ts.net` 没有加入 `fake-ip-filter` 是有意设计',
     '不能作为普通订阅单独激活',
@@ -83,33 +81,9 @@ if ($readme -notmatch 'scripts/generate_loon_configs\.py') { throw 'README must 
 if ($readme -notmatch 'Zed 流量进入 Proxy' -or $readme -notmatch 'Apple（含 iCloud）流量完全直连') {
     throw 'README must document the Zed proxy and Apple direct-connect scopes'
 }
-if ($readme -notmatch 'KeLee.+403/503') { throw 'README must document KeLee remote-audit warning policy' }
+if ($readme -match 'KeLee 覆写转换、构建与发布') { throw 'README must not contain the removed KeLee conversion/build/publish section' }
+if ($readme -match 'stash\.ponyo\.fun') { throw 'README must not contain the production host literal' }
 
 # KeLee conversion/build/publish contract: docs must match the implemented
 # behaviour and explicitly list what is NOT supported/verified.
-foreach ($conversionGuidance in @(
-    'KELEE_PUBLIC_BASE',
-    '内容哈希',
-    '重新验证',
-    '构建时固化',
-    '可编辑参数',
-    '真实客户端验收清单',
-    '-DryRun',
-    '-BuildOnly',
-    '同一把 `flock`',
-    'publish-release.sh',
-    'STASH_KEEP_RELEASES',
-    'tests/test_validate_stash.py',
-    'tests/test_publish_transaction.sh',
-    '不发布站点',
-    '不擅自改成'
-)) {
-    if ($readme -notmatch [regex]::Escape($conversionGuidance)) {
-        throw "Missing KeLee conversion/publish guidance: $conversionGuidance"
-    }
-}
-if ($readme -notmatch '未在真实 Stash 客户端') {
-    throw 'README must state that device/client verification is still pending'
-}
-
 Write-Output 'PASS: Loon, Stash, and Stelliberty README validation'

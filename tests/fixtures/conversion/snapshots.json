@@ -6,6 +6,6 @@
   "https://github.com/NSRingo/WeatherKit/releases/download/v3.1.0/response.bundle.js": "scripts/amp_argument.js",
   "https://kelee.one/Resource/JavaScript/Test/argument_consumer.js": "scripts/argument_consumer.js",
   "https://kelee.one/Resource/JavaScript/Spotify/Spotify_response.js": "scripts/no_argument.js",
-  "https://kelee.one/Resource/JavaScript/Taobao/Taobao_remove_ads.js": "scripts/response_only.js",
+  "https://example.test/taobao.js": "scripts/response_only.js",
   "https://jq.example.test/clean.jq": "jq/commented_fixture.jq"
 }

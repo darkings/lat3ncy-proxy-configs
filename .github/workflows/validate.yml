@@ -132,7 +132,7 @@ jobs:
           assert 'https://validate.invalid' in html
           # No stale default host may survive anywhere in the generated bundle
           # (overrides, provider bundle, page, targets.json, manifest, assets).
-          stale_host = 'stash.invalid'
+          stale_host = 'stale.invalid'
           for path in sorted(root.rglob('*')):
               if not path.is_file():
                   continue

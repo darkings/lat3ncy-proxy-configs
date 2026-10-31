@@ -865,7 +865,7 @@ class HeaderRewriteTests(unittest.TestCase):
 
 class IntegrationPatchTests(unittest.TestCase):
     def test_taobao_poplayer_extra_reject_is_dropped_upstream_script_kept(self) -> None:
-        result = convert("Taobao_remove_ads.lpx", url_name="Taobao_remove_ads.lpx")
+        result = convert("taobao_contract.lpx", url_name="Taobao_remove_ads.lpx")
         self.assertFalse(result.blocking, [d.as_dict() for d in result.diagnostics])
         scripts = result.stash["http"]["script"]
         self.assertTrue(
@@ -884,7 +884,7 @@ class IntegrationPatchTests(unittest.TestCase):
         self.assertIn("DOMAIN-SUFFIX,afpssp.alimama.com,REJECT", result.stash["rules"])
 
     def test_block_httpdns_wechat_domains_become_direct_exceptions(self) -> None:
-        result = convert("Block_HTTPDNS.lpx", url_name="Block_HTTPDNS.lpx")
+        result = convert("httpdns_contract.lpx", url_name="Block_HTTPDNS.lpx")
         self.assertFalse(result.blocking, [d.as_dict() for d in result.diagnostics])
         rules = result.stash["rules"]
         # The three DIRECT exceptions are emitted at the front of the rule block

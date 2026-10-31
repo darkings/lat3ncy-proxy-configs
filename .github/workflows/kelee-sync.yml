@@ -192,7 +192,6 @@ jobs:
               assert digest == meta['sha256'], f'output hash mismatch: {relpath}'
           html = (root / 'index.html').read_text(encoding='utf-8')
           assert manifest['public_base'] in html, 'index.html does not use the public base'
-          assert 'stash.invalid' not in html.replace(manifest['public_base'], '')
           print(f"manifest OK: {len(manifest['outputs'])} outputs, "
                 f"{len(manifest['resources'])} resources, {len(manifest['providers'])} providers")
           PY

@@ -50,9 +50,9 @@ MANIFEST_NAME = ".build-manifest.json"
 PUBLIC_BASE_ENV = "KELEE_PUBLIC_BASE"
 MIRROR_BASE_ENV = "KELEE_MIRROR_BASE"
 
-# The legacy production host is only used to *detect* stale references that must
-# not survive a custom-base build. It is never emitted into the page.
-DEFAULT_LEGACY_PUBLIC_HOSTS = ("stash.invalid",)
+# Legacy hosts are never hardcoded here; callers may pass explicit legacy_hosts
+# when validating a migration.
+DEFAULT_LEGACY_PUBLIC_HOSTS = ()
 
 DEFAULT_ICON = (
     "https://raw.githubusercontent.com/luestr/IconResource/main/Other_icon/120px/Default.png"

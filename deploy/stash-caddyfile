@@ -24,7 +24,7 @@
 #     `9410-b8806e870a26db7d.js`) are not misclassified as content-addressed.
 
 :80 {
-	@stash host {$KELEE_PUBLIC_HOST:stash.invalid}
+	@stash host {$KELEE_PUBLIC_HOST:localhost}
 	handle @stash {
 		root * {$KELEE_SITE_ROOT:/srv}
 

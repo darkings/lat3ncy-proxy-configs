@@ -1,0 +1,11 @@
+#!name=Taobao Contract
+#!desc=Synthetic contract: an extra poplayer reject must not preempt a response script
+
+[Rule]
+DOMAIN,poplayer.example.com,REJECT
+
+[Script]
+response if ${url} ~= /^https:\/\/poplayer\.template\.alibaba\.com\/\w+\.json/i then script("https://example.test/taobao.js") with tag="Synthetic", requires_body=true
+
+[MitM]
+hostname=poplayer.template.alibaba.com

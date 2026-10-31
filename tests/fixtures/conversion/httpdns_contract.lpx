@@ -1,0 +1,8 @@
+#!name=HTTPDNS Contract
+#!desc=Synthetic contract: HTTPDNS domains must become explicit DIRECT exceptions
+
+[Rule]
+DOMAIN,dns.weixin.qq.com,REJECT
+DOMAIN,dns.weixin.qq.com.cn,REJECT
+DOMAIN,aedns.weixin.qq.com,REJECT
+DOMAIN,other-httpdns.example.com,REJECT
